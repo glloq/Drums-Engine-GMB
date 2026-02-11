@@ -1,0 +1,343 @@
+Parfait.
+On conçoit une UI V1 minimaliste, strictement basée sur les 14 blocs définis.
+Objectif : rapide à configurer, visuelle, sans scripting, compilable proprement.
+
+🧱 STRUCTURE GLOBALE UI
+
+Interface en 4 onglets :
+
+Actuators
+
+Instruments
+
+Mappings
+
+System
+
+1️⃣ ONGLET ACTUATORS
+
+Liste des actionneurs physiques.
+
+Vue liste
+ID	Type	Canal	Status	Test
+
+Bouton :
+
++ Ajouter Actuator
+
+Formulaire Actuator
+Type :
+
+Servo
+
+Solénoïde
+
+PWM Motor
+
+Paramètres communs
+
+Nom
+
+Bus (PCA9685 chX / MCP pinX / GPIO)
+
+Inversion
+
+Limite sécurité
+
+Paramètres spécifiques
+Servo
+
+Angle min
+
+Angle max
+
+Vitesse max
+
+Temps retour
+
+Solénoïde
+
+Durée max impulsion
+
+Cooldown min
+
+PWM autorisé (oui/non)
+
+Motor
+
+PWM min
+
+PWM max
+
+Accel
+
+Decel
+
+Bouton :
+
+Test manuel (slider ou bouton)
+
+2️⃣ ONGLET INSTRUMENTS
+
+Vue liste :
+
+| Nom | Notes | Blocks | Edit |
+
+Bouton :
+
++ Nouvel Instrument
+
+Écran Instrument
+
+Structure verticale simple :
+
+Nom :
+Notes associées : [42] [+]
+CC associés : [4] [+]
+
+
+Puis section :
+
+🧩 Behavior Pipeline
+
+Interface en colonnes :
+
+[INPUT] → [CONDITION] → [TRANSFORM] → [TIME] → [OUTPUT]
+
+
+Chaque colonne peut contenir plusieurs blocs.
+
+📥 COLONNE INPUT
+
+Bouton :
+
++ Ajouter Input
+
+
+Choix :
+
+Note Trigger
+
+CC Input
+
+Paramètres :
+
+Note Trigger
+
+Note number
+
+Inclure Note Off (checkbox)
+
+CC Input
+
+CC number
+
+🔀 COLONNE CONDITION
+
+Bouton :
+
++ Ajouter Condition
+
+
+Choix :
+
+Seuil
+
+Source (CC / Variable / Position Actuator)
+
+ou <
+
+Valeur
+
+Alternance
+
+Nombre de sorties
+
+Mode (cycle / ping-pong)
+
+Split vélocité
+
+Min
+
+Max
+
+Les conditions apparaissent en blocs empilés.
+
+🔧 COLONNE TRANSFORM
+
+Bouton :
+
++ Ajouter Transform
+
+
+Choix :
+
+Courbe vélocité
+
+Linéaire
+
+Expo
+
+Log
+
+Custom
+
+Gain
+
+Multiplicateur
+
+Clamp
+
+Min
+
+Max
+
+⏱ COLONNE TIME
+
+Bouton :
+
++ Ajouter Time Block
+
+
+Choix :
+
+Impulsion
+
+Durée (ms)
+
+Dépend vélocité (checkbox)
+
+Delay
+
+Temps ms
+
+Dépend vélocité (checkbox)
+
+Ramping
+
+Temps montée
+
+Temps descente
+
+📤 COLONNE OUTPUT
+
+Bouton :
+
++ Ajouter Output
+
+
+Choix :
+
+Impulsion
+
+Actuator cible
+
+Intensité max
+
+Position
+
+Actuator cible
+
+Position min
+
+Position max
+
+PWM
+
+Actuator cible
+
+PWM min
+
+PWM max
+
+🔁 MULTI-OUTPUT
+
+Permet de faire :
+
+Plusieurs sorties dans le même instrument
+
+Exemple : solénoïde + servo
+
+🧠 Exemple UI Hi-Hat
+
+INPUT :
+
+Note 42
+
+CC4
+
+CONDITION :
+
+Seuil CC4 < 40
+
+TRANSFORM :
+
+Courbe vélocité expo
+
+TIME :
+
+Impulsion 15ms
+
+OUTPUT :
+
+Solénoïde HH
+
+Deuxième pipeline :
+
+INPUT :
+
+CC4
+
+TRANSFORM :
+
+Gain 0.8
+
+OUTPUT :
+
+Position Servo ouverture
+
+🏗 CONFIGURATION INTERNE
+
+Chaque colonne correspond à une liste ordonnée.
+
+Au moment du SAVE :
+
+UI → JSON → Compilation → Table optimisée.
+
+🎛 Mode Simplifié / Avancé
+Mode Simple
+
+Interface guidée
+
+1 pipeline par note
+
+Mode Avancé
+
+Multi pipelines
+
+Conditions multiples
+
+Alternance
+
+🧱 STRUCTURE VISUELLE SIMPLIFIÉE
+
+Chaque bloc = carte :
+
+┌───────────────┐
+│ Courbe Expo   │
+│ Param: 0.7    │
+│ [edit] [x]    │
+└───────────────┘
+
+
+Drag & drop possible.
+
+🧩 Résultat
+
+Avec cette UI :
+
+✔ L’utilisateur configure sans coder
+✔ Système totalement modulaire
+✔ Tous les 14 blocs disponibles
+✔ Structure simple
+✔ Extensible

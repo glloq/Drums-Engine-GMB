@@ -1,19 +1,5 @@
 # Drums-Engine-MIDI
 
-
-Voici une présentation globale structurée type README GitHub synthétisant les 5 étapes précédentes :
-
-1️⃣ Liste minimale des blocs indispensables
-
-2️⃣ Structure UI simple (14 blocs)
-
-3️⃣ Objectifs globaux de programmation
-
-4️⃣ Architecture interne C++
-
-5️⃣ Scheduler temps réel + timing cible
-
-🎛 Realtime Modular Engine
 🎯 Objectif du projet
 
 Développer un engine modulaire temps réel déterministe, orienté :

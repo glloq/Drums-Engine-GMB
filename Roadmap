@@ -1,0 +1,218 @@
+🏁 Roadmap Technique – Realtime Modular Engine
+Sprint 0 – Préparation & Définition (1 semaine)
+
+Objectifs :
+
+Définir spécifications globales
+
+Structurer repository GitHub
+
+Définir architecture C++ et nomenclature des dossiers
+
+Créer documentations initiales : README + schéma blocs
+
+Choisir outils & librairies : FreeRTOS, ESP-IDF, I2C drivers, PCA9685, MCP23017
+
+Livrables :
+
+README initial
+
+Diagramme architecture logique
+
+Arborescence GitHub
+
+Checklist matériel et simulation minimale
+
+Sprint 1 – Core Engine & Scheduler Temps Réel (2–3 semaines)
+
+Objectifs :
+
+Implémenter Scheduler haute précision (Option B – timer adaptatif)
+
+Implémenter queue statique ActuatorCommand
+
+ISR minimal pour dispatch des commandes
+
+Gestion timestamp microsecondes
+
+Test jitter, latence, ordre FIFO
+
+Livrables :
+
+Scheduler fonctionnel en simulation
+
+Benchmarks jitter < 200–300 µs
+
+Documentation de l’API scheduler
+
+Test unitaire avec 1 solénoïde simulé
+
+Sprint 2 – Actuator Engine & HAL Drivers (2–3 semaines)
+
+Objectifs :
+
+Développer classes Actuator : Servo / Solenoid / Motor
+
+Implémenter ActuatorManager central
+
+HAL abstrait : PCA9685, MCP23017, GPIO PWM
+
+Test de multi-actionneurs simultanés
+
+Implémentation sécurité : clamp, cooldown, duty-cycle
+
+Livrables :
+
+Bibliothèque Actuator Engine
+
+Test multi-actionneurs (jusqu’à 10 simultanés)
+
+Documentation interface Actuator
+
+Benchmarks temps d’exécution pour ISR et Dispatch
+
+Sprint 3 – Event Engine & Pipeline Compilation (3 semaines)
+
+Objectifs :
+
+Implémenter bloc pipeline (14 blocs V1)
+
+Compiler JSON UI → CompiledPipeline
+
+Implémenter EventProcessor : O(1) lookup note → pipeline
+
+Multi-pipelines par instrument
+
+Multi-sorties par note
+
+Test pipeline complexe (Hi-Hat + Snare double solénoïde)
+
+Livrables :
+
+EventProcessor stable
+
+Table de lookup note → pipeline
+
+Tests unitaires pour tous les blocs
+
+Documentation blocs & pipeline
+
+Sprint 4 – UI Web & Configuration (3 semaines)
+
+Objectifs :
+
+Créer interface web minimale pour :
+
+Ajouter actuators
+
+Ajouter instruments
+
+Construire pipeline visuel drag/drop
+
+Sauvegarde JSON
+
+Mode AP via bouton BOOT ESP32
+
+Test communication JSON → EventProcessor
+
+Visualisation temps réel & monitoring latence
+
+Livrables :
+
+Web UI fonctionnelle
+
+Pipeline JSON → compilateur → engine
+
+Test sur matériel réel : 2–3 actuators
+
+Documentation UI
+
+Sprint 5 – Test et Validation Temps Réel (2 semaines)
+
+Objectifs :
+
+Intégration complète Scheduler + EventEngine + ActuatorEngine + UI
+
+Validation latence et jitter sous charge maximale
+
+Test de séquences rapides (double frappe Snare, Hi-Hat rapide)
+
+Mesure consommation CPU / mémoire
+
+Ajustement timing et priorités FreeRTOS
+
+Livrables :
+
+Rapport benchmark complet
+
+Pipeline test standard (Hi-Hat, Snare, Kick, Cymbale, Tambourin)
+
+Validation sécurité (cooldown, limites servo, solénoïde)
+
+Sprint 6 – Extension et Modularité Avancée (3 semaines)
+
+Objectifs :
+
+Préparer architecture pour :
+
+LFO / modulation
+
+Random / Humanize
+
+Clock sync externe
+
+Ajout futur de nouveaux types d’actionneurs
+
+Extension pipeline (count, toggle, ADSR simplifié)
+
+Documentation complète pour contributeurs
+
+Livrables :
+
+Base modulaire prête à l’extension
+
+Documentation contribution / blocs / actuators
+
+Planification future sprints
+
+Sprint 7 – Release v1.0 (2 semaines)
+
+Objectifs :
+
+Packaging firmware + UI web
+
+Documentation complète GitHub :
+
+Architecture
+
+Blocs
+
+Scheduler
+
+Exemples pipelines instruments
+
+Test final multi-actuators sur setup complet
+
+Déploiement instructions AP / configuration initiale
+
+Livrables :
+
+Release v1.0 GitHub
+
+Firmware ESP32
+
+UI web minimale prête
+
+Exemple instruments préconfigurés
+
+🔑 Points critiques à suivre
+
+Temps réel : latence stable <2 ms
+
+Memory safe : aucune allocation dynamique critique
+
+Multi-actuator simultané : tests continus
+
+I2C / PWM limits : vérifier goulots physiques
+
+Extensibilité UI / engine : blocs & actuators facilement ajoutables

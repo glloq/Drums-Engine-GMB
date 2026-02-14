@@ -31,6 +31,10 @@ public:
   bool begin();
   void update();
 
+  // Callback pour recompiler les pipelines apres modification
+  typedef void (*RecompileCallback)();
+  void setRecompileCallback(RecompileCallback cb) { _recompileCb = cb; }
+
 private:
   AsyncWebServer _server;
   AsyncWebSocket _ws;
@@ -43,8 +47,10 @@ private:
   Storage* _storage;
   Scheduler* _scheduler;
   EventProcessor* _eventProc;
+  RecompileCallback _recompileCb = nullptr;
 
   void _setupRoutes();
+  void _recompilePipelines();
 
   // Instruments CRUD
   void _handleGetInstruments(AsyncWebServerRequest* req);

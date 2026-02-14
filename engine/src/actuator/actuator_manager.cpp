@@ -1,4 +1,5 @@
 #include "actuator_manager.h"
+#include "../scheduler/scheduler.h"
 
 ActuatorManager::ActuatorManager() : _count(0) {
   memset(_actuators, 0, sizeof(_actuators));
@@ -69,6 +70,13 @@ void ActuatorManager::stopAll() {
   }
 }
 
+void ActuatorManager::clearAll() {
+  stopAll();
+  memset(_actuators, 0, sizeof(_actuators));
+  memset(_idMap, 0xFF, sizeof(_idMap));
+  _count = 0;
+}
+
 void ActuatorManager::initAll() {
   for (uint8_t i = 0; i < _count; i++) {
     if (_actuators[i]) {
@@ -97,29 +105,51 @@ void ActuatorManager::testActuator(uint8_t id, uint8_t value) {
   DBGF("[ActMgr] Test actuator '%s' (id=%d, val=%d)\n",
        act->getConfig().name, id, value);
 
-  ActuatorCommand cmd;
-  cmd.actuator_id = id;
-  cmd.value = value;
-  cmd.duration = 0;
-  cmd.execute_at = micros();
+  const ActuatorConfig& cfg = act->getConfig();
 
-  // Choisir le type de commande selon le type d'actuateur
-  switch (act->getConfig().type) {
-    case ActuatorType::SOLENOID:
-      cmd.command_type = (uint8_t)CommandType::PULSE;
+  switch (cfg.type) {
+    case ActuatorType::SOLENOID: {
+      // Utiliser le scheduler pour generer ON + OFF (securite)
+      uint32_t durationUs = map(value, 0, 127,
+                                (uint32_t)cfg.paramMin * 1000,
+                                (uint32_t)cfg.paramMax * 1000);
+      if (_scheduler) {
+        _scheduler->schedulePulse(id, value, durationUs);
+      } else {
+        // Fallback: executer direct + OFF apres duree par defaut
+        ActuatorCommand cmd;
+        cmd.actuator_id = id;
+        cmd.command_type = (uint8_t)CommandType::PULSE;
+        cmd.value = value;
+        cmd.duration = 0;
+        cmd.execute_at = micros();
+        act->execute(cmd);
+      }
       break;
-    case ActuatorType::SERVO:
+    }
+    case ActuatorType::SERVO: {
+      ActuatorCommand cmd;
+      cmd.actuator_id = id;
       cmd.command_type = (uint8_t)CommandType::POSITION;
+      cmd.value = value;
+      cmd.duration = 0;
+      cmd.execute_at = micros();
+      act->execute(cmd);
       break;
-    case ActuatorType::PWM_MOTOR:
+    }
+    case ActuatorType::PWM_MOTOR: {
+      ActuatorCommand cmd;
+      cmd.actuator_id = id;
       cmd.command_type = (uint8_t)CommandType::PWM;
+      cmd.value = value;
+      cmd.duration = 0;
+      cmd.execute_at = micros();
+      act->execute(cmd);
       break;
+    }
     default:
-      cmd.command_type = (uint8_t)CommandType::PULSE;
       break;
   }
-
-  act->execute(cmd);
 }
 
 // --- Safety ---

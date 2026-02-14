@@ -176,6 +176,7 @@ void WebServerManager::_handleCreateInstrument(AsyncWebServerRequest* req, uint8
   if (idx < 0) { _sendError(req, 507, "Max instruments reached"); return; }
 
   _storage->saveInstruments(*_instrMgr);
+  _recompilePipelines();
 
   JsonDocument resp;
   JsonObject obj = resp.to<JsonObject>();
@@ -196,6 +197,7 @@ void WebServerManager::_handleUpdateInstrument(AsyncWebServerRequest* req, uint8
   }
 
   _storage->saveInstruments(*_instrMgr);
+  _recompilePipelines();
   _sendError(req, 200, "Updated");
 }
 
@@ -205,6 +207,7 @@ void WebServerManager::_handleDeleteInstrument(AsyncWebServerRequest* req) {
     _sendError(req, 404, "Instrument not found"); return;
   }
   _storage->saveInstruments(*_instrMgr);
+  _recompilePipelines();
   _sendError(req, 200, "Deleted");
 }
 
@@ -265,6 +268,7 @@ void WebServerManager::_handleCreateActuator(AsyncWebServerRequest* req, uint8_t
   // Reconstruire les actionneurs physiques
   _actFactory->rebuildAll();
   _storage->saveActuators(*_actFactory);
+  _recompilePipelines();
 
   JsonDocument resp;
   resp["id"] = _actFactory->getConfig(idx).id;
@@ -296,6 +300,7 @@ void WebServerManager::_handleUpdateActuator(AsyncWebServerRequest* req, uint8_t
   // Reconstruire les actionneurs physiques
   _actFactory->rebuildAll();
   _storage->saveActuators(*_actFactory);
+  _recompilePipelines();
 
   _sendError(req, 200, "Updated");
 }
@@ -308,6 +313,7 @@ void WebServerManager::_handleDeleteActuator(AsyncWebServerRequest* req) {
 
   _actFactory->rebuildAll();
   _storage->saveActuators(*_actFactory);
+  _recompilePipelines();
   _sendError(req, 200, "Deleted");
 }
 
@@ -377,6 +383,15 @@ void WebServerManager::_handleCreateLoop(AsyncWebServerRequest* req, uint8_t* da
     }
   }
 
+  // Persister la boucle
+  Loop* newLoop = _loopEngine->getLoop(idx);
+  if (newLoop) {
+    JsonDocument loopDoc;
+    JsonObject loopObj = loopDoc.to<JsonObject>();
+    _loopEngine->loopToJson(*newLoop, loopObj);
+    _storage->saveLoop(idx, loopObj);
+  }
+
   JsonDocument resp;
   resp["index"] = idx;
   resp["message"] = "Loop created";
@@ -392,12 +407,20 @@ void WebServerManager::_handleUpdateLoop(AsyncWebServerRequest* req, uint8_t* da
   if (!loop) { _sendError(req, 404, "Loop not found"); return; }
 
   _loopEngine->loopFromJson(doc.as<JsonObject>(), *loop);
+
+  // Persister la modification
+  JsonDocument loopDoc;
+  JsonObject loopObj = loopDoc.to<JsonObject>();
+  _loopEngine->loopToJson(*loop, loopObj);
+  _storage->saveLoop(id, loopObj);
+
   _sendError(req, 200, "Updated");
 }
 
 void WebServerManager::_handleDeleteLoop(AsyncWebServerRequest* req) {
   uint8_t id = _extractId(req, "id");
   if (!_loopEngine->deleteLoop(id)) { _sendError(req, 404, "Loop not found"); return; }
+  _storage->deleteLoop(id);
   _sendError(req, 200, "Deleted");
 }
 
@@ -525,6 +548,15 @@ void WebServerManager::_wsBroadcast(const char* type, const JsonObject& data) {
   String msg;
   serializeJson(doc, msg);
   _ws.textAll(msg);
+}
+
+// --- Pipeline recompile ---
+
+void WebServerManager::_recompilePipelines() {
+  if (_recompileCb) {
+    _recompileCb();
+    DBGLN("[Web] Pipelines recompiled after CRUD");
+  }
 }
 
 // --- Helpers ---

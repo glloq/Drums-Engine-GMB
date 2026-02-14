@@ -5,6 +5,8 @@
 #include "../core/config.h"
 #include "../core/types.h"
 
+class Scheduler; // Forward declaration
+
 // ============================================================================
 // ActuatorManager - Gestionnaire central des actionneurs
 // ============================================================================
@@ -32,6 +34,9 @@ public:
   // Arreter tous les actionneurs
   void stopAll();
 
+  // Supprimer tous les enregistrements (pour rebuild)
+  void clearAll();
+
   // Initialiser tous les actionneurs enregistres
   void initAll();
 
@@ -40,8 +45,9 @@ public:
   const Actuator* getActuator(uint8_t id) const;
   uint8_t getCount() const { return _count; }
 
-  // Test direct d'un actionneur
+  // Test direct d'un actionneur (utilise le scheduler pour les solenoide)
   void testActuator(uint8_t id, uint8_t value);
+  void setScheduler(class Scheduler* sched) { _scheduler = sched; }
 
   // --- Safety ---
 
@@ -55,6 +61,7 @@ private:
   Actuator* _actuators[MAX_ACTUATORS];
   uint8_t _idMap[MAX_ACTUATORS];     // Map index -> actuator ID
   uint8_t _count;
+  Scheduler* _scheduler = nullptr;
 
   int8_t _findIndex(uint8_t id) const;
 };

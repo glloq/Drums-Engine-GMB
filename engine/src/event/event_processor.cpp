@@ -25,7 +25,7 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
     const CompiledPipeline& pipeline = _lookup.pipelines[pipelineIdx];
     if (pipeline.note_off_count > 0) {
       _scheduler->scheduleActionSteps(pipeline.note_off_actions, pipeline.note_off_count,
-                                      ev.data2, ev.timestamp, _state->raw().variables);
+                                      0, ev.timestamp, _state->raw().variables);
       return;
     }
 

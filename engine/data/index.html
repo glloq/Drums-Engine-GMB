@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MidiPercussion V4</title>
+<title>Drums Engine</title>
 <style>
 :root {
   --bg: #1a1a2e; --bg2: #16213e; --bg3: #0f3460;
@@ -13,14 +13,15 @@
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--fg); min-height: 100vh; }
+
 .header { background: var(--bg2); padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid var(--accent); }
 .header h1 { font-size: 1.3em; font-weight: 600; }
 .header .status { display: flex; gap: 12px; font-size: 0.85em; color: var(--fg2); }
-.header .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
 .dot.on { background: var(--success); } .dot.off { background: var(--accent); }
 
 .tabs { display: flex; background: var(--bg2); border-bottom: 1px solid #333; }
-.tab { padding: 10px 20px; cursor: pointer; color: var(--fg2); border-bottom: 2px solid transparent; transition: all 0.2s; }
+.tab { padding: 10px 20px; cursor: pointer; color: var(--fg2); border-bottom: 2px solid transparent; transition: all 0.2s; font-size: 0.95em; }
 .tab:hover { color: var(--fg); background: rgba(255,255,255,0.05); }
 .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 
@@ -29,7 +30,9 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 
 .card { background: var(--bg2); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; box-shadow: var(--shadow); }
 .card h3 { margin-bottom: 12px; font-size: 1.1em; display: flex; align-items: center; justify-content: space-between; }
-.card .badge { background: var(--accent2); padding: 2px 8px; border-radius: 12px; font-size: 0.75em; }
+.badge { background: var(--accent2); padding: 2px 8px; border-radius: 12px; font-size: 0.75em; margin-left: 6px; }
+.badge-green { background: var(--success); }
+.badge-warn { background: var(--warn); color: #000; }
 
 .btn { padding: 8px 16px; border: none; border-radius: var(--radius); cursor: pointer; font-size: 0.9em; transition: all 0.2s; }
 .btn-primary { background: var(--accent); color: white; }
@@ -39,7 +42,6 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .btn-success { background: var(--success); color: white; }
 .btn-danger { background: #c62828; color: white; }
 .btn-sm { padding: 4px 10px; font-size: 0.8em; }
-.btn-icon { width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
 
 .form-group { margin-bottom: 12px; }
 .form-group label { display: block; margin-bottom: 4px; font-size: 0.85em; color: var(--fg2); }
@@ -48,24 +50,43 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 input, select { width: 100%; padding: 8px 10px; background: var(--bg); border: 1px solid #444; border-radius: var(--radius); color: var(--fg); font-size: 0.9em; }
 input:focus, select:focus { outline: none; border-color: var(--accent); }
 input[type=range] { padding: 0; }
+input[type=checkbox] { width: auto; }
 
-.actuator-list { margin-top: 8px; }
-.actuator-item { background: var(--bg); border-radius: var(--radius); padding: 10px; margin-bottom: 8px; border-left: 3px solid var(--accent2); }
-.actuator-item .act-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-.actuator-item .act-type { font-size: 0.8em; color: var(--accent); }
+.list-item { background: var(--bg); border-radius: var(--radius); padding: 12px; margin-bottom: 8px; border-left: 3px solid var(--accent2); }
+.list-item .item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.list-item .item-detail { font-size: 0.8em; color: var(--fg2); line-height: 1.6; }
 
-.instrument-list { display: grid; gap: 12px; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 768px) { .grid-2 { grid-template-columns: 1fr; } }
+
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.stat-card { background: var(--bg); border-radius: var(--radius); padding: 12px; text-align: center; }
+.stat-card .stat-value { font-size: 1.5em; font-weight: bold; color: var(--accent); }
+.stat-card .stat-label { font-size: 0.8em; color: var(--fg2); margin-top: 4px; }
+
+/* Pipeline visualization */
+.pipeline-view { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 0; }
+.pipe-block { background: var(--bg3); border-radius: 6px; padding: 6px 10px; font-size: 0.8em; border: 1px solid #555; }
+.pipe-block.cond { border-color: #ff9800; color: #ff9800; }
+.pipe-block.trans { border-color: #2196f3; color: #2196f3; }
+.pipe-block.time { border-color: #9c27b0; color: #9c27b0; }
+.pipe-block.out { border-color: #4caf50; color: #4caf50; }
+.pipe-arrow { color: var(--fg2); font-size: 1.2em; }
+
+/* Checkbox list */
+.checkbox-list { max-height: 200px; overflow-y: auto; padding: 8px; background: var(--bg); border-radius: var(--radius); border: 1px solid #444; }
+.checkbox-list label { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 0.9em; cursor: pointer; }
+.checkbox-list label:hover { color: var(--accent); }
 
 /* Loop Grid */
-.loop-grid { display: grid; grid-template-columns: 40px repeat(16, 1fr); gap: 2px; margin-top: 12px; }
+.loop-grid { display: grid; gap: 2px; margin-top: 12px; }
 .loop-cell { width: 100%; aspect-ratio: 1; background: var(--bg); border-radius: 3px; cursor: pointer; transition: background 0.1s; border: 1px solid #333; }
 .loop-cell:hover { border-color: var(--accent); }
 .loop-cell.active { background: var(--accent); border-color: var(--accent); }
-.loop-cell.playing { animation: pulse 0.3s; }
 .loop-label { font-size: 0.7em; color: var(--fg2); display: flex; align-items: center; justify-content: flex-end; padding-right: 4px; white-space: nowrap; overflow: hidden; }
 .beat-marker { font-size: 0.65em; color: var(--fg2); text-align: center; }
-
-@keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
+.transport { display: flex; align-items: center; gap: 12px; padding: 12px 0; }
+.transport .bpm-display { font-size: 1.4em; font-weight: bold; min-width: 80px; text-align: center; }
 
 .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 100; align-items: center; justify-content: center; }
 .modal-overlay.show { display: flex; }
@@ -79,89 +100,93 @@ input[type=range] { padding: 0; }
 .toast.success { border-left: 3px solid var(--success); }
 
 .empty-state { text-align: center; padding: 40px; color: var(--fg2); }
-.empty-state p { margin: 8px 0; }
-
-.transport { display: flex; align-items: center; gap: 12px; padding: 12px 0; }
-.transport .bpm-display { font-size: 1.4em; font-weight: bold; min-width: 80px; text-align: center; }
 </style>
 </head>
 <body>
 
 <div class="header">
-  <h1>MidiPercussion V4</h1>
+  <h1>Drums Engine</h1>
   <div class="status">
-    <span><span class="dot" id="wifiDot"></span>WiFi: <span id="wifiStatus">--</span></span>
+    <span><span class="dot" id="wifiDot"></span><span id="wifiStatus">--</span></span>
     <span><span class="dot" id="midiDot"></span>MIDI: <span id="midiStatus">--</span></span>
     <span>HW: <span id="hwStatus">--</span></span>
   </div>
 </div>
 
 <div class="tabs">
-  <div class="tab active" data-tab="instruments">Instruments</div>
-  <div class="tab" data-tab="test">Test</div>
-  <div class="tab" data-tab="loops">Boucles</div>
+  <div class="tab active" data-tab="actuators">Actionneurs</div>
+  <div class="tab" data-tab="instruments">Instruments</div>
+  <div class="tab" data-tab="mappings">Mappings</div>
   <div class="tab" data-tab="system">Systeme</div>
 </div>
 
 <div class="content">
-  <!-- INSTRUMENTS TAB -->
-  <div class="panel active" id="tab-instruments">
+
+  <!-- ====== ACTUATORS TAB ====== -->
+  <div class="panel active" id="tab-actuators">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h2>Actionneurs (<span id="actCount">0</span>)</h2>
+      <button class="btn btn-primary" onclick="showAddActuator()">+ Ajouter</button>
+    </div>
+    <div id="actuatorList"></div>
+  </div>
+
+  <!-- ====== INSTRUMENTS TAB ====== -->
+  <div class="panel" id="tab-instruments">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
       <h2>Instruments (<span id="instrCount">0</span>)</h2>
       <button class="btn btn-primary" onclick="showAddInstrument()">+ Ajouter</button>
     </div>
-    <div class="instrument-list" id="instrumentList"></div>
+    <div id="instrumentList"></div>
   </div>
 
-  <!-- TEST TAB -->
-  <div class="panel" id="tab-test">
-    <h2>Test des Actionneurs</h2>
-    <div class="card" style="margin-top:16px;">
-      <div class="form-row">
-        <div class="form-group">
-          <label>Instrument</label>
-          <select id="testInstrument" onchange="updateTestActuators()">
-            <option value="">-- Choisir --</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Actionneur (optionnel)</label>
-          <select id="testActuator">
-            <option value="all">Tous (instrument complet)</option>
-          </select>
-        </div>
-      </div>
-      <div class="form-group">
-        <label>Velocite / Valeur: <span id="testValLabel">80</span></label>
-        <input type="range" id="testValue" min="0" max="127" value="80" oninput="document.getElementById('testValLabel').textContent=this.value">
-      </div>
-      <button class="btn btn-success" onclick="doTest()">Tester</button>
-    </div>
-  </div>
-
-  <!-- LOOPS TAB -->
-  <div class="panel" id="tab-loops">
+  <!-- ====== MAPPINGS TAB ====== -->
+  <div class="panel" id="tab-mappings">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-      <h2>Boucles</h2>
-      <button class="btn btn-primary" onclick="showAddLoop()">+ Nouvelle Boucle</button>
+      <h2>Pipelines MIDI</h2>
+      <button class="btn btn-secondary" onclick="refreshMappings()">Actualiser</button>
     </div>
-    <div id="loopList"></div>
-    <div id="loopEditor" style="display:none;">
+    <p style="font-size:0.85em;color:var(--fg2);margin-bottom:16px;">
+      Pipelines compiles automatiquement depuis les instruments. Chaque note MIDI est mappee vers un pipeline de traitement.
+    </p>
+    <div id="mappingList"></div>
+  </div>
+
+  <!-- ====== SYSTEM TAB ====== -->
+  <div class="panel" id="tab-system">
+    <h2 style="margin-bottom:16px;">Systeme</h2>
+    <div class="stat-grid" id="statGrid"></div>
+    <div class="grid-2">
+      <div class="card">
+        <h3>Actions</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+          <button class="btn btn-primary" onclick="saveAll()">Sauvegarder tout</button>
+          <button class="btn btn-secondary" onclick="scanI2C()">Scanner I2C</button>
+          <button class="btn btn-secondary" onclick="refreshStatus()">Actualiser</button>
+        </div>
+        <div id="i2cInfo" style="margin-top:12px;font-size:0.85em;color:var(--fg2);"></div>
+      </div>
+      <div class="card">
+        <h3>
+          <span>Boucles (<span id="loopCount">0</span>)</span>
+          <button class="btn btn-sm btn-primary" onclick="showAddLoop()">+ Nouvelle</button>
+        </h3>
+        <div id="loopList" style="margin-top:8px;"></div>
+      </div>
+    </div>
+    <div id="loopEditor" style="display:none;margin-top:16px;">
       <div class="card">
         <h3>
           <span id="loopEditorTitle">Editeur</span>
-          <div>
-            <button class="btn btn-sm btn-secondary" onclick="closeLoopEditor()">Fermer</button>
-          </div>
+          <button class="btn btn-sm btn-secondary" onclick="closeLoopEditor()">Fermer</button>
         </h3>
         <div class="transport">
-          <button class="btn btn-success btn-icon" onclick="playCurrentLoop()" id="btnPlay">&#9654;</button>
-          <button class="btn btn-danger btn-icon" onclick="stopLoop()">&#9632;</button>
+          <button class="btn btn-success btn-sm" onclick="playCurrentLoop()">Play</button>
+          <button class="btn btn-danger btn-sm" onclick="stopLoop()">Stop</button>
           <div class="bpm-display"><span id="loopBpmDisplay">120</span> BPM</div>
           <input type="range" id="loopBpmSlider" min="40" max="300" value="120"
                  oninput="updateLoopBpm(this.value)" style="flex:1;">
-          <select id="loopQuantize" onchange="quantizeLoop(this.value)">
-            <option value="0">Libre</option>
+          <select id="loopQuantize" onchange="renderCurrentLoopGrid()" style="width:80px;">
             <option value="4">1/4</option>
             <option value="8" selected>1/8</option>
             <option value="16">1/16</option>
@@ -171,27 +196,95 @@ input[type=range] { padding: 0; }
       </div>
     </div>
   </div>
+</div>
 
-  <!-- SYSTEM TAB -->
-  <div class="panel" id="tab-system">
-    <h2>Systeme</h2>
-    <div class="card" style="margin-top:16px;">
-      <h3>Etat</h3>
-      <div id="systemInfo" style="font-size:0.9em;line-height:1.8;"></div>
-      <div style="margin-top:12px;">
-        <button class="btn btn-secondary" onclick="refreshStatus()">Actualiser</button>
-        <button class="btn btn-secondary" onclick="scanI2C()">Scanner I2C</button>
-        <button class="btn btn-primary" onclick="saveAll()">Sauvegarder tout</button>
+<!-- ====== MODAL: Add/Edit Actuator ====== -->
+<div class="modal-overlay" id="modalActuator">
+  <div class="modal">
+    <h2 id="modalActTitle">Nouvel Actionneur</h2>
+    <input type="hidden" id="editActId" value="">
+    <div class="form-row">
+      <div class="form-group">
+        <label>Nom</label>
+        <input type="text" id="actName" placeholder="Kick Solenoid">
+      </div>
+      <div class="form-group">
+        <label>ID</label>
+        <input type="number" id="actId" min="0" max="255" placeholder="Auto">
       </div>
     </div>
-    <div class="card" style="margin-top:12px;">
-      <h3>Bus I2C</h3>
-      <div id="i2cInfo" style="font-size:0.9em;">Cliquez "Scanner I2C" pour detecter les modules</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Type</label>
+        <select id="actType">
+          <option value="0">Servo</option>
+          <option value="1">Solenoid</option>
+          <option value="2">PWM Motor</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Comportement</label>
+        <select id="actBehavior">
+          <option value="0">Solenoid Strike</option>
+          <option value="1">Solenoid Hold</option>
+          <option value="2">Servo Position</option>
+          <option value="3">Servo Strike</option>
+          <option value="4">Comb/Brush</option>
+          <option value="5">Pitch Bend</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Bus Hardware</label>
+        <select id="actBus">
+          <option value="0">MCP23017 (I2C GPIO)</option>
+          <option value="1">PCA9685 (I2C PWM)</option>
+          <option value="2">ESP32 GPIO</option>
+          <option value="3">ESP32 LEDC PWM</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Adresse I2C</label>
+        <input type="text" id="actAddr" value="0x20" placeholder="0x20">
+      </div>
+      <div class="form-group">
+        <label>Pin/Channel</label>
+        <input type="number" id="actPin" value="0" min="0" max="15">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Param Min</label>
+        <input type="number" id="actParamMin" value="8">
+      </div>
+      <div class="form-group">
+        <label>Param Max</label>
+        <input type="number" id="actParamMax" value="30">
+      </div>
+      <div class="form-group">
+        <label>Par Defaut</label>
+        <input type="number" id="actParamDef" value="15">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Cooldown (us/100)</label>
+        <input type="number" id="actCooldown" value="200">
+      </div>
+      <div class="form-group" style="display:flex;align-items:flex-end;gap:16px;">
+        <label><input type="checkbox" id="actEnabled" checked> Active</label>
+        <label><input type="checkbox" id="actInverted"> Inverse</label>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('modalActuator')">Annuler</button>
+      <button class="btn btn-primary" onclick="saveActuator()">Enregistrer</button>
     </div>
   </div>
 </div>
 
-<!-- MODAL: Add/Edit Instrument -->
+<!-- ====== MODAL: Add/Edit Instrument ====== -->
 <div class="modal-overlay" id="modalInstrument">
   <div class="modal">
     <h2 id="modalInstrTitle">Nouvel Instrument</h2>
@@ -223,11 +316,10 @@ input[type=range] { padding: 0; }
         </select>
       </div>
     </div>
-
-    <h3 style="margin:16px 0 8px;">Actionneurs</h3>
-    <div id="modalActuatorList"></div>
-    <button class="btn btn-sm btn-secondary" onclick="addActuatorRow()" style="margin-top:8px;">+ Actionneur</button>
-
+    <div class="form-group">
+      <label>Actionneurs assignes</label>
+      <div class="checkbox-list" id="instrActuatorChecklist"></div>
+    </div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal('modalInstrument')">Annuler</button>
       <button class="btn btn-primary" onclick="saveInstrument()">Enregistrer</button>
@@ -235,7 +327,7 @@ input[type=range] { padding: 0; }
   </div>
 </div>
 
-<!-- MODAL: Add Loop -->
+<!-- ====== MODAL: Add Loop ====== -->
 <div class="modal-overlay" id="modalLoop">
   <div class="modal">
     <h2>Nouvelle Boucle</h2>
@@ -272,35 +364,19 @@ input[type=range] { padding: 0; }
 <div class="toast" id="toast"></div>
 
 <script>
+// ====================================================================
 // State
+// ====================================================================
+let actuators = [];
 let instruments = [];
 let loops = [];
 let midiNotes = [];
+let statusData = {};
 let currentLoopIdx = -1;
-let gridSubdivision = 8; // 1/8 notes
 
-const ACTUATOR_TYPES = [
-  {v:0, l:'Solenoid Strike', desc:'Frappe simple on/off'},
-  {v:1, l:'Solenoid Hold',   desc:'Solenoide avec maintien PWM'},
-  {v:2, l:'Servo Position',  desc:'Servo position (ouvert/ferme)'},
-  {v:3, l:'Servo Strike',    desc:'Servo oscillant (maracas, shaker)'},
-  {v:4, l:'Comb/Brush',      desc:'Peigne/brosse pour cymbales/snare'},
-  {v:5, l:'Pitch Bend',      desc:'Tension de peau pour pitch bend'}
-];
-const TIMING_TYPES = [
-  {v:0, l:'Pre-Strike'}, {v:1, l:'On Strike'}, {v:2, l:'Post-Strike'},
-  {v:3, l:'On Release'}, {v:4, l:'Continuous'}
-];
-const CONTROL_TYPES = [
-  {v:0, l:'Note Velocity'}, {v:1, l:'Control Change'}, {v:2, l:'Pitch Bend'},
-  {v:3, l:'Aftertouch'}, {v:4, l:'Fixed Value'}
-];
-const BUS_TYPES = [
-  {v:0, l:'MCP23017 (I2C GPIO)'}, {v:1, l:'PCA9685 (I2C PWM)'},
-  {v:2, l:'ESP32 GPIO'}, {v:3, l:'ESP32 LEDC PWM'}
-];
-
-// --- API ---
+// ====================================================================
+// API helper
+// ====================================================================
 async function api(path, method='GET', body=null) {
   const opts = {method, headers: {'Content-Type':'application/json'}};
   if (body) opts.body = JSON.stringify(body);
@@ -313,22 +389,19 @@ async function api(path, method='GET', body=null) {
   }
 }
 
-// --- Init ---
+// ====================================================================
+// Init
+// ====================================================================
 async function init() {
   populateMidiSelects();
-  await loadMidiNotes();
-  await loadInstruments();
-  await loadLoops();
+  await Promise.all([loadMidiNotes(), loadActuators(), loadInstruments(), loadLoops()]);
   refreshStatus();
   setInterval(refreshStatus, 5000);
 }
 
 async function loadMidiNotes() {
   const data = await api('midi-notes');
-  if (data) {
-    midiNotes = data;
-    populateMidiNoteSelect();
-  }
+  if (data) { midiNotes = data; populateMidiNoteSelect(); }
 }
 
 function populateMidiSelects() {
@@ -345,68 +418,185 @@ function populateMidiSelects() {
 function populateMidiNoteSelect() {
   const sel = document.getElementById('instrMidiNote');
   sel.innerHTML = '';
+  const noteSet = new Set(midiNotes.map(n => n.note));
   midiNotes.forEach(n => {
     const o = document.createElement('option');
     o.value = n.note;
     o.textContent = n.note + ' - ' + n.name;
     sel.appendChild(o);
   });
-  // Add generic range
   for (let i = 0; i < 128; i++) {
-    if (!midiNotes.find(n => n.note === i)) {
+    if (!noteSet.has(i)) {
       const o = document.createElement('option');
-      o.value = i;
-      o.textContent = i + ' - Note ' + i;
+      o.value = i; o.textContent = i + ' - Note ' + i;
       sel.appendChild(o);
     }
   }
 }
 
-// --- Instruments ---
-async function loadInstruments() {
-  const data = await api('instruments');
-  if (data) {
-    instruments = data;
-    renderInstruments();
-    updateTestInstrumentSelect();
-  }
+// ====================================================================
+// ACTUATORS
+// ====================================================================
+async function loadActuators() {
+  const data = await api('actuators');
+  if (data) { actuators = data; renderActuators(); }
 }
 
-function renderInstruments() {
-  const list = document.getElementById('instrumentList');
-  document.getElementById('instrCount').textContent = instruments.length;
-
-  if (instruments.length === 0) {
-    list.innerHTML = '<div class="empty-state"><p>Aucun instrument configure</p><p>Cliquez "+ Ajouter" pour commencer</p></div>';
+function renderActuators() {
+  const el = document.getElementById('actuatorList');
+  document.getElementById('actCount').textContent = actuators.length;
+  if (actuators.length === 0) {
+    el.innerHTML = '<div class="empty-state"><p>Aucun actionneur configure</p><p>Cliquez "+ Ajouter" pour commencer</p></div>';
     return;
   }
-
-  list.innerHTML = instruments.map(inst => `
-    <div class="card">
-      <h3>
-        <span>${inst.name} <span class="badge">${inst.category}</span> <span class="badge">Note ${inst.midiNote}</span></span>
+  el.innerHTML = actuators.map(a => `
+    <div class="list-item" style="border-left-color:${a.active?'var(--success)':'var(--accent2)'}">
+      <div class="item-header">
         <span>
-          <button class="btn btn-sm btn-secondary" onclick="editInstrument(${inst.id})">Modifier</button>
-          <button class="btn btn-sm btn-danger" onclick="deleteInstrument(${inst.id})">Suppr</button>
+          <strong>${a.name}</strong>
+          <span class="badge">${a.typeName}</span>
+          <span class="badge">${a.behaviorName}</span>
+          ${a.active ? '<span class="badge badge-green">ACTIF</span>' : ''}
+          ${!a.enabled ? '<span class="badge badge-warn">OFF</span>' : ''}
         </span>
-      </h3>
-      <div class="actuator-list">
-        ${inst.actuators.length === 0 ? '<div style="color:var(--fg2);font-size:0.85em;">Aucun actionneur</div>' :
-          inst.actuators.map((a, i) => `
-            <div class="actuator-item">
-              <div class="act-header">
-                <span><strong>${a.name}</strong> <span class="act-type">${ACTUATOR_TYPES[a.type]?.l||'?'}</span></span>
-                <span style="font-size:0.8em;color:var(--fg2);">${TIMING_TYPES[a.timing]?.l||'?'} | ${BUS_TYPES[a.bus]?.l||'?'} @ 0x${a.hwAddress.toString(16)} pin ${a.hwPin}</span>
-              </div>
-              <div style="font-size:0.8em;color:var(--fg2);">
-                Param: ${a.paramMin}-${a.paramMax} (def:${a.paramDefault}) | Delai: ${a.delayMs}ms | Ctrl: ${CONTROL_TYPES[a.control]?.l||'?'}
-                ${a.control===1 ? '(CC#'+a.ccNumber+')' : ''}
-              </div>
-            </div>
-          `).join('')}
+        <span>
+          <button class="btn btn-sm btn-success" onclick="testActuator(${a.id})">Test</button>
+          <button class="btn btn-sm btn-secondary" onclick="editActuator(${a.id})">Modifier</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteActuator(${a.id})">Suppr</button>
+        </span>
+      </div>
+      <div class="item-detail">
+        ID: ${a.id} | ${a.busName} @ 0x${a.hwAddress.toString(16)} pin ${a.hwPin}
+        | Range: ${a.paramMin}-${a.paramMax} (def:${a.paramDefault})
+        | Cooldown: ${a.cooldownUs}
+        ${a.inverted ? '| Inverse' : ''}
       </div>
     </div>
   `).join('');
+}
+
+function showAddActuator() {
+  document.getElementById('modalActTitle').textContent = 'Nouvel Actionneur';
+  document.getElementById('editActId').value = '';
+  document.getElementById('actName').value = '';
+  document.getElementById('actId').value = '';
+  document.getElementById('actType').value = '1';
+  document.getElementById('actBehavior').value = '0';
+  document.getElementById('actBus').value = '0';
+  document.getElementById('actAddr').value = '0x20';
+  document.getElementById('actPin').value = '0';
+  document.getElementById('actParamMin').value = '8';
+  document.getElementById('actParamMax').value = '30';
+  document.getElementById('actParamDef').value = '15';
+  document.getElementById('actCooldown').value = '200';
+  document.getElementById('actEnabled').checked = true;
+  document.getElementById('actInverted').checked = false;
+  showModal('modalActuator');
+}
+
+function editActuator(id) {
+  const a = actuators.find(x => x.id === id);
+  if (!a) return;
+  document.getElementById('modalActTitle').textContent = 'Modifier: ' + a.name;
+  document.getElementById('editActId').value = id;
+  document.getElementById('actName').value = a.name;
+  document.getElementById('actId').value = a.id;
+  document.getElementById('actType').value = a.type;
+  document.getElementById('actBehavior').value = a.behavior;
+  document.getElementById('actBus').value = a.bus;
+  document.getElementById('actAddr').value = '0x' + a.hwAddress.toString(16);
+  document.getElementById('actPin').value = a.hwPin;
+  document.getElementById('actParamMin').value = a.paramMin;
+  document.getElementById('actParamMax').value = a.paramMax;
+  document.getElementById('actParamDef').value = a.paramDefault;
+  document.getElementById('actCooldown').value = a.cooldownUs;
+  document.getElementById('actEnabled').checked = a.enabled;
+  document.getElementById('actInverted').checked = a.inverted;
+  showModal('modalActuator');
+}
+
+async function saveActuator() {
+  const editId = document.getElementById('editActId').value;
+  const data = {
+    id: parseInt(document.getElementById('actId').value) || 0,
+    name: document.getElementById('actName').value || 'Actuator',
+    type: parseInt(document.getElementById('actType').value),
+    behavior: parseInt(document.getElementById('actBehavior').value),
+    bus: parseInt(document.getElementById('actBus').value),
+    hwAddress: parseInt(document.getElementById('actAddr').value),
+    hwPin: parseInt(document.getElementById('actPin').value),
+    paramMin: parseInt(document.getElementById('actParamMin').value),
+    paramMax: parseInt(document.getElementById('actParamMax').value),
+    paramDefault: parseInt(document.getElementById('actParamDef').value),
+    cooldownUs: parseInt(document.getElementById('actCooldown').value),
+    enabled: document.getElementById('actEnabled').checked,
+    inverted: document.getElementById('actInverted').checked
+  };
+  if (editId !== '') {
+    await api('actuator?id=' + editId, 'PUT', data);
+  } else {
+    await api('actuators', 'POST', data);
+  }
+  closeModal('modalActuator');
+  await loadActuators();
+  toast('Actionneur enregistre', 'success');
+}
+
+async function deleteActuator(id) {
+  if (!confirm('Supprimer cet actionneur ?')) return;
+  await api('actuator?id=' + id, 'DELETE');
+  await loadActuators();
+  toast('Actionneur supprime', 'success');
+}
+
+async function testActuator(id) {
+  await api('test/actuator', 'POST', {id: id, value: 80});
+  toast('Test envoye', 'success');
+}
+
+// ====================================================================
+// INSTRUMENTS
+// ====================================================================
+async function loadInstruments() {
+  const data = await api('instruments');
+  if (data) { instruments = data; renderInstruments(); }
+}
+
+function renderInstruments() {
+  const el = document.getElementById('instrumentList');
+  document.getElementById('instrCount').textContent = instruments.length;
+  if (instruments.length === 0) {
+    el.innerHTML = '<div class="empty-state"><p>Aucun instrument configure</p><p>Cliquez "+ Ajouter" pour commencer</p></div>';
+    return;
+  }
+  el.innerHTML = instruments.map(inst => {
+    const noteInfo = midiNotes.find(n => n.note === inst.midiNote);
+    const noteName = noteInfo ? noteInfo.name : 'Note ' + inst.midiNote;
+    const actNames = (inst.actuatorIds || [])
+      .filter(id => id !== 255)
+      .map(id => { const a = actuators.find(x => x.id === id); return a ? a.name : 'ID:'+id; });
+    return `
+    <div class="list-item">
+      <div class="item-header">
+        <span>
+          <strong>${inst.name}</strong>
+          <span class="badge">${inst.category}</span>
+          <span class="badge">${inst.midiNote} - ${noteName}</span>
+          ${!inst.enabled ? '<span class="badge badge-warn">OFF</span>' : ''}
+        </span>
+        <span>
+          <button class="btn btn-sm btn-success" onclick="testInstrument(${inst.id})">Test</button>
+          <button class="btn btn-sm btn-secondary" onclick="editInstrument(${inst.id})">Modifier</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteInstrument(${inst.id})">Suppr</button>
+        </span>
+      </div>
+      <div class="item-detail">
+        Ch: ${inst.midiChannel === 0 ? 'Tous' : inst.midiChannel}
+        | Actionneurs: ${actNames.length > 0 ? actNames.join(', ') : '<em>aucun</em>'}
+        ${inst.pipelineId !== undefined && inst.pipelineId !== 255 ? '| Pipeline #' + inst.pipelineId : ''}
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function showAddInstrument() {
@@ -416,8 +606,7 @@ function showAddInstrument() {
   document.getElementById('instrCategory').value = 'drums';
   document.getElementById('instrMidiNote').value = '36';
   document.getElementById('instrMidiChannel').value = '10';
-  document.getElementById('modalActuatorList').innerHTML = '';
-  addActuatorRow(); // Start with one actuator
+  buildActuatorChecklist([]);
   showModal('modalInstrument');
 }
 
@@ -430,25 +619,39 @@ function editInstrument(id) {
   document.getElementById('instrCategory').value = inst.category;
   document.getElementById('instrMidiNote').value = inst.midiNote;
   document.getElementById('instrMidiChannel').value = inst.midiChannel;
-  document.getElementById('modalActuatorList').innerHTML = '';
-  inst.actuators.forEach(a => addActuatorRow(a));
-  if (inst.actuators.length === 0) addActuatorRow();
+  const assignedIds = (inst.actuatorIds || []).filter(x => x !== 255);
+  buildActuatorChecklist(assignedIds);
   showModal('modalInstrument');
 }
 
+function buildActuatorChecklist(selectedIds) {
+  const el = document.getElementById('instrActuatorChecklist');
+  if (actuators.length === 0) {
+    el.innerHTML = '<span style="color:var(--fg2);font-size:0.85em;">Aucun actionneur disponible. Creez-en d\'abord dans l\'onglet Actionneurs.</span>';
+    return;
+  }
+  el.innerHTML = actuators.map(a => `
+    <label>
+      <input type="checkbox" value="${a.id}" ${selectedIds.includes(a.id) ? 'checked' : ''}>
+      <span>${a.name} <span style="color:var(--fg2);">(${a.typeName} - ${a.busName})</span></span>
+    </label>
+  `).join('');
+}
+
 async function saveInstrument() {
-  const id = document.getElementById('editInstrId').value;
+  const editId = document.getElementById('editInstrId').value;
+  const checkedBoxes = document.querySelectorAll('#instrActuatorChecklist input[type=checkbox]:checked');
+  const actIds = Array.from(checkedBoxes).map(cb => parseInt(cb.value));
   const data = {
     name: document.getElementById('instrName').value || 'Unnamed',
     category: document.getElementById('instrCategory').value,
     midiNote: parseInt(document.getElementById('instrMidiNote').value),
     midiChannel: parseInt(document.getElementById('instrMidiChannel').value),
     enabled: true,
-    actuators: collectActuators()
+    actuatorIds: actIds
   };
-
-  if (id) {
-    await api('instrument?id=' + id, 'PUT', data);
+  if (editId !== '') {
+    await api('instrument?id=' + editId, 'PUT', data);
   } else {
     await api('instruments', 'POST', data);
   }
@@ -464,124 +667,102 @@ async function deleteInstrument(id) {
   toast('Instrument supprime', 'success');
 }
 
-// --- Actuator rows in modal ---
-let actRowCounter = 0;
-function addActuatorRow(data = null) {
-  const idx = actRowCounter++;
-  const d = data || {name:'', type:0, timing:1, control:0, bus:0, hwAddress:0x20, hwPin:0, paramMin:8, paramMax:30, paramDefault:15, delayMs:0, ccNumber:0, enabled:true};
-  const html = `
-    <div class="actuator-item" id="actRow${idx}">
-      <div class="act-header">
-        <strong>Actionneur</strong>
-        <button class="btn btn-sm btn-danger" onclick="document.getElementById('actRow${idx}').remove()">X</button>
-      </div>
-      <div class="form-row">
-        <div class="form-group"><label>Nom</label><input type="text" class="act-name" value="${d.name}"></div>
-        <div class="form-group"><label>Type</label><select class="act-type">${ACTUATOR_TYPES.map(t=>`<option value="${t.v}" ${t.v===d.type?'selected':''}>${t.l}</option>`).join('')}</select></div>
-      </div>
-      <div class="form-row">
-        <div class="form-group"><label>Timing</label><select class="act-timing">${TIMING_TYPES.map(t=>`<option value="${t.v}" ${t.v===d.timing?'selected':''}>${t.l}</option>`).join('')}</select></div>
-        <div class="form-group"><label>Controle</label><select class="act-control">${CONTROL_TYPES.map(t=>`<option value="${t.v}" ${t.v===d.control?'selected':''}>${t.l}</option>`).join('')}</select></div>
-      </div>
-      <div class="form-row">
-        <div class="form-group"><label>Bus</label><select class="act-bus">${BUS_TYPES.map(t=>`<option value="${t.v}" ${t.v===d.bus?'selected':''}>${t.l}</option>`).join('')}</select></div>
-        <div class="form-group"><label>Adresse I2C</label><input type="text" class="act-addr" value="0x${d.hwAddress.toString(16)}"></div>
-        <div class="form-group"><label>Pin/Channel</label><input type="number" class="act-pin" value="${d.hwPin}" min="0" max="15"></div>
-      </div>
-      <div class="form-row">
-        <div class="form-group"><label>Param Min</label><input type="number" class="act-pmin" value="${d.paramMin}"></div>
-        <div class="form-group"><label>Param Max</label><input type="number" class="act-pmax" value="${d.paramMax}"></div>
-        <div class="form-group"><label>Par Defaut</label><input type="number" class="act-pdef" value="${d.paramDefault}"></div>
-        <div class="form-group"><label>Delai (ms)</label><input type="number" class="act-delay" value="${d.delayMs}"></div>
-      </div>
-      <div class="form-row">
-        <div class="form-group"><label>CC#</label><input type="number" class="act-cc" value="${d.ccNumber}" min="0" max="127"></div>
-      </div>
-    </div>`;
-  document.getElementById('modalActuatorList').insertAdjacentHTML('beforeend', html);
-}
-
-function collectActuators() {
-  const rows = document.querySelectorAll('#modalActuatorList .actuator-item');
-  return Array.from(rows).map(row => ({
-    name: row.querySelector('.act-name').value || 'Actuator',
-    type: parseInt(row.querySelector('.act-type').value),
-    timing: parseInt(row.querySelector('.act-timing').value),
-    control: parseInt(row.querySelector('.act-control').value),
-    bus: parseInt(row.querySelector('.act-bus').value),
-    hwAddress: parseInt(row.querySelector('.act-addr').value),
-    hwPin: parseInt(row.querySelector('.act-pin').value),
-    paramMin: parseInt(row.querySelector('.act-pmin').value),
-    paramMax: parseInt(row.querySelector('.act-pmax').value),
-    paramDefault: parseInt(row.querySelector('.act-pdef').value),
-    delayMs: parseInt(row.querySelector('.act-delay').value),
-    ccNumber: parseInt(row.querySelector('.act-cc').value),
-    enabled: true
-  }));
-}
-
-// --- Test ---
-function updateTestInstrumentSelect() {
-  const sel = document.getElementById('testInstrument');
-  sel.innerHTML = '<option value="">-- Choisir --</option>';
-  instruments.forEach(inst => {
-    const o = document.createElement('option');
-    o.value = inst.id;
-    o.textContent = inst.name + ' (Note ' + inst.midiNote + ')';
-    sel.appendChild(o);
-  });
-}
-
-function updateTestActuators() {
-  const instId = document.getElementById('testInstrument').value;
-  const sel = document.getElementById('testActuator');
-  sel.innerHTML = '<option value="all">Tous (instrument complet)</option>';
-  if (!instId) return;
-  const inst = instruments.find(i => i.id == instId);
-  if (!inst) return;
-  inst.actuators.forEach((a, i) => {
-    const o = document.createElement('option');
-    o.value = i;
-    o.textContent = a.name + ' (' + ACTUATOR_TYPES[a.type]?.l + ')';
-    sel.appendChild(o);
-  });
-}
-
-async function doTest() {
-  const instId = document.getElementById('testInstrument').value;
-  if (!instId) { toast('Choisissez un instrument', 'error'); return; }
-  const actIdx = document.getElementById('testActuator').value;
-  const val = parseInt(document.getElementById('testValue').value);
-
-  if (actIdx === 'all') {
-    await api('test/instrument', 'POST', {id: parseInt(instId), velocity: val});
-  } else {
-    await api('test/actuator', 'POST', {instrumentId: parseInt(instId), index: parseInt(actIdx), value: val});
-  }
+async function testInstrument(id) {
+  await api('test/instrument', 'POST', {id: id, velocity: 80});
   toast('Test envoye', 'success');
 }
 
-// --- Loops ---
+// ====================================================================
+// MAPPINGS (read-only pipeline visualization)
+// ====================================================================
+const BLOCK_TYPE_NAMES = {
+  0: {name:'CONDITION', cls:'cond', subtypes:{0:'Threshold',1:'RoundRobin',2:'VelocitySplit'}},
+  1: {name:'TRANSFORM', cls:'trans', subtypes:{0:'VelocityCurve',1:'Gain',2:'Clamp'}},
+  2: {name:'TIME', cls:'time', subtypes:{0:'Pulse',1:'Delay',2:'Ramp'}},
+  3: {name:'OUTPUT', cls:'out', subtypes:{0:'Pulse',1:'Position',2:'PWM'}}
+};
+
+function refreshMappings() {
+  renderMappings();
+  toast('Mappings actualises', 'success');
+}
+
+function renderMappings() {
+  const el = document.getElementById('mappingList');
+  if (instruments.length === 0) {
+    el.innerHTML = '<div class="empty-state"><p>Aucun instrument configure</p></div>';
+    return;
+  }
+
+  el.innerHTML = instruments.filter(inst => inst.enabled).map(inst => {
+    const noteInfo = midiNotes.find(n => n.note === inst.midiNote);
+    const noteName = noteInfo ? noteInfo.name : 'Note ' + inst.midiNote;
+    const actNames = (inst.actuatorIds || [])
+      .filter(id => id !== 255)
+      .map(id => { const a = actuators.find(x => x.id === id); return a; })
+      .filter(Boolean);
+
+    let pipelineHtml = '';
+    if (actNames.length > 0) {
+      const mainAct = actNames[0];
+      pipelineHtml = '<div class="pipeline-view">';
+      pipelineHtml += `<div class="pipe-block" style="border-color:var(--accent);color:var(--accent);">MIDI IN<br><small>${inst.midiNote} ${noteName}</small></div>`;
+      pipelineHtml += '<span class="pipe-arrow">&rarr;</span>';
+
+      // Show default pipeline blocks based on actuator type
+      if (mainAct.type === 1) { // SOLENOID
+        pipelineHtml += `<div class="pipe-block time">TIME:Pulse<br><small>${mainAct.paramMin}-${mainAct.paramMax}ms</small></div>`;
+        pipelineHtml += '<span class="pipe-arrow">&rarr;</span>';
+      } else if (mainAct.type === 0) { // SERVO
+        pipelineHtml += `<div class="pipe-block out">OUT:Position<br><small>ID:${mainAct.id}</small></div>`;
+        pipelineHtml += '<span class="pipe-arrow">&rarr;</span>';
+      } else if (mainAct.type === 2) { // PWM_MOTOR
+        pipelineHtml += `<div class="pipe-block out">OUT:PWM<br><small>ID:${mainAct.id}</small></div>`;
+        pipelineHtml += '<span class="pipe-arrow">&rarr;</span>';
+      }
+
+      pipelineHtml += `<div class="pipe-block" style="border-color:var(--success);color:var(--success);">${mainAct.name}<br><small>${mainAct.busName} pin ${mainAct.hwPin}</small></div>`;
+      pipelineHtml += '</div>';
+    } else {
+      pipelineHtml = '<div style="color:var(--fg2);font-size:0.85em;padding:4px 0;">Aucun actionneur assigne</div>';
+    }
+
+    return `
+    <div class="card">
+      <h3>
+        <span>${inst.name} <span class="badge">Note ${inst.midiNote}</span>
+        ${inst.pipelineId !== undefined && inst.pipelineId !== 255 ? '<span class="badge badge-green">Pipeline #'+inst.pipelineId+'</span>' : '<span class="badge badge-warn">Pas de pipeline</span>'}
+        </span>
+      </h3>
+      ${pipelineHtml}
+    </div>`;
+  }).join('');
+}
+
+// ====================================================================
+// LOOPS
+// ====================================================================
 async function loadLoops() {
   const data = await api('loops');
   if (data) { loops = data; renderLoops(); }
 }
 
 function renderLoops() {
-  const list = document.getElementById('loopList');
+  const el = document.getElementById('loopList');
+  document.getElementById('loopCount').textContent = loops.length;
   if (loops.length === 0) {
-    list.innerHTML = '<div class="empty-state"><p>Aucune boucle</p></div>';
+    el.innerHTML = '<div style="color:var(--fg2);font-size:0.85em;">Aucune boucle</div>';
     return;
   }
-  list.innerHTML = loops.map((loop, i) => `
-    <div class="card">
-      <h3>
-        <span>${loop.name} <span class="badge">${loop.bpm} BPM</span> <span class="badge">${loop.bars} mes.</span></span>
+  el.innerHTML = loops.map((loop, i) => `
+    <div class="list-item" style="border-left-color:var(--accent);">
+      <div class="item-header">
+        <span><strong>${loop.name}</strong> <span class="badge">${loop.bpm} BPM</span></span>
         <span>
           <button class="btn btn-sm btn-success" onclick="openLoopEditor(${i})">Editer</button>
           <button class="btn btn-sm btn-danger" onclick="deleteLoopItem(${i})">Suppr</button>
         </span>
-      </h3>
+      </div>
     </div>
   `).join('');
 }
@@ -617,7 +798,7 @@ function openLoopEditor(idx) {
   document.getElementById('loopBpmDisplay').textContent = loop.bpm;
   document.getElementById('loopBpmSlider').value = loop.bpm;
   document.getElementById('loopEditor').style.display = 'block';
-  renderLoopGrid(loop);
+  renderCurrentLoopGrid();
 }
 
 function closeLoopEditor() {
@@ -625,7 +806,9 @@ function closeLoopEditor() {
   currentLoopIdx = -1;
 }
 
-function renderLoopGrid(loop) {
+function renderCurrentLoopGrid() {
+  if (currentLoopIdx < 0 || !loops[currentLoopIdx]) return;
+  const loop = loops[currentLoopIdx];
   const grid = document.getElementById('loopGrid');
   const ppq = loop.ppq || 96;
   const beatsPerBar = loop.beatsPerBar || 4;
@@ -633,37 +816,29 @@ function renderLoopGrid(loop) {
   const totalBeats = beatsPerBar * bars;
   const subdivision = parseInt(document.getElementById('loopQuantize').value) || 8;
   const stepsPerBeat = subdivision / (loop.beatValue || 4);
-  const totalSteps = totalBeats * stepsPerBeat;
+  const totalSteps = Math.min(totalBeats * stepsPerBeat, 32);
   const ticksPerStep = (ppq * 4) / subdivision;
 
-  // Use instruments that are configured
   const rows = instruments.length > 0 ? instruments : [{id:0, name:'(aucun)', midiNote:36}];
-
-  let html = '';
-  // Header row - beat markers
-  html += '<div></div>';
-  for (let s = 0; s < totalSteps && s < 32; s++) {
+  let html = '<div></div>';
+  for (let s = 0; s < totalSteps; s++) {
     const beat = Math.floor(s / stepsPerBeat) + 1;
     const sub = (s % stepsPerBeat) + 1;
     html += `<div class="beat-marker">${sub === 1 ? beat : '.'}</div>`;
   }
-
-  // Instrument rows
   rows.forEach(inst => {
     html += `<div class="loop-label" title="${inst.name}">${inst.name.substring(0, 8)}</div>`;
-    for (let s = 0; s < totalSteps && s < 32; s++) {
+    for (let s = 0; s < totalSteps; s++) {
       const tick = Math.round(s * ticksPerStep);
-      const events = (loop.events || []);
+      const events = loop.events || [];
       const isActive = events.some(e =>
         e[1] === inst.midiNote && Math.abs(e[0] - tick) < ticksPerStep/2 && e[2] > 0
       );
       html += `<div class="loop-cell ${isActive ? 'active' : ''}"
-                    onclick="toggleLoopCell(${currentLoopIdx}, ${inst.midiNote}, ${tick}, ${ticksPerStep}, this)"
-                    data-note="${inst.midiNote}" data-tick="${tick}"></div>`;
+                    onclick="toggleLoopCell(${currentLoopIdx}, ${inst.midiNote}, ${tick}, ${ticksPerStep}, this)"></div>`;
     }
   });
-
-  grid.style.gridTemplateColumns = `60px repeat(${Math.min(totalSteps, 32)}, 1fr)`;
+  grid.style.gridTemplateColumns = `60px repeat(${totalSteps}, 1fr)`;
   grid.innerHTML = html;
 }
 
@@ -671,20 +846,16 @@ async function toggleLoopCell(loopIdx, note, tick, ticksPerStep, el) {
   if (loopIdx < 0 || loopIdx >= loops.length) return;
   const loop = loops[loopIdx];
   const events = loop.events || [];
-
-  // Find existing event
   const existingIdx = events.findIndex(e =>
     e[1] === note && Math.abs(e[0] - tick) < ticksPerStep/2 && e[2] > 0
   );
-
   if (existingIdx >= 0) {
     events.splice(existingIdx, 1);
     el.classList.remove('active');
   } else {
-    events.push([tick, note, 80, 10]); // tick, note, velocity, channel
+    events.push([tick, note, 80, 10]);
     el.classList.add('active');
   }
-
   loop.events = events;
   await api('loop?id=' + loopIdx, 'PUT', loop);
 }
@@ -697,11 +868,6 @@ function updateLoopBpm(val) {
   }
 }
 
-async function quantizeLoop(val) {
-  if (currentLoopIdx < 0) return;
-  renderLoopGrid(loops[currentLoopIdx]);
-}
-
 async function playCurrentLoop() {
   if (currentLoopIdx < 0) return;
   await api('loop/play?id=' + currentLoopIdx, 'POST');
@@ -712,26 +878,33 @@ async function stopLoop() {
   await api('loop/stop', 'POST');
 }
 
-// --- System ---
+// ====================================================================
+// SYSTEM
+// ====================================================================
 async function refreshStatus() {
   const data = await api('status');
   if (!data) return;
+  statusData = data;
 
   document.getElementById('wifiDot').className = 'dot ' + (data.wifi_ip ? 'on' : 'off');
   document.getElementById('wifiStatus').textContent = data.wifi_ip || 'Deconnecte';
   document.getElementById('midiDot').className = 'dot ' + (data.midi_connected ? 'on' : 'off');
   document.getElementById('midiStatus').textContent = data.midi_connected ? data.midi_sessions + ' session(s)' : 'Aucune';
-  document.getElementById('hwStatus').textContent = data.mcp_count + ' MCP + ' + data.pca_count + ' PCA';
+  document.getElementById('hwStatus').textContent = (data.actuator_configs||0) + ' act. ' + (data.instrument_count||0) + ' inst.';
 
-  document.getElementById('systemInfo').innerHTML = `
-    <div><strong>WiFi:</strong> ${data.wifi_ssid} (${data.wifi_ip}) RSSI: ${data.wifi_rssi}dBm</div>
-    <div><strong>MIDI:</strong> ${data.midi_connected?'Connecte':'Deconnecte'} | RX: ${data.midi_notes_rx} | TX: ${data.midi_notes_tx}</div>
-    <div><strong>Hardware:</strong> ${data.mcp_count} MCP23017 + ${data.pca_count} PCA9685</div>
-    <div><strong>Instruments:</strong> ${data.instrument_count} configures</div>
-    <div><strong>Boucles:</strong> ${data.loop_count} ${data.loop_playing?'(en lecture: '+data.loop_bpm+' BPM)':''}</div>
-    <div><strong>Memoire:</strong> ${(data.free_heap/1024).toFixed(1)} KB libre</div>
-    <div><strong>Stockage:</strong> ${data.storage}</div>
-    <div><strong>Uptime:</strong> ${Math.floor(data.uptime_s/3600)}h ${Math.floor((data.uptime_s%3600)/60)}m ${data.uptime_s%60}s</div>
+  document.getElementById('statGrid').innerHTML = `
+    <div class="stat-card"><div class="stat-value">${data.actuator_configs||0}</div><div class="stat-label">Actionneurs</div></div>
+    <div class="stat-card"><div class="stat-value">${data.actuator_active||0}/${data.actuator_count||0}</div><div class="stat-label">Actifs / Charges</div></div>
+    <div class="stat-card"><div class="stat-value">${data.instrument_count||0}</div><div class="stat-label">Instruments</div></div>
+    <div class="stat-card"><div class="stat-value">${data.pipeline_count||0}</div><div class="stat-label">Pipelines</div></div>
+    <div class="stat-card"><div class="stat-value">${data.scheduler_dispatched||0}</div><div class="stat-label">Cmds dispatched</div></div>
+    <div class="stat-card"><div class="stat-value">${data.scheduler_jitter_us||0}us</div><div class="stat-label">Jitter (max: ${data.scheduler_max_jitter_us||0}us)</div></div>
+    <div class="stat-card"><div class="stat-value">${data.scheduler_queue||0}/${data.scheduler_usage||0}%</div><div class="stat-label">Queue scheduler</div></div>
+    <div class="stat-card"><div class="stat-value">${((data.free_heap||0)/1024).toFixed(1)} KB</div><div class="stat-label">Memoire libre</div></div>
+    <div class="stat-card"><div class="stat-value">${data.midi_notes_rx||0}</div><div class="stat-label">MIDI RX</div></div>
+    <div class="stat-card"><div class="stat-value">${data.wifi_rssi||0} dBm</div><div class="stat-label">WiFi RSSI</div></div>
+    <div class="stat-card"><div class="stat-value">${Math.floor((data.uptime_s||0)/3600)}h${Math.floor(((data.uptime_s||0)%3600)/60)}m</div><div class="stat-label">Uptime</div></div>
+    <div class="stat-card"><div class="stat-value">${data.loop_playing ? 'Lecture' : 'Arrete'}</div><div class="stat-label">Loop ${data.loop_playing ? data.loop_bpm + ' BPM' : ''}</div></div>
   `;
 }
 
@@ -747,7 +920,9 @@ async function saveAll() {
   toast('Configuration sauvegardee', 'success');
 }
 
-// --- UI Helpers ---
+// ====================================================================
+// UI Helpers
+// ====================================================================
 function showModal(id) { document.getElementById(id).classList.add('show'); }
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
 
@@ -757,6 +932,8 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
     tab.classList.add('active');
     document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+    // Refresh mappings when switching to that tab
+    if (tab.dataset.tab === 'mappings') renderMappings();
   });
 });
 
@@ -767,7 +944,6 @@ function toast(msg, type='success') {
   setTimeout(() => t.classList.remove('show'), 3000);
 }
 
-// Init on load
 window.addEventListener('load', init);
 </script>
 </body>

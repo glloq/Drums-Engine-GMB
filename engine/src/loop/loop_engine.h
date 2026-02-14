@@ -7,13 +7,22 @@
 #include "../core/types.h"
 #include "../instrument/instrument_manager.h"
 
+// Forward declaration
+class EventProcessor;
+
 // ============================================================================
 // LoopEngine - Sequenceur de boucles
+// ============================================================================
+// Route automatiquement par EventProcessor (pipeline) quand disponible,
+// sinon fallback vers InstrumentManager (legacy).
 // ============================================================================
 
 class LoopEngine {
 public:
   LoopEngine(InstrumentManager* instrumentMgr);
+
+  // Connecter l'EventProcessor pour mode pipeline
+  void setEventProcessor(EventProcessor* eventProc) { _eventProc = eventProc; }
 
   // Controle de lecture
   void play(uint8_t loopIndex);
@@ -55,6 +64,7 @@ public:
 
 private:
   InstrumentManager* _instrumentMgr;
+  EventProcessor* _eventProc = nullptr;
   Loop _loops[MAX_LOOPS];
   uint8_t _loopCount;
 
@@ -69,6 +79,7 @@ private:
   void _calcTickInterval(uint16_t bpm, uint16_t ppq);
   uint16_t _totalTicks(const Loop& loop) const;
   void _sortEvents(Loop& loop);
+  void _dispatchEvent(const LoopEvent& evt);
 };
 
 #endif // LOOP_ENGINE_H

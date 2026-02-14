@@ -41,7 +41,7 @@ void EventProcessor::_executePipeline(uint8_t pipelineIdx, uint8_t value, uint32
 
   const CompiledPipeline& pipeline = _lookup.pipelines[pipelineIdx];
   uint8_t currentValue = value;
-  uint32_t delayAccum = 0; // Accumulation des delais
+  uint32_t delayAccum = 0;
 
   for (uint8_t i = 0; i < pipeline.block_count; i++) {
     const CompiledBlock& block = pipeline.blocks[i];
@@ -60,29 +60,28 @@ void EventProcessor::_executePipeline(uint8_t pipelineIdx, uint8_t value, uint32
       }
 
       case BlockType::TIME: {
-        // Les blocs TIME ajoutent du delai ou generent des impulsions
         if (block.subtype == TIME_DELAY) {
+          // Delai simple: accumuler
           delayAccum += (uint32_t)block.param2 * 1000; // ms -> us
-        } else if (block.subtype == TIME_PULSE) {
+        }
+        else if (block.subtype == TIME_PULSE) {
           // Generer impulsion via scheduler
-          uint32_t duration = (uint32_t)block.param2 * 1000; // ms -> us
-          if (block.param1 > 0) {
-            // Duree depend de la velocite
-            duration = map(currentValue, 0, 127,
-                          (uint32_t)block.param1 * 1000,
-                          (uint32_t)block.param2 * 1000);
-          }
-          _scheduler->schedulePulseAt(pipeline.output_actuator_id,
-                                       currentValue, duration,
-                                       timestamp + delayAccum);
-          return; // L'impulsion genere sa propre commande OFF
+          _processTimePulse(block, pipeline.output_actuator_id,
+                           currentValue, timestamp, delayAccum);
+          return; // L'impulsion genere ON+OFF, pipeline termine
+        }
+        else if (block.subtype == TIME_RAMP) {
+          // Generer rampe de micro-steps pour servo/moteur
+          _processTimeRamp(block, pipeline.output_actuator_id,
+                          currentValue, timestamp, delayAccum);
+          return; // Le ramp genere N commandes, pipeline termine
         }
         break;
       }
 
       case BlockType::OUTPUT: {
-        _processOutputBlock(block, currentValue, timestamp + delayAccum);
-        return; // Sortie atteinte
+        _processOutputBlock(block, currentValue, timestamp, delayAccum);
+        return;
       }
     }
   }
@@ -99,38 +98,45 @@ void EventProcessor::_executePipeline(uint8_t pipelineIdx, uint8_t value, uint32
   }
 }
 
+// --- CONDITION blocks ---
+
 int16_t EventProcessor::_processConditionBlock(const CompiledBlock& block, uint8_t value,
                                                  uint8_t pipelineIdx) {
   switch (block.subtype) {
     case COND_THRESHOLD: {
-      // param1: source variable index, param2: seuil
+      // param1 bits[6:0] = variable index (0x7F = use velocity)
+      // param1 bit[7] = direction (0: >=, 1: <)
+      uint8_t varIdx = block.param1 & 0x7F;
+      bool isLessThan = (block.param1 & 0x80) != 0;
+
       uint16_t sourceVal;
-      if (block.param1 == 0xFF) {
+      if (varIdx == 0x7F) {
         sourceVal = value; // Utiliser la velocite
       } else {
-        sourceVal = _state->getVariable(block.param1);
+        sourceVal = _state->getVariable(varIdx);
       }
-      // bit 7 de param1 = direction (0: >, 1: <)
-      bool isLessThan = (block.param1 & 0x80) != 0;
+
       if (isLessThan) {
         return (sourceVal < block.param2) ? value : -1;
       } else {
-        return (sourceVal > block.param2) ? value : -1;
+        return (sourceVal >= block.param2) ? value : -1;
       }
     }
 
     case COND_ROUND_ROBIN: {
-      // param2: nombre de sorties
+      // param1: index de sortie que ce pipeline gere
+      // param2: nombre total de sorties
       uint8_t numOutputs = block.param2 & 0xFF;
       uint8_t current = _state->advanceRoundRobin(pipelineIdx, numOutputs);
-      // param1: index de sortie que ce pipeline gere
-      if (current != block.param1) return -1; // Pas notre tour
+      if (current != block.param1) return -1;
       return value;
     }
 
     case COND_VELOCITY_SPLIT: {
-      // param1: min, param2: max
-      if (value >= block.param1 && value <= (block.param2 & 0xFF)) {
+      // param1: velocity min, param2: velocity max
+      uint8_t vMin = block.param1;
+      uint8_t vMax = block.param2 & 0xFF;
+      if (value >= vMin && value <= vMax) {
         return value;
       }
       return -1;
@@ -140,6 +146,8 @@ int16_t EventProcessor::_processConditionBlock(const CompiledBlock& block, uint8
       return value;
   }
 }
+
+// --- TRANSFORM blocks ---
 
 uint8_t EventProcessor::_processTransformBlock(const CompiledBlock& block, uint8_t value) {
   switch (block.subtype) {
@@ -154,8 +162,10 @@ uint8_t EventProcessor::_processTransformBlock(const CompiledBlock& block, uint8
 
     case TRANS_CLAMP: {
       // param1: min, param2: max
-      if (value < block.param1) return block.param1;
-      if (value > (block.param2 & 0xFF)) return (uint8_t)block.param2;
+      uint8_t cMin = block.param1;
+      uint8_t cMax = block.param2 & 0xFF;
+      if (value < cMin) return cMin;
+      if (value > cMax) return cMax;
       return value;
     }
 
@@ -164,17 +174,74 @@ uint8_t EventProcessor::_processTransformBlock(const CompiledBlock& block, uint8
   }
 }
 
+// --- TIME blocks ---
+
+uint32_t EventProcessor::_processTimePulse(const CompiledBlock& block, uint8_t actuatorId,
+                                            uint8_t value, uint32_t timestamp, uint32_t delayAccum) {
+  // param1: min duration ms (if > 0, velocity-dependent)
+  // param2: max duration ms
+  uint32_t durationUs;
+  if (block.param1 > 0) {
+    durationUs = map(value, 0, 127,
+                     (uint32_t)block.param1 * 1000,
+                     (uint32_t)block.param2 * 1000);
+  } else {
+    durationUs = (uint32_t)block.param2 * 1000;
+  }
+
+  _scheduler->schedulePulseAt(actuatorId, value, durationUs,
+                               timestamp + delayAccum);
+  return durationUs;
+}
+
+void EventProcessor::_processTimeRamp(const CompiledBlock& block, uint8_t actuatorId,
+                                       uint8_t value, uint32_t timestamp, uint32_t delayAccum) {
+  // Ramping: generer des micro-steps pour transition progressive
+  // param1: nombre de steps (0 = auto ~5ms par step)
+  // param2: duree totale en ms
+  //
+  // Genere N commandes POSITION de 0 -> value sur la duree totale
+  // Ex: position 10->50 en 20ms = 4 steps de 5ms
+  //     = 4 commandes POSITION schedulees a t+0, t+5ms, t+10ms, t+15ms
+
+  uint32_t totalDurationUs = (uint32_t)block.param2 * 1000;
+  uint8_t stepCount = block.param1;
+  if (stepCount == 0) {
+    stepCount = totalDurationUs / 5000; // ~5ms per step
+    if (stepCount < 2) stepCount = 2;
+    if (stepCount > 20) stepCount = 20; // Limiter la queue
+  }
+
+  uint32_t stepInterval = totalDurationUs / stepCount;
+  uint32_t baseTime = timestamp + delayAccum;
+
+  for (uint8_t i = 0; i < stepCount; i++) {
+    uint8_t stepVal = (uint8_t)(((uint16_t)value * (i + 1)) / stepCount);
+
+    ActuatorCommand cmd;
+    cmd.actuator_id = actuatorId;
+    cmd.command_type = (uint8_t)CommandType::POSITION;
+    cmd.value = stepVal;
+    cmd.duration = 0;
+    cmd.execute_at = baseTime + (stepInterval * i);
+
+    if (!_scheduler->scheduleCommand(cmd)) break; // Queue pleine
+  }
+}
+
+// --- OUTPUT blocks ---
+
 void EventProcessor::_processOutputBlock(const CompiledBlock& block, uint8_t value,
-                                          uint32_t timestamp) {
+                                          uint32_t timestamp, uint32_t delayAccum) {
   ActuatorCommand cmd;
-  cmd.actuator_id = block.param1; // Actionneur cible dans param1
+  cmd.actuator_id = block.param1;
   cmd.value = value;
-  cmd.execute_at = timestamp;
+  cmd.execute_at = timestamp + delayAccum;
 
   switch (block.subtype) {
     case OUT_PULSE:
       cmd.command_type = (uint8_t)CommandType::PULSE;
-      cmd.duration = block.param2; // Duree en centaines de us
+      cmd.duration = block.param2;
       break;
 
     case OUT_POSITION:
@@ -195,6 +262,8 @@ void EventProcessor::_processOutputBlock(const CompiledBlock& block, uint8_t val
 
   _scheduler->scheduleCommand(cmd);
 }
+
+// --- Velocity curves ---
 
 uint8_t EventProcessor::_applyVelocityCurve(uint8_t value, uint8_t curveType) {
   float normalized = value / 127.0f;
@@ -218,8 +287,6 @@ uint8_t EventProcessor::_applyVelocityCurve(uint8_t value, uint8_t curveType) {
 }
 
 void EventProcessor::recompileLookup() {
-  // Reinitialiser la lookup table
   memset(_lookup.note_to_pipeline, 0xFF, sizeof(_lookup.note_to_pipeline));
-  // Les pipelines sont charges depuis le JSON par le pipeline compiler
   DBGF("[EventProc] Lookup recompiled (%d pipelines)\n", _lookup.pipeline_count);
 }

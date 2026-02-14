@@ -431,7 +431,10 @@ void setup() {
   // 4. Load configuration + create actuators + compile pipelines
   loadConfiguration();
 
-  // 5. Hardware timer pour scheduler precis
+  // 5. Connecter le LoopEngine au pipeline system
+  loopEngine.setEventProcessor(&eventProcessor);
+
+  // 6. Hardware timer pour scheduler precis
   setupSchedulerTimer();
 
   // 6. WiFi

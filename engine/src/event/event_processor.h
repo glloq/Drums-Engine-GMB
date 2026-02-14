@@ -17,6 +17,12 @@
 //   4. Generer ActuatorCommand
 //   5. Push dans scheduler queue
 //
+// Supporte les 14 types de blocs :
+//   CONDITION: Threshold, RoundRobin, VelocitySplit
+//   TRANSFORM: VelocityCurve, Gain, Clamp
+//   TIME: Pulse, Delay, Ramp (micro-steps)
+//   OUTPUT: Pulse, Position, PWM
+//
 // Aucune allocation dynamique.
 // ============================================================================
 
@@ -43,12 +49,16 @@ private:
   void _executePipeline(uint8_t pipelineIdx, uint8_t value, uint32_t timestamp);
 
   // Traitement des blocs individuels
-  // Retourne la valeur transformee, ou -1 si le pipeline doit s'arreter
   int16_t _processConditionBlock(const CompiledBlock& block, uint8_t value, uint8_t pipelineIdx);
   uint8_t _processTransformBlock(const CompiledBlock& block, uint8_t value);
-  void _processTimeBlock(const CompiledBlock& block, uint8_t actuatorId,
-                          uint8_t value, uint32_t timestamp);
-  void _processOutputBlock(const CompiledBlock& block, uint8_t value, uint32_t timestamp);
+  void _processOutputBlock(const CompiledBlock& block, uint8_t value,
+                            uint32_t timestamp, uint32_t delayAccum);
+
+  // TIME block handlers
+  uint32_t _processTimePulse(const CompiledBlock& block, uint8_t actuatorId,
+                              uint8_t value, uint32_t timestamp, uint32_t delayAccum);
+  void _processTimeRamp(const CompiledBlock& block, uint8_t actuatorId,
+                         uint8_t value, uint32_t timestamp, uint32_t delayAccum);
 
   // Courbes de velocite
   uint8_t _applyVelocityCurve(uint8_t value, uint8_t curveType);

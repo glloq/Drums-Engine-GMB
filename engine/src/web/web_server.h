@@ -76,6 +76,7 @@ private:
   void _handleGetStatus(AsyncWebServerRequest* req);
   void _handleScanI2C(AsyncWebServerRequest* req);
   void _handleGetMidiNotes(AsyncWebServerRequest* req);
+  void _handleGetCapabilities(AsyncWebServerRequest* req);
   void _handleSaveConfig(AsyncWebServerRequest* req);
 
   // WebSocket
@@ -87,6 +88,8 @@ private:
   void _sendError(AsyncWebServerRequest* req, int code, const char* msg);
   uint8_t _extractId(AsyncWebServerRequest* req, const char* param);
   void _wsBroadcast(const char* type, const JsonObject& data);
+
+  bool _validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg);
 };
 
 #endif // WEB_SERVER_H

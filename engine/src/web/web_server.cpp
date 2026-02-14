@@ -137,6 +137,9 @@ void WebServerManager::_setupRoutes() {
   _server.on("/api/midi-notes", HTTP_GET,
     [this](AsyncWebServerRequest* req) { _handleGetMidiNotes(req); });
 
+  _server.on("/api/capabilities", HTTP_GET,
+    [this](AsyncWebServerRequest* req) { _handleGetCapabilities(req); });
+
   _server.on("/api/save", HTTP_POST,
     [this](AsyncWebServerRequest* req) { _handleSaveConfig(req); });
 
@@ -259,6 +262,12 @@ void WebServerManager::_handleCreateActuator(AsyncWebServerRequest* req, uint8_t
   cfg.enabled = doc["enabled"] | true;
   cfg.inverted = doc["inverted"] | false;
 
+  const char* errMsg = nullptr;
+  if (!_validateActuatorConfig(cfg, errMsg)) {
+    _sendError(req, 400, errMsg);
+    return;
+  }
+
   int idx = _actFactory->addConfig(cfg);
   if (idx < 0) { _sendError(req, 507, "Max actuators reached"); return; }
 
@@ -292,6 +301,12 @@ void WebServerManager::_handleUpdateActuator(AsyncWebServerRequest* req, uint8_t
   if (doc.containsKey("cooldownUs"))  cfg->cooldownUs = doc["cooldownUs"] | 200;
   if (doc.containsKey("enabled"))     cfg->enabled = doc["enabled"] | true;
   if (doc.containsKey("inverted"))    cfg->inverted = doc["inverted"] | false;
+
+  const char* errMsg = nullptr;
+  if (!_validateActuatorConfig(*cfg, errMsg)) {
+    _sendError(req, 400, errMsg);
+    return;
+  }
 
   // Reconstruire les actionneurs physiques
   _actFactory->rebuildAll();
@@ -482,6 +497,41 @@ void WebServerManager::_handleGetMidiNotes(AsyncWebServerRequest* req) {
   _sendJson(req, 200, doc);
 }
 
+void WebServerManager::_handleGetCapabilities(AsyncWebServerRequest* req) {
+  JsonDocument doc;
+
+  JsonArray types = doc["actuatorTypes"].to<JsonArray>();
+  {
+    JsonObject t = types.add<JsonObject>();
+    t["id"] = (uint8_t)ActuatorType::SERVO;
+    t["name"] = "Servo";
+    t["recommendedBus"] = (uint8_t)HardwareBus::PCA9685;
+    t["supportedBusMask"] = (1 << (uint8_t)HardwareBus::PCA9685);
+  }
+  {
+    JsonObject t = types.add<JsonObject>();
+    t["id"] = (uint8_t)ActuatorType::SOLENOID;
+    t["name"] = "Solenoid";
+    t["recommendedBus"] = (uint8_t)HardwareBus::MCP23017;
+    t["supportedBusMask"] = (1 << (uint8_t)HardwareBus::MCP23017) |
+                            (1 << (uint8_t)HardwareBus::GPIO_DIRECT);
+  }
+  {
+    JsonObject t = types.add<JsonObject>();
+    t["id"] = (uint8_t)ActuatorType::PWM_MOTOR;
+    t["name"] = "PWM Motor";
+    t["recommendedBus"] = (uint8_t)HardwareBus::LEDC_PWM;
+    t["supportedBusMask"] = (1 << (uint8_t)HardwareBus::LEDC_PWM) |
+                            (1 << (uint8_t)HardwareBus::PCA9685);
+  }
+
+  doc["maxActuators"] = MAX_ACTUATORS;
+  doc["maxInstruments"] = MAX_INSTRUMENTS;
+  doc["maxActuatorsPerInstrument"] = MAX_ACTUATORS_PER_INST;
+
+  _sendJson(req, 200, doc);
+}
+
 void WebServerManager::_handleSaveConfig(AsyncWebServerRequest* req) {
   _storage->saveActuators(*_actFactory);
   _storage->saveInstruments(*_instrMgr);
@@ -525,6 +575,46 @@ void WebServerManager::_wsBroadcast(const char* type, const JsonObject& data) {
   String msg;
   serializeJson(doc, msg);
   _ws.textAll(msg);
+}
+
+bool WebServerManager::_validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg) {
+  if (cfg.paramMin > cfg.paramMax) {
+    errMsg = "paramMin must be <= paramMax";
+    return false;
+  }
+
+  if (cfg.paramDefault < cfg.paramMin || cfg.paramDefault > cfg.paramMax) {
+    errMsg = "paramDefault must be inside [paramMin, paramMax]";
+    return false;
+  }
+
+  if (cfg.type == ActuatorType::SERVO) {
+    if (cfg.bus != HardwareBus::PCA9685) {
+      errMsg = "Servo currently requires PCA9685 bus";
+      return false;
+    }
+    if (cfg.hwPin > 15) {
+      errMsg = "Servo channel must be in [0..15]";
+      return false;
+    }
+  }
+
+  if (cfg.type == ActuatorType::SOLENOID) {
+    if (cfg.bus != HardwareBus::MCP23017 && cfg.bus != HardwareBus::GPIO_DIRECT) {
+      errMsg = "Solenoid supports MCP23017 or GPIO_DIRECT";
+      return false;
+    }
+  }
+
+  if (cfg.type == ActuatorType::PWM_MOTOR) {
+    if (cfg.bus != HardwareBus::LEDC_PWM && cfg.bus != HardwareBus::PCA9685) {
+      errMsg = "PWM motor supports LEDC_PWM or PCA9685";
+      return false;
+    }
+  }
+
+  errMsg = nullptr;
+  return true;
 }
 
 // --- Helpers ---

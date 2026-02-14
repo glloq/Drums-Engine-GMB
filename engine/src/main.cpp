@@ -317,6 +317,9 @@ void loadConfiguration() {
 
   // 4. Compiler les pipelines depuis les instruments charges
   compilePipelines();
+
+  // 5. Charger les boucles depuis le stockage
+  loadLoops();
 }
 
 // ============================================================================
@@ -396,6 +399,35 @@ void compilePipelines() {
 }
 
 // ============================================================================
+// Charger les boucles depuis le stockage
+// ============================================================================
+void loadLoops() {
+  JsonDocument doc;
+  JsonArray arr = doc.to<JsonArray>();
+  if (storage.listLoops(arr)) {
+    for (JsonObject loopInfo : arr) {
+      uint8_t id = loopInfo["id"] | 0;
+      JsonDocument loopDoc;
+      JsonObject loopObj = loopDoc.to<JsonObject>();
+      if (storage.loadLoop(id, loopObj)) {
+        const char* name = loopObj["name"] | "Loop";
+        uint16_t bpm = loopObj["bpm"] | MIDI_BPM_DEFAULT;
+        uint8_t bars = loopObj["bars"] | 1;
+        uint8_t beatsPerBar = loopObj["beatsPerBar"] | 4;
+        uint8_t beatValue = loopObj["beatValue"] | 4;
+
+        int idx = loopEngine.createLoop(name, bpm, bars, beatsPerBar, beatValue);
+        if (idx >= 0) {
+          Loop* loop = loopEngine.getLoop(idx);
+          if (loop) loopEngine.loopFromJson(loopObj, *loop);
+        }
+      }
+    }
+    DBGF("[Config] Loaded %d loops\n", loopEngine.getLoopCount());
+  }
+}
+
+// ============================================================================
 // Setup
 // ============================================================================
 void setup() {
@@ -427,6 +459,7 @@ void setup() {
 
   // 3. Scheduler
   scheduler.begin();
+  actuatorManager.setScheduler(&scheduler);
 
   // 4. Load configuration + create actuators + compile pipelines
   loadConfiguration();
@@ -437,18 +470,19 @@ void setup() {
   // 6. Hardware timer pour scheduler precis
   setupSchedulerTimer();
 
-  // 6. WiFi
+  // 7. WiFi
   if (!connectWiFi()) {
     DBGLN("[FATAL] WiFi init failed!");
   }
 
-  // 7. MIDI over WiFi
+  // 8. MIDI over WiFi
   midiEngine.begin();
 
-  // 8. Web Server
+  // 9. Web Server
+  webServer.setRecompileCallback(compilePipelines);
   webServer.begin();
 
-  // 9. FreeRTOS tasks
+  // 10. FreeRTOS tasks
   // RT Core: Scheduler + MIDI sur Core 1, priorite haute
   xTaskCreatePinnedToCore(rtCoreTask, "RT_Core", 8192, nullptr, 5, nullptr, 1);
 

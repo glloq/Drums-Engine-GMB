@@ -146,6 +146,9 @@ ActuatorConfig* ActuatorFactory::findConfig(uint8_t id) {
 }
 
 uint8_t ActuatorFactory::rebuildAll() {
+  // Nettoyer les enregistrements existants dans le manager
+  _manager->clearAll();
+
   // Reset les pools
   _solenoidIdx = 0;
   _servoIdx = 0;

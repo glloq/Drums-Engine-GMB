@@ -21,8 +21,6 @@
 // Supporte la migration depuis le format V4_ESP32 (ancien format inline).
 // ============================================================================
 
-#define ACTUATORS_FILE "/actuators.json"
-
 class Storage {
 public:
   bool begin();

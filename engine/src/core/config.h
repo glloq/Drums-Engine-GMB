@@ -68,6 +68,7 @@
 
 // --- Storage ---
 #define CONFIG_FILE       "/config.json"
+#define ACTUATORS_FILE    "/actuators.json"
 #define INSTRUMENTS_FILE  "/instruments.json"
 #define LOOPS_DIR         "/loops"
 

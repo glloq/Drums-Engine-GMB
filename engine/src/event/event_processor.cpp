@@ -6,18 +6,29 @@ EventProcessor::EventProcessor(Scheduler* scheduler, EngineState* state)
 
 void EventProcessor::processMidiEvent(const MidiEvent& ev) {
   if (ev.type == MIDI_EVT_NOTE_ON && ev.data2 > 0) {
-    // Note On: lookup pipeline
-    uint8_t pipelineIdx = _lookup.note_to_pipeline[ev.data1];
-    if (pipelineIdx == 0xFF || pipelineIdx >= _lookup.pipeline_count) return;
-
-    _executePipeline(pipelineIdx, ev.data2, ev.timestamp);
-  }
-  else if (ev.type == MIDI_EVT_NOTE_OFF || (ev.type == MIDI_EVT_NOTE_ON && ev.data2 == 0)) {
-    // Note Off: envoyer commande OFF a l'actionneur lie
     uint8_t pipelineIdx = _lookup.note_to_pipeline[ev.data1];
     if (pipelineIdx == 0xFF || pipelineIdx >= _lookup.pipeline_count) return;
 
     const CompiledPipeline& pipeline = _lookup.pipelines[pipelineIdx];
+    if (pipeline.note_on_count > 0) {
+      _scheduler->scheduleActionSteps(pipeline.note_on_actions, pipeline.note_on_count,
+                                      ev.data2, ev.timestamp, _state->raw().variables);
+      return;
+    }
+
+    _executePipeline(pipelineIdx, ev.data2, ev.timestamp);
+  }
+  else if (ev.type == MIDI_EVT_NOTE_OFF || (ev.type == MIDI_EVT_NOTE_ON && ev.data2 == 0)) {
+    uint8_t pipelineIdx = _lookup.note_to_pipeline[ev.data1];
+    if (pipelineIdx == 0xFF || pipelineIdx >= _lookup.pipeline_count) return;
+
+    const CompiledPipeline& pipeline = _lookup.pipelines[pipelineIdx];
+    if (pipeline.note_off_count > 0) {
+      _scheduler->scheduleActionSteps(pipeline.note_off_actions, pipeline.note_off_count,
+                                      0, ev.timestamp, _state->raw().variables);
+      return;
+    }
+
     if (pipeline.output_actuator_id != 0xFF) {
       ActuatorCommand cmd;
       cmd.actuator_id = pipeline.output_actuator_id;
@@ -29,9 +40,33 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
     }
   }
   else if (ev.type == MIDI_EVT_CC) {
-    // CC: stocker dans une variable globale indexee par CC number
-    if (ev.data1 < MAX_GLOBAL_VARS) {
-      _state->setVariable(ev.data1, ev.data2);
+    _processCcEvent(ev);
+  }
+}
+
+
+void EventProcessor::_processCcEvent(const MidiEvent& ev) {
+  if (ev.data1 < MAX_GLOBAL_VARS) {
+    _state->setVariable(ev.data1, ev.data2);
+  }
+
+  for (uint8_t i = 0; i < _lookup.pipeline_count; i++) {
+    const CompiledPipeline& pipeline = _lookup.pipelines[i];
+    for (uint8_t j = 0; j < pipeline.cc_binding_count; j++) {
+      const CCBinding& binding = pipeline.cc_bindings[j];
+      if (binding.cc_number != ev.data1 || binding.actuator_id == 0xFF) continue;
+
+      uint8_t inVal = binding.inverted ? (127 - ev.data2) : ev.data2;
+      uint8_t curved = _applyVelocityCurve(inVal, binding.curve);
+      uint16_t mapped = map(curved, 0, 127, binding.range_min, binding.range_max);
+
+      ActuatorCommand cmd;
+      cmd.actuator_id = binding.actuator_id;
+      cmd.command_type = binding.command_type;
+      cmd.value = mapped;
+      cmd.duration = 0;
+      cmd.execute_at = ev.timestamp;
+      _scheduler->scheduleCommand(cmd);
     }
   }
 }

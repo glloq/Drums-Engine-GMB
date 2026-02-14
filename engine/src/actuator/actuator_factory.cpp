@@ -1,0 +1,192 @@
+#include "actuator_factory.h"
+
+ActuatorFactory::ActuatorFactory(ActuatorManager* manager,
+                                  MCP23017Driver* mcpDrivers, uint8_t mcpCount,
+                                  PCA9685Driver* pcaDrivers, uint8_t pcaCount,
+                                  GpioDriver* gpioDriver, LedcDriver* ledcDriver)
+  : _manager(manager),
+    _mcpDrivers(mcpDrivers), _mcpCount(mcpCount),
+    _pcaDrivers(pcaDrivers), _pcaCount(pcaCount),
+    _gpioDriver(gpioDriver), _ledcDriver(ledcDriver),
+    _solenoidIdx(0), _servoIdx(0), _motorIdx(0),
+    _configCount(0), _createdCount(0) {
+  // Initialiser les pools servo avec un pointeur PCA par defaut
+  // (sera reassigne dans createAndRegister)
+}
+
+Actuator* ActuatorFactory::createAndRegister(const ActuatorConfig& config) {
+  if (_createdCount >= MAX_ACTUATORS) {
+    DBGLN("[Factory] Max actuators reached!");
+    return nullptr;
+  }
+
+  Actuator* actuator = nullptr;
+
+  switch (config.type) {
+    case ActuatorType::SOLENOID: {
+      if (_solenoidIdx >= MAX_ACTUATORS) return nullptr;
+      HalDriver* driver = _getDriver(config.bus, config.hwAddress);
+      if (!driver) {
+        DBGF("[Factory] No HAL driver for solenoid '%s' (bus=%d, addr=0x%02X)\n",
+             config.name, (int)config.bus, config.hwAddress);
+        return nullptr;
+      }
+      SolenoidActuator& sol = _solenoidPool[_solenoidIdx];
+      sol = SolenoidActuator(driver);
+      sol.setConfig(config);
+      actuator = &sol;
+      _solenoidIdx++;
+      break;
+    }
+
+    case ActuatorType::SERVO: {
+      if (_servoIdx >= MAX_ACTUATORS) return nullptr;
+      PCA9685Driver* pcaDriver = _getPcaDriver(config.hwAddress);
+      if (!pcaDriver) {
+        DBGF("[Factory] No PCA9685 driver for servo '%s' (addr=0x%02X)\n",
+             config.name, config.hwAddress);
+        return nullptr;
+      }
+      ServoActuator& srv = _servoPool[_servoIdx];
+      srv = ServoActuator(pcaDriver);
+      srv.setConfig(config);
+      actuator = &srv;
+      _servoIdx++;
+      break;
+    }
+
+    case ActuatorType::PWM_MOTOR: {
+      if (_motorIdx >= MAX_ACTUATORS) return nullptr;
+      HalDriver* driver = _getDriver(config.bus, config.hwAddress);
+      if (!driver) {
+        DBGF("[Factory] No HAL driver for motor '%s' (bus=%d)\n",
+             config.name, (int)config.bus);
+        return nullptr;
+      }
+      MotorActuator& mot = _motorPool[_motorIdx];
+      mot = MotorActuator(driver);
+      mot.setConfig(config);
+      actuator = &mot;
+      _motorIdx++;
+      break;
+    }
+
+    default:
+      DBGF("[Factory] Unknown actuator type %d\n", (int)config.type);
+      return nullptr;
+  }
+
+  if (actuator) {
+    if (_manager->registerActuator(config.id, actuator)) {
+      actuator->init();
+      _createdCount++;
+      DBGF("[Factory] Created '%s' (id=%d, type=%s, bus=%s, pin=%d)\n",
+           config.name, config.id,
+           actuatorTypeName(config.type),
+           hardwareBusName(config.bus),
+           config.hwPin);
+      return actuator;
+    } else {
+      DBGF("[Factory] Failed to register '%s' (id=%d)\n", config.name, config.id);
+    }
+  }
+
+  return nullptr;
+}
+
+uint8_t ActuatorFactory::createAll(const ActuatorConfig* configs, uint8_t count) {
+  uint8_t created = 0;
+  for (uint8_t i = 0; i < count; i++) {
+    if (configs[i].enabled) {
+      if (createAndRegister(configs[i])) {
+        created++;
+      }
+    }
+  }
+  DBGF("[Factory] Created %d/%d actuators\n", created, count);
+  return created;
+}
+
+int ActuatorFactory::addConfig(const ActuatorConfig& config) {
+  if (_configCount >= MAX_ACTUATORS) return -1;
+
+  // Assigner un ID unique si pas deja defini
+  ActuatorConfig cfg = config;
+  if (cfg.id == 0) {
+    uint8_t maxId = 0;
+    for (uint8_t i = 0; i < _configCount; i++) {
+      if (_configPool[i].id > maxId) maxId = _configPool[i].id;
+    }
+    cfg.id = maxId + 1;
+  }
+
+  _configPool[_configCount] = cfg;
+  _configCount++;
+  return _configCount - 1;
+}
+
+bool ActuatorFactory::removeConfig(uint8_t id) {
+  for (uint8_t i = 0; i < _configCount; i++) {
+    if (_configPool[i].id == id) {
+      for (uint8_t j = i; j < _configCount - 1; j++) {
+        _configPool[j] = _configPool[j + 1];
+      }
+      _configCount--;
+      return true;
+    }
+  }
+  return false;
+}
+
+ActuatorConfig* ActuatorFactory::findConfig(uint8_t id) {
+  for (uint8_t i = 0; i < _configCount; i++) {
+    if (_configPool[i].id == id) return &_configPool[i];
+  }
+  return nullptr;
+}
+
+uint8_t ActuatorFactory::rebuildAll() {
+  // Reset les pools
+  _solenoidIdx = 0;
+  _servoIdx = 0;
+  _motorIdx = 0;
+  _createdCount = 0;
+
+  return createAll(_configPool, _configCount);
+}
+
+HalDriver* ActuatorFactory::_getDriver(HardwareBus bus, uint8_t hwAddress) {
+  switch (bus) {
+    case HardwareBus::MCP23017: {
+      if (!_mcpDrivers) return nullptr;
+      uint8_t idx = hwAddress - MCP_BASE_ADDRESS;
+      if (idx < _mcpCount && _mcpDrivers[idx].isReady()) {
+        return &_mcpDrivers[idx];
+      }
+      return nullptr;
+    }
+
+    case HardwareBus::PCA9685: {
+      PCA9685Driver* pca = _getPcaDriver(hwAddress);
+      return pca; // PCA9685Driver herite de HalDriver
+    }
+
+    case HardwareBus::GPIO_DIRECT:
+      return _gpioDriver;
+
+    case HardwareBus::LEDC_PWM:
+      return _ledcDriver;
+
+    default:
+      return nullptr;
+  }
+}
+
+PCA9685Driver* ActuatorFactory::_getPcaDriver(uint8_t hwAddress) {
+  if (!_pcaDrivers) return nullptr;
+  uint8_t idx = hwAddress - PCA_BASE_ADDRESS;
+  if (idx < _pcaCount && _pcaDrivers[idx].isReady()) {
+    return &_pcaDrivers[idx];
+  }
+  return nullptr;
+}

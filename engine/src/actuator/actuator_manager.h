@@ -10,6 +10,10 @@
 // ============================================================================
 // Registre des actionneurs. Dispatch les commandes vers le bon actuator.
 // Ne connait pas le MIDI ni les pipelines.
+//
+// Securite :
+//   - Watchdog periodique : force l'arret des actionneurs depasses
+//   - Protection surcharge : limite les activations simultanees
 // ============================================================================
 
 class ActuatorManager {
@@ -38,6 +42,14 @@ public:
 
   // Test direct d'un actionneur
   void testActuator(uint8_t id, uint8_t value);
+
+  // --- Safety ---
+
+  // Verifier les timeouts de tous les actionneurs (appeler periodiquement)
+  uint8_t checkWatchdog();
+
+  // Nombre d'actionneurs actuellement actifs
+  uint8_t getActiveCount() const;
 
 private:
   Actuator* _actuators[MAX_ACTUATORS];

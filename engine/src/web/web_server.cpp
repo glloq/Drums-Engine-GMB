@@ -2,11 +2,13 @@
 #include "../hal/i2c_scanner.h"
 
 WebServerManager::WebServerManager(InstrumentManager* instrMgr, ActuatorManager* actMgr,
+                                    ActuatorFactory* actFactory,
                                     LoopEngine* loopEngine, MidiEngine* midiEngine,
                                     Storage* storage, Scheduler* scheduler,
                                     EventProcessor* eventProc)
   : _server(WEB_PORT), _ws(WS_PATH),
-    _instrMgr(instrMgr), _actMgr(actMgr), _loopEngine(loopEngine),
+    _instrMgr(instrMgr), _actMgr(actMgr), _actFactory(actFactory),
+    _loopEngine(loopEngine),
     _midiEngine(midiEngine), _storage(storage), _scheduler(scheduler),
     _eventProc(eventProc) {}
 
@@ -62,6 +64,23 @@ void WebServerManager::_setupRoutes() {
   // --- Actuators API ---
   _server.on("/api/actuators", HTTP_GET,
     [this](AsyncWebServerRequest* req) { _handleGetActuators(req); });
+
+  _server.on("/api/actuators", HTTP_POST,
+    [](AsyncWebServerRequest* req) {},
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) _handleCreateActuator(req, data, len);
+    });
+
+  _server.on("/api/actuator", HTTP_PUT,
+    [](AsyncWebServerRequest* req) {},
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) _handleUpdateActuator(req, data, len);
+    });
+
+  _server.on("/api/actuator", HTTP_DELETE,
+    [this](AsyncWebServerRequest* req) { _handleDeleteActuator(req); });
 
   // --- Test API ---
   _server.on("/api/test/instrument", HTTP_POST,
@@ -194,11 +213,102 @@ void WebServerManager::_handleDeleteInstrument(AsyncWebServerRequest* req) {
 void WebServerManager::_handleGetActuators(AsyncWebServerRequest* req) {
   JsonDocument doc;
   JsonArray arr = doc.to<JsonArray>();
-  for (uint8_t i = 0; i < _actMgr->getCount(); i++) {
-    // Iterate through registered actuators
-    // This is a simplified version - in production you'd iterate by ID
+  for (uint8_t i = 0; i < _actFactory->getConfigCount(); i++) {
+    const ActuatorConfig& cfg = _actFactory->getConfig(i);
+    JsonObject obj = arr.add<JsonObject>();
+    obj["id"] = cfg.id;
+    obj["name"] = cfg.name;
+    obj["type"] = (uint8_t)cfg.type;
+    obj["typeName"] = actuatorTypeName(cfg.type);
+    obj["behavior"] = (uint8_t)cfg.behavior;
+    obj["behaviorName"] = actuatorBehaviorName(cfg.behavior);
+    obj["bus"] = (uint8_t)cfg.bus;
+    obj["busName"] = hardwareBusName(cfg.bus);
+    obj["hwAddress"] = cfg.hwAddress;
+    obj["hwPin"] = cfg.hwPin;
+    obj["paramMin"] = cfg.paramMin;
+    obj["paramMax"] = cfg.paramMax;
+    obj["paramDefault"] = cfg.paramDefault;
+    obj["cooldownUs"] = cfg.cooldownUs;
+    obj["enabled"] = cfg.enabled;
+    obj["inverted"] = cfg.inverted;
+
+    // Etat temps reel
+    Actuator* act = _actMgr->getActuator(cfg.id);
+    obj["active"] = act ? act->isActive() : false;
   }
   _sendJson(req, 200, doc);
+}
+
+void WebServerManager::_handleCreateActuator(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
+  JsonDocument doc;
+  if (deserializeJson(doc, data, len)) { _sendError(req, 400, "Invalid JSON"); return; }
+
+  ActuatorConfig cfg;
+  cfg.id = doc["id"] | 0;
+  strlcpy(cfg.name, doc["name"] | "Actuator", sizeof(cfg.name));
+  cfg.type = (ActuatorType)(doc["type"] | 0);
+  cfg.behavior = (ActuatorBehavior)(doc["behavior"] | 0);
+  cfg.bus = (HardwareBus)(doc["bus"] | 0);
+  cfg.hwAddress = doc["hwAddress"] | 0x20;
+  cfg.hwPin = doc["hwPin"] | 0;
+  cfg.paramMin = doc["paramMin"] | 8;
+  cfg.paramMax = doc["paramMax"] | 30;
+  cfg.paramDefault = doc["paramDefault"] | 15;
+  cfg.cooldownUs = doc["cooldownUs"] | 200;
+  cfg.enabled = doc["enabled"] | true;
+  cfg.inverted = doc["inverted"] | false;
+
+  int idx = _actFactory->addConfig(cfg);
+  if (idx < 0) { _sendError(req, 507, "Max actuators reached"); return; }
+
+  // Reconstruire les actionneurs physiques
+  _actFactory->rebuildAll();
+  _storage->saveActuators(*_actFactory);
+
+  JsonDocument resp;
+  resp["id"] = _actFactory->getConfig(idx).id;
+  resp["message"] = "Actuator created";
+  _sendJson(req, 201, resp);
+}
+
+void WebServerManager::_handleUpdateActuator(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
+  uint8_t id = _extractId(req, "id");
+  JsonDocument doc;
+  if (deserializeJson(doc, data, len)) { _sendError(req, 400, "Invalid JSON"); return; }
+
+  ActuatorConfig* cfg = _actFactory->findConfig(id);
+  if (!cfg) { _sendError(req, 404, "Actuator config not found"); return; }
+
+  if (doc.containsKey("name"))        strlcpy(cfg->name, doc["name"] | "Actuator", sizeof(cfg->name));
+  if (doc.containsKey("type"))        cfg->type = (ActuatorType)(doc["type"] | 0);
+  if (doc.containsKey("behavior"))    cfg->behavior = (ActuatorBehavior)(doc["behavior"] | 0);
+  if (doc.containsKey("bus"))         cfg->bus = (HardwareBus)(doc["bus"] | 0);
+  if (doc.containsKey("hwAddress"))   cfg->hwAddress = doc["hwAddress"] | 0x20;
+  if (doc.containsKey("hwPin"))       cfg->hwPin = doc["hwPin"] | 0;
+  if (doc.containsKey("paramMin"))    cfg->paramMin = doc["paramMin"] | 8;
+  if (doc.containsKey("paramMax"))    cfg->paramMax = doc["paramMax"] | 30;
+  if (doc.containsKey("paramDefault")) cfg->paramDefault = doc["paramDefault"] | 15;
+  if (doc.containsKey("cooldownUs"))  cfg->cooldownUs = doc["cooldownUs"] | 200;
+  if (doc.containsKey("enabled"))     cfg->enabled = doc["enabled"] | true;
+  if (doc.containsKey("inverted"))    cfg->inverted = doc["inverted"] | false;
+
+  // Reconstruire les actionneurs physiques
+  _actFactory->rebuildAll();
+  _storage->saveActuators(*_actFactory);
+
+  _sendError(req, 200, "Updated");
+}
+
+void WebServerManager::_handleDeleteActuator(AsyncWebServerRequest* req) {
+  uint8_t id = _extractId(req, "id");
+  if (!_actFactory->removeConfig(id)) {
+    _sendError(req, 404, "Actuator config not found"); return;
+  }
+
+  _actFactory->rebuildAll();
+  _storage->saveActuators(*_actFactory);
+  _sendError(req, 200, "Deleted");
 }
 
 void WebServerManager::_handleTestActuator(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
@@ -321,6 +431,8 @@ void WebServerManager::_handleGetStatus(AsyncWebServerRequest* req) {
 
   // Actuators
   obj["actuator_count"] = _actMgr->getCount();
+  obj["actuator_active"] = _actMgr->getActiveCount();
+  obj["actuator_configs"] = _actFactory->getConfigCount();
 
   // Instruments
   obj["instrument_count"] = _instrMgr->getInstrumentCount();
@@ -371,6 +483,7 @@ void WebServerManager::_handleGetMidiNotes(AsyncWebServerRequest* req) {
 }
 
 void WebServerManager::_handleSaveConfig(AsyncWebServerRequest* req) {
+  _storage->saveActuators(*_actFactory);
   _storage->saveInstruments(*_instrMgr);
   _sendError(req, 200, "Configuration saved");
 }

@@ -9,6 +9,7 @@
 #include "../core/types.h"
 #include "../instrument/instrument_manager.h"
 #include "../actuator/actuator_manager.h"
+#include "../actuator/actuator_factory.h"
 #include "../loop/loop_engine.h"
 #include "../midi/midi_engine.h"
 #include "../storage/storage.h"
@@ -22,6 +23,7 @@
 class WebServerManager {
 public:
   WebServerManager(InstrumentManager* instrMgr, ActuatorManager* actMgr,
+                   ActuatorFactory* actFactory,
                    LoopEngine* loopEngine, MidiEngine* midiEngine,
                    Storage* storage, Scheduler* scheduler,
                    EventProcessor* eventProc);
@@ -35,6 +37,7 @@ private:
 
   InstrumentManager* _instrMgr;
   ActuatorManager* _actMgr;
+  ActuatorFactory* _actFactory;
   LoopEngine* _loopEngine;
   MidiEngine* _midiEngine;
   Storage* _storage;
@@ -50,8 +53,11 @@ private:
   void _handleUpdateInstrument(AsyncWebServerRequest* req, uint8_t* data, size_t len);
   void _handleDeleteInstrument(AsyncWebServerRequest* req);
 
-  // Actuators
+  // Actuators CRUD
   void _handleGetActuators(AsyncWebServerRequest* req);
+  void _handleCreateActuator(AsyncWebServerRequest* req, uint8_t* data, size_t len);
+  void _handleUpdateActuator(AsyncWebServerRequest* req, uint8_t* data, size_t len);
+  void _handleDeleteActuator(AsyncWebServerRequest* req);
   void _handleTestActuator(AsyncWebServerRequest* req, uint8_t* data, size_t len);
 
   // Testing

@@ -7,14 +7,20 @@
 // ============================================================================
 // MotorActuator - Moteur DC via PWM
 // ============================================================================
+// Securite :
+//   - Limite duty-cycle continu (MOTOR_MAX_CONTINUOUS_US)
+//   - Arret force apres timeout
+// ============================================================================
 
 class MotorActuator : public Actuator {
 public:
+  MotorActuator() : _driver(nullptr), _currentSpeed(0) {}
   MotorActuator(HalDriver* driver);
 
   void init() override;
   void execute(const ActuatorCommand& cmd) override;
   void stop() override;
+  bool checkTimeout(uint32_t nowUs) override;
 
 private:
   HalDriver* _driver;

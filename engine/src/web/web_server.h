@@ -77,6 +77,7 @@ private:
   void _handleScanI2C(AsyncWebServerRequest* req);
   void _handleGetMidiNotes(AsyncWebServerRequest* req);
   void _handleGetCapabilities(AsyncWebServerRequest* req);
+  void _handleGetCcRoutes(AsyncWebServerRequest* req);
   void _handleSaveConfig(AsyncWebServerRequest* req);
 
   // WebSocket

@@ -140,6 +140,9 @@ void WebServerManager::_setupRoutes() {
   _server.on("/api/capabilities", HTTP_GET,
     [this](AsyncWebServerRequest* req) { _handleGetCapabilities(req); });
 
+  _server.on("/api/cc-routes", HTTP_GET,
+    [this](AsyncWebServerRequest* req) { _handleGetCcRoutes(req); });
+
   _server.on("/api/save", HTTP_POST,
     [this](AsyncWebServerRequest* req) { _handleSaveConfig(req); });
 
@@ -528,6 +531,39 @@ void WebServerManager::_handleGetCapabilities(AsyncWebServerRequest* req) {
   doc["maxActuators"] = MAX_ACTUATORS;
   doc["maxInstruments"] = MAX_INSTRUMENTS;
   doc["maxActuatorsPerInstrument"] = MAX_ACTUATORS_PER_INST;
+
+  _sendJson(req, 200, doc);
+}
+
+void WebServerManager::_handleGetCcRoutes(AsyncWebServerRequest* req) {
+  const PipelineLookup& lookup = _eventProc->getLookup();
+  JsonDocument doc;
+  doc["count"] = lookup.cc_route_count;
+
+  JsonArray routes = doc["routes"].to<JsonArray>();
+  for (uint8_t cc = 0; cc < 128; cc++) {
+    uint8_t first = lookup.cc_to_first[cc];
+    uint8_t count = lookup.cc_to_count[cc];
+    if (first == 0xFF || count == 0) continue;
+
+    JsonObject ccObj = routes.add<JsonObject>();
+    ccObj["cc"] = cc;
+    JsonArray entries = ccObj["entries"].to<JsonArray>();
+
+    for (uint8_t i = 0; i < count; i++) {
+      uint8_t routeIdx = first + i;
+      if (routeIdx >= lookup.cc_route_count) break;
+      const CCRoutingEntry& route = lookup.cc_routes[routeIdx];
+
+      JsonObject e = entries.add<JsonObject>();
+      e["actuatorId"] = route.actuator_id;
+      e["commandType"] = route.command_type;
+      e["rangeMin"] = route.range_min;
+      e["rangeMax"] = route.range_max;
+      e["curve"] = route.curve;
+      e["inverted"] = route.inverted;
+    }
+  }
 
   _sendJson(req, 200, doc);
 }

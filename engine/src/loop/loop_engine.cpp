@@ -1,7 +1,8 @@
 #include "loop_engine.h"
+#include "../event/event_processor.h"
 
 LoopEngine::LoopEngine(InstrumentManager* instrumentMgr)
-  : _instrumentMgr(instrumentMgr), _loopCount(0),
+  : _instrumentMgr(instrumentMgr), _eventProc(nullptr), _loopCount(0),
     _playing(false), _paused(false), _currentLoop(0),
     _currentTick(0), _nextEventIndex(0), _lastTickTime(0),
     _tickIntervalUs(0) {}
@@ -62,13 +63,34 @@ void LoopEngine::update() {
 
     while (_nextEventIndex < loop.eventCount &&
            loop.events[_nextEventIndex].tickPosition == _currentTick) {
-      const LoopEvent& evt = loop.events[_nextEventIndex];
-      if (evt.velocity > 0) {
-        _instrumentMgr->onNoteOn(evt.channel, evt.midiNote, evt.velocity);
-      } else {
-        _instrumentMgr->onNoteOff(evt.channel, evt.midiNote);
-      }
+      _dispatchEvent(loop.events[_nextEventIndex]);
       _nextEventIndex++;
+    }
+  }
+}
+
+void LoopEngine::_dispatchEvent(const LoopEvent& evt) {
+  // Route par EventProcessor (pipeline) si disponible et pipelines compiles
+  if (_eventProc && _eventProc->getLookup().pipeline_count > 0) {
+    MidiEvent midiEv;
+    midiEv.channel = evt.channel;
+    midiEv.data1 = evt.midiNote;
+    midiEv.data2 = evt.velocity;
+    midiEv.timestamp = micros();
+
+    if (evt.velocity > 0) {
+      midiEv.type = MIDI_EVT_NOTE_ON;
+    } else {
+      midiEv.type = MIDI_EVT_NOTE_OFF;
+    }
+
+    _eventProc->processMidiEvent(midiEv);
+  } else {
+    // Fallback legacy: route par InstrumentManager
+    if (evt.velocity > 0) {
+      _instrumentMgr->onNoteOn(evt.channel, evt.midiNote, evt.velocity);
+    } else {
+      _instrumentMgr->onNoteOff(evt.channel, evt.midiNote);
     }
   }
 }

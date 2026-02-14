@@ -47,6 +47,7 @@ private:
 
   // Executer un pipeline sur une valeur
   void _executePipeline(uint8_t pipelineIdx, uint8_t value, uint32_t timestamp);
+  void _processCcEvent(const MidiEvent& ev);
 
   // Traitement des blocs individuels
   int16_t _processConditionBlock(const CompiledBlock& block, uint8_t value, uint8_t pipelineIdx);

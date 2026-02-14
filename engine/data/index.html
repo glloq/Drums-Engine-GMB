@@ -81,10 +81,6 @@ input[type=checkbox] { width: auto; }
 .help-box { background: rgba(233,69,96,0.08); border: 1px solid rgba(233,69,96,0.35); border-radius: var(--radius); padding: 10px; font-size: 0.82em; color: var(--fg2); }
 .quick-actions { display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; margin-bottom: 10px; }
 .hint { font-size:0.8em; color: var(--fg2); margin-top:4px; }
-.pill { display:inline-block; padding:2px 8px; border-radius:10px; font-size:0.72em; margin-left:6px; }
-.pill-servo { background:#1565c0; }
-.pill-solenoid { background:#6a1b9a; }
-.pill-motor { background:#2e7d32; }
 
 /* Loop Grid */
 .loop-grid { display: grid; gap: 2px; margin-top: 12px; }
@@ -336,22 +332,8 @@ input[type=checkbox] { width: auto; }
         </select>
       </div>
     </div>
-    <div class="quick-actions">
-      <div class="form-group" style="min-width:260px; margin-bottom:0;">
-        <label>Template instrument</label>
-        <select id="instrQuickTemplate">
-          <option value="">-- Choisir un template --</option>
-          <option value="kick">Kick (solénoïde)</option>
-          <option value="snare">Snare (solénoïde)</option>
-          <option value="hihat">Hi-Hat (servo)</option>
-          <option value="shaker">Shaker (moteur)</option>
-        </select>
-      </div>
-      <button class="btn btn-secondary" onclick="applyInstrumentTemplate()">Appliquer template</button>
-    </div>
-    <div class="help-box" id="instrumentHelp">Astuce: appliquez un template pour préremplir note/catégorie et suggérer les actionneurs adaptés.</div>
     <div class="form-group">
-      <label>Actionneurs assignes <span class="hint" id="instrSelectedCount">0 sélectionné</span></label>
+      <label>Actionneurs assignes</label>
       <div class="checkbox-list" id="instrActuatorChecklist"></div>
     </div>
     <div class="modal-actions">
@@ -408,7 +390,6 @@ let midiNotes = [];
 let statusData = {};
 let currentLoopIdx = -1;
 let capabilities = null;
-const BUS_LABELS = ['MCP23017', 'PCA9685', 'GPIO', 'LEDC PWM'];
 
 // ====================================================================
 // API helper
@@ -448,11 +429,7 @@ async function loadMidiNotes() {
 
 async function loadCapabilities() {
   const data = await api('capabilities');
-  if (data) {
-    capabilities = data;
-    applyBusConstraintsForType(parseInt(document.getElementById('actType').value || '1'));
-    updateActuatorHelp();
-  }
+  if (data) capabilities = data;
 }
 
 function populateMidiSelects() {
@@ -488,74 +465,25 @@ function populateMidiNoteSelect() {
 // ====================================================================
 // ACTUATORS
 // ====================================================================
-function getTypeCapabilities(type) {
-  if (!capabilities || !Array.isArray(capabilities.actuatorTypes)) return null;
-  return capabilities.actuatorTypes.find(t => parseInt(t.id) === parseInt(type)) || null;
-}
-
-function isBusSupportedForType(type, bus) {
-  const t = getTypeCapabilities(type);
-  if (!t || typeof t.supportedBusMask !== 'number') {
-    if (type === 0) return bus === 1;
-    if (type === 1) return bus === 0 || bus === 2;
-    if (type === 2) return bus === 1 || bus === 3;
-    return true;
-  }
-  return (t.supportedBusMask & (1 << bus)) !== 0;
-}
-
-function applyBusConstraintsForType(type) {
-  const busSel = document.getElementById('actBus');
-  const opts = Array.from(busSel.options);
-
-  opts.forEach(opt => {
-    const bus = parseInt(opt.value);
-    opt.disabled = !isBusSupportedForType(type, bus);
-  });
-
-  const currentBus = parseInt(busSel.value);
-  if (!isBusSupportedForType(type, currentBus)) {
-    const t = getTypeCapabilities(type);
-    if (t && typeof t.recommendedBus === 'number' && isBusSupportedForType(type, t.recommendedBus)) {
-      busSel.value = String(t.recommendedBus);
-    } else {
-      const firstOk = opts.find(o => !o.disabled);
-      if (firstOk) busSel.value = firstOk.value;
-    }
-  }
-}
-
 function updateActuatorHelp() {
   const type = parseInt(document.getElementById('actType').value);
   const bus = parseInt(document.getElementById('actBus').value);
   const help = document.getElementById('actuatorHelp');
   const typeName = ['Servo', 'Solénoïde', 'Moteur PWM'][type] || 'Inconnu';
 
-  const tCap = getTypeCapabilities(type);
-  let supportedBusesText = '';
-  if (tCap && typeof tCap.supportedBusMask === 'number') {
-    const allowed = BUS_LABELS
-      .map((name, idx) => ((tCap.supportedBusMask & (1 << idx)) !== 0 ? name : null))
-      .filter(Boolean);
-    supportedBusesText = allowed.length ? `Bus supportés: ${allowed.join(', ')}.` : '';
-  }
-
   let msg = `Type sélectionné: ${typeName}. `;
   if (type === 0) {
-    msg += 'Usage: position continue (hi-hat/choke). ';
+    msg += 'Bus recommandé: PCA9685. Usage: position continue (hi-hat/choke).';
   } else if (type === 1) {
-    msg += 'Usage: frappe impulsionnelle (kick/snare/tom). ';
+    msg += 'Bus recommandé: MCP23017 ou GPIO direct. Usage: frappe impulsionnelle (kick/snare/tom).';
   } else if (type === 2) {
-    msg += 'Usage: shaker/brush rotatif. ';
+    msg += 'Bus recommandé: LEDC PWM (ou PCA9685). Usage: shaker/brush rotatif.';
   }
 
-  msg += supportedBusesText ? (' ' + supportedBusesText) : '';
-
-  if (!isBusSupportedForType(type, bus)) {
-    msg += ' ⚠ Bus non supporté pour ce type (refusé par le backend).';
+  if (type === 0 && bus !== 1) {
+    msg += ' ⚠ Le servo nécessite PCA9685 dans la version actuelle.';
   }
-
-  help.textContent = msg.trim();
+  help.textContent = msg;
 }
 
 function applyTypeDefaults(type) {
@@ -583,7 +511,6 @@ function applyTypeDefaults(type) {
     addr.value = '0x40';
     pmin.value = '20'; pmax.value = '100'; pdef.value = '0'; cooldown.value = '100';
   }
-  applyBusConstraintsForType(type);
   updateActuatorHelp();
 }
 
@@ -684,7 +611,6 @@ function editActuator(id) {
   document.getElementById('actCooldown').value = a.cooldownUs;
   document.getElementById('actEnabled').checked = a.enabled;
   document.getElementById('actInverted').checked = a.inverted;
-  applyBusConstraintsForType(parseInt(a.type));
   updateActuatorHelp();
   showModal('modalActuator');
 }
@@ -719,18 +645,15 @@ async function saveActuator() {
     toast('Paramètre par défaut hors plage', 'error');
     return;
   }
-  if (!isBusSupportedForType(data.type, data.bus)) {
-    toast("Bus incompatible avec le type d'actionneur", 'error');
+  if (data.type === 0 && data.bus !== 1) {
+    toast('Servo: choisir bus PCA9685', 'error');
     return;
   }
-  let resp;
   if (editId !== '') {
-    resp = await api('actuator?id=' + editId, 'PUT', data);
+    await api('actuator?id=' + editId, 'PUT', data);
   } else {
-    resp = await api('actuators', 'POST', data);
+    await api('actuators', 'POST', data);
   }
-  if (!resp) return;
-
   closeModal('modalActuator');
   await loadActuators();
   toast('Actionneur enregistre', 'success');
@@ -801,8 +724,6 @@ function showAddInstrument() {
   document.getElementById('instrMidiNote').value = '36';
   document.getElementById('instrMidiChannel').value = '10';
   buildActuatorChecklist([]);
-  document.getElementById('instrQuickTemplate').value = '';
-  updateInstrumentHelp();
   showModal('modalInstrument');
 }
 
@@ -817,102 +738,21 @@ function editInstrument(id) {
   document.getElementById('instrMidiChannel').value = inst.midiChannel;
   const assignedIds = (inst.actuatorIds || []).filter(x => x !== 255);
   buildActuatorChecklist(assignedIds);
-  document.getElementById('instrQuickTemplate').value = '';
-  updateInstrumentHelp();
   showModal('modalInstrument');
-}
-
-function actuatorTypePill(type) {
-  if (type === 0) return '<span class="pill pill-servo">SERVO</span>';
-  if (type === 1) return '<span class="pill pill-solenoid">SOLENOID</span>';
-  if (type === 2) return '<span class="pill pill-motor">MOTOR</span>';
-  return '';
-}
-
-function updateInstrumentSelectionCount() {
-  const checked = document.querySelectorAll('#instrActuatorChecklist input[type=checkbox]:checked').length;
-  const countEl = document.getElementById('instrSelectedCount');
-  if (countEl) countEl.textContent = `${checked} sélectionné${checked > 1 ? 's' : ''}`;
-}
-
-function updateInstrumentHelp() {
-  const help = document.getElementById('instrumentHelp');
-  const checked = document.querySelectorAll('#instrActuatorChecklist input[type=checkbox]:checked').length;
-  if (!help) return;
-  if (checked === 0) {
-    help.textContent = 'Ajoutez au moins 1 actionneur pour que le pipeline soit immédiatement jouable.';
-  } else if (checked === 1) {
-    help.textContent = 'Configuration simple: 1 actionneur assigné. Vous pourrez enrichir ensuite (layer/split/alternance).';
-  } else {
-    help.textContent = 'Configuration multi-actionneurs active: idéal pour layering, alternance thermique et instruments hybrides.';
-  }
-}
-
-function selectSuggestedActuators(preferredType) {
-  const boxes = Array.from(document.querySelectorAll('#instrActuatorChecklist input[type=checkbox]'));
-  boxes.forEach(cb => cb.checked = false);
-  const best = boxes.find(cb => parseInt(cb.dataset.type) === preferredType);
-  if (best) best.checked = true;
-  updateInstrumentSelectionCount();
-  updateInstrumentHelp();
-}
-
-function applyInstrumentTemplate() {
-  const tpl = document.getElementById('instrQuickTemplate').value;
-  if (!tpl) return;
-
-  if (tpl === 'kick') {
-    document.getElementById('instrName').value = document.getElementById('instrName').value || 'Kick';
-    document.getElementById('instrCategory').value = 'drums';
-    document.getElementById('instrMidiNote').value = '36';
-    document.getElementById('instrMidiChannel').value = '10';
-    selectSuggestedActuators(1);
-  } else if (tpl === 'snare') {
-    document.getElementById('instrName').value = document.getElementById('instrName').value || 'Snare';
-    document.getElementById('instrCategory').value = 'drums';
-    document.getElementById('instrMidiNote').value = '38';
-    document.getElementById('instrMidiChannel').value = '10';
-    selectSuggestedActuators(1);
-  } else if (tpl === 'hihat') {
-    document.getElementById('instrName').value = document.getElementById('instrName').value || 'Hi-Hat';
-    document.getElementById('instrCategory').value = 'cymbals';
-    document.getElementById('instrMidiNote').value = '42';
-    document.getElementById('instrMidiChannel').value = '10';
-    selectSuggestedActuators(0);
-  } else if (tpl === 'shaker') {
-    document.getElementById('instrName').value = document.getElementById('instrName').value || 'Shaker';
-    document.getElementById('instrCategory').value = 'latin';
-    document.getElementById('instrMidiNote').value = '82';
-    document.getElementById('instrMidiChannel').value = '10';
-    selectSuggestedActuators(2);
-  }
-  toast('Template instrument appliqué', 'success');
 }
 
 function buildActuatorChecklist(selectedIds) {
   const el = document.getElementById('instrActuatorChecklist');
   if (actuators.length === 0) {
     el.innerHTML = '<span style="color:var(--fg2);font-size:0.85em;">Aucun actionneur disponible. Creez-en d\'abord dans l\'onglet Actionneurs.</span>';
-    updateInstrumentSelectionCount();
-    updateInstrumentHelp();
     return;
   }
   el.innerHTML = actuators.map(a => `
     <label>
-      <input type="checkbox" value="${a.id}" data-type="${a.type}" ${selectedIds.includes(a.id) ? 'checked' : ''}>
-      <span>${a.name} ${actuatorTypePill(a.type)} <span style="color:var(--fg2);">(${a.typeName} - ${a.busName})</span></span>
+      <input type="checkbox" value="${a.id}" ${selectedIds.includes(a.id) ? 'checked' : ''}>
+      <span>${a.name} <span style="color:var(--fg2);">(${a.typeName} - ${a.busName})</span></span>
     </label>
   `).join('');
-
-  document.querySelectorAll('#instrActuatorChecklist input[type=checkbox]').forEach(cb => {
-    cb.addEventListener('change', () => {
-      updateInstrumentSelectionCount();
-      updateInstrumentHelp();
-    });
-  });
-
-  updateInstrumentSelectionCount();
-  updateInstrumentHelp();
 }
 
 async function saveInstrument() {
@@ -927,14 +767,11 @@ async function saveInstrument() {
     enabled: true,
     actuatorIds: actIds
   };
-  let resp;
   if (editId !== '') {
-    resp = await api('instrument?id=' + editId, 'PUT', data);
+    await api('instrument?id=' + editId, 'PUT', data);
   } else {
-    resp = await api('instruments', 'POST', data);
+    await api('instruments', 'POST', data);
   }
-  if (!resp) return;
-
   closeModal('modalInstrument');
   await loadInstruments();
   toast('Instrument enregistre', 'success');
@@ -1225,9 +1062,7 @@ function toast(msg, type='success') {
 }
 
 document.getElementById('actType').addEventListener('change', (e) => {
-  const t = parseInt(e.target.value);
-  applyTypeDefaults(t);
-  applyBusConstraintsForType(t);
+  applyTypeDefaults(parseInt(e.target.value));
 });
 document.getElementById('actBus').addEventListener('change', updateActuatorHelp);
 

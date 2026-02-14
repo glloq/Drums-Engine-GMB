@@ -7,9 +7,14 @@
 // ============================================================================
 // ServoActuator - Servo (position, frappe oscillante, peigne/brosse, pitch)
 // ============================================================================
+// Securite :
+//   - Angle clampe entre paramMin et paramMax
+//   - Inversion supportee
+// ============================================================================
 
 class ServoActuator : public Actuator {
 public:
+  ServoActuator() : _driver(nullptr), _currentAngle(0) {}
   ServoActuator(PCA9685Driver* driver);
 
   void init() override;

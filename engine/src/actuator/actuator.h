@@ -9,6 +9,11 @@
 // ============================================================================
 // Chaque type d'actionneur herite de cette classe.
 // Ne connait pas le MIDI. Recoit uniquement des ActuatorCommand.
+//
+// Securite integree :
+//   - Cooldown entre activations (anti-rebond thermique)
+//   - Tracking activation (pour watchdog timeout)
+//   - Interface commune pour overload protection
 // ============================================================================
 
 class Actuator {
@@ -32,8 +37,45 @@ public:
   uint8_t getId() const { return _config.id; }
   bool isEnabled() const { return _config.enabled; }
 
+  // --- Safety ---
+
+  // Verifier si l'actionneur est actif (allume/en mouvement)
+  bool isActive() const { return _active; }
+
+  // Timestamp du debut d'activation
+  uint32_t getActivationStart() const { return _activationStartUs; }
+
+  // Verifier le timeout watchdog. Retourne true si l'actionneur
+  // a depasse sa duree max et a ete force a s'arreter.
+  virtual bool checkTimeout(uint32_t nowUs) { return false; }
+
 protected:
   ActuatorConfig _config;
+  bool _active = false;
+  uint32_t _activationStartUs = 0;
+
+  // Verifier le cooldown. Retourne true si l'activation est permise.
+  bool checkCooldown(uint32_t nowUs) {
+    if (_config.cooldownUs == 0) return true;
+    uint32_t cooldownReal = (uint32_t)_config.cooldownUs * 100; // cooldownUs stocke en /100
+    uint32_t elapsed = nowUs - _config.lastActivation;
+    if (elapsed < cooldownReal) {
+      return false; // Encore en cooldown
+    }
+    return true;
+  }
+
+  // Marquer l'activation
+  void markActivation(uint32_t nowUs) {
+    _config.lastActivation = nowUs;
+    _active = true;
+    _activationStartUs = nowUs;
+  }
+
+  // Marquer la desactivation
+  void markDeactivation() {
+    _active = false;
+  }
 };
 
 #endif // ACTUATOR_H

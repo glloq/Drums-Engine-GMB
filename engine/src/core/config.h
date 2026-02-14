@@ -60,6 +60,12 @@
 #define MIN_RETRIGGER_US         20000   // 20ms anti-bounce
 #define SERVO_MOVE_TIME_US       50000   // 50ms default servo transit
 
+// --- Safety ---
+#define SOLENOID_MAX_ON_US       500000    // 500ms max solenoid activation (thermal)
+#define MOTOR_MAX_CONTINUOUS_US  5000000   // 5s max continuous motor run
+#define MAX_CONCURRENT_ACTIVE    8         // Max simultaneously active actuators
+#define WATCHDOG_CHECK_US        100000    // Check watchdog every 100ms
+
 // --- Storage ---
 #define CONFIG_FILE       "/config.json"
 #define INSTRUMENTS_FILE  "/instruments.json"

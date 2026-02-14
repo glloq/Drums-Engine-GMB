@@ -46,9 +46,19 @@ void ActuatorManager::dispatch(const ActuatorCommand& cmd) {
   if (idx < 0) return;
 
   Actuator* act = _actuators[idx];
-  if (act && act->isEnabled()) {
-    act->execute(cmd);
+  if (!act || !act->isEnabled()) return;
+
+  // Protection surcharge: verifier si on depasse le max d'activations
+  // simultanees (sauf pour les commandes OFF qui liberent)
+  if ((CommandType)cmd.command_type != CommandType::OFF) {
+    if (!act->isActive() && getActiveCount() >= MAX_CONCURRENT_ACTIVE) {
+      DBGF("[Safety] Overload protection: %d actuators active, refusing new activation\n",
+           getActiveCount());
+      return;
+    }
   }
+
+  act->execute(cmd);
 }
 
 void ActuatorManager::stopAll() {
@@ -110,6 +120,32 @@ void ActuatorManager::testActuator(uint8_t id, uint8_t value) {
   }
 
   act->execute(cmd);
+}
+
+// --- Safety ---
+
+uint8_t ActuatorManager::checkWatchdog() {
+  uint32_t now = micros();
+  uint8_t stopped = 0;
+
+  for (uint8_t i = 0; i < _count; i++) {
+    if (_actuators[i] && _actuators[i]->isActive()) {
+      if (_actuators[i]->checkTimeout(now)) {
+        stopped++;
+      }
+    }
+  }
+  return stopped;
+}
+
+uint8_t ActuatorManager::getActiveCount() const {
+  uint8_t active = 0;
+  for (uint8_t i = 0; i < _count; i++) {
+    if (_actuators[i] && _actuators[i]->isActive()) {
+      active++;
+    }
+  }
+  return active;
 }
 
 int8_t ActuatorManager::_findIndex(uint8_t id) const {

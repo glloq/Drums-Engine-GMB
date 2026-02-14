@@ -9,6 +9,7 @@ Le système actuel est opérationnel sur ESP32 (Arduino + FreeRTOS) avec une arc
 - Gestion d'actionneurs: solénoïde, servo, moteur PWM.
 - HAL I2C/GPIO/LEDC pour MCP23017, PCA9685, GPIO natif.
 - API web REST + WebSocket pour CRUD instruments/actionneurs/boucles.
+- Endpoint de capacités (`/api/capabilities`) exploité par l'UI pour guider les choix type↔bus.
 - Persistance LittleFS (`actuators.json`, `instruments.json`, `loops`).
 - Support de migration de configuration legacy V4 dans la couche storage.
 

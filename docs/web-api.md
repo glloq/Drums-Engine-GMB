@@ -47,3 +47,15 @@ Base URL: `http://<ip-esp32>/`
 - Les handlers renvoient JSON.
 - La validation JSON est faite côté firmware avec `ArduinoJson`.
 - Les opérations CRUD persistantes déclenchent des sauvegardes dans LittleFS.
+
+
+## Détail `GET /api/capabilities`
+Payload principal:
+- `actuatorTypes[]`
+  - `id` : identifiant du type actionneur
+  - `name` : libellé
+  - `recommendedBus` : bus conseillé
+  - `supportedBusMask` : masque binaire des bus compatibles
+- `maxActuators`
+- `maxInstruments`
+- `maxActuatorsPerInstrument`

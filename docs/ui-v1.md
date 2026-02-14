@@ -22,3 +22,9 @@
 - Éditeur pipeline visuel complet (blocs chaînés).
 - Feedback temps réel (latence/jitter visibles).
 - Validation stricte des formulaires côté client.
+
+## Améliorations UI implémentées (itération actuelle)
+- Presets rapides pour actionneurs (kick/snare, hi-hat, shaker).
+- Templates instrument pour pré-remplir note/catégorie et suggérer un type d'actionneur.
+- Aides visuelles contextuelles dans les modales (configuration guidée).
+- Compteur de sélection d'actionneurs pour éviter les instruments sans sortie.

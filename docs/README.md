@@ -11,6 +11,7 @@ Ce dossier regroupe la documentation utile et maintenue du projet.
 6. [`roadmap.md`](roadmap.md) — plan d'évolution.
 7. [`ui-v1.md`](ui-v1.md) — structure UI cible.
 8. [`code-audit.md`](code-audit.md) — audit du code actuel et plan de modifications.
+9. [`frontend-backend-linkage.md`](frontend-backend-linkage.md) — contrôle des liaisons UI/API.
 
 ## Règles de maintenance
 - Toute nouvelle doc doit être ajoutée ici (pas à la racine).

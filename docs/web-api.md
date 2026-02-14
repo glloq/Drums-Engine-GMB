@@ -33,6 +33,7 @@ Base URL: `http://<ip-esp32>/`
 - `GET /api/status`
 - `GET /api/scan-i2c`
 - `GET /api/midi-notes`
+- `GET /api/capabilities`
 - `POST /api/save`
 
 ## WebSocket

@@ -78,6 +78,10 @@ input[type=checkbox] { width: auto; }
 .checkbox-list label { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 0.9em; cursor: pointer; }
 .checkbox-list label:hover { color: var(--accent); }
 
+.help-box { background: rgba(233,69,96,0.08); border: 1px solid rgba(233,69,96,0.35); border-radius: var(--radius); padding: 10px; font-size: 0.82em; color: var(--fg2); }
+.quick-actions { display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; margin-bottom: 10px; }
+.hint { font-size:0.8em; color: var(--fg2); margin-top:4px; }
+
 /* Loop Grid */
 .loop-grid { display: grid; gap: 2px; margin-top: 12px; }
 .loop-cell { width: 100%; aspect-ratio: 1; background: var(--bg); border-radius: 3px; cursor: pointer; transition: background 0.1s; border: 1px solid #333; }
@@ -277,6 +281,18 @@ input[type=checkbox] { width: auto; }
         <label><input type="checkbox" id="actInverted"> Inverse</label>
       </div>
     </div>
+    <div class="quick-actions">
+      <div class="form-group" style="min-width:220px; margin-bottom:0;">
+        <label>Preset rapide</label>
+        <select id="actQuickPreset">
+          <option value="solenoid_kick">Solénoïde - Kick/Snare</option>
+          <option value="servo_hihat">Servo - Hi-Hat</option>
+          <option value="motor_shaker">Moteur DC - Shaker</option>
+        </select>
+      </div>
+      <button class="btn btn-secondary" onclick="applyActuatorPreset()">Appliquer preset</button>
+    </div>
+    <div class="help-box" id="actuatorHelp">Choisissez un type puis un preset pour préremplir les paramètres recommandés.</div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal('modalActuator')">Annuler</button>
       <button class="btn btn-primary" onclick="saveActuator()">Enregistrer</button>
@@ -373,6 +389,7 @@ let loops = [];
 let midiNotes = [];
 let statusData = {};
 let currentLoopIdx = -1;
+let capabilities = null;
 
 // ====================================================================
 // API helper
@@ -382,7 +399,13 @@ async function api(path, method='GET', body=null) {
   if (body) opts.body = JSON.stringify(body);
   try {
     const r = await fetch('/api/' + path, opts);
-    return await r.json();
+    const payload = await r.json();
+    if (!r.ok) {
+      const msg = payload && (payload.message || payload.error) ? (payload.message || payload.error) : ('HTTP ' + r.status);
+      toast('Erreur API: ' + msg, 'error');
+      return null;
+    }
+    return payload;
   } catch(e) {
     toast('Erreur reseau: ' + e.message, 'error');
     return null;
@@ -394,7 +417,7 @@ async function api(path, method='GET', body=null) {
 // ====================================================================
 async function init() {
   populateMidiSelects();
-  await Promise.all([loadMidiNotes(), loadActuators(), loadInstruments(), loadLoops()]);
+  await Promise.all([loadMidiNotes(), loadCapabilities(), loadActuators(), loadInstruments(), loadLoops()]);
   refreshStatus();
   setInterval(refreshStatus, 5000);
 }
@@ -402,6 +425,11 @@ async function init() {
 async function loadMidiNotes() {
   const data = await api('midi-notes');
   if (data) { midiNotes = data; populateMidiNoteSelect(); }
+}
+
+async function loadCapabilities() {
+  const data = await api('capabilities');
+  if (data) capabilities = data;
 }
 
 function populateMidiSelects() {
@@ -437,6 +465,76 @@ function populateMidiNoteSelect() {
 // ====================================================================
 // ACTUATORS
 // ====================================================================
+function updateActuatorHelp() {
+  const type = parseInt(document.getElementById('actType').value);
+  const bus = parseInt(document.getElementById('actBus').value);
+  const help = document.getElementById('actuatorHelp');
+  const typeName = ['Servo', 'Solénoïde', 'Moteur PWM'][type] || 'Inconnu';
+
+  let msg = `Type sélectionné: ${typeName}. `;
+  if (type === 0) {
+    msg += 'Bus recommandé: PCA9685. Usage: position continue (hi-hat/choke).';
+  } else if (type === 1) {
+    msg += 'Bus recommandé: MCP23017 ou GPIO direct. Usage: frappe impulsionnelle (kick/snare/tom).';
+  } else if (type === 2) {
+    msg += 'Bus recommandé: LEDC PWM (ou PCA9685). Usage: shaker/brush rotatif.';
+  }
+
+  if (type === 0 && bus !== 1) {
+    msg += ' ⚠ Le servo nécessite PCA9685 dans la version actuelle.';
+  }
+  help.textContent = msg;
+}
+
+function applyTypeDefaults(type) {
+  const behavior = document.getElementById('actBehavior');
+  const bus = document.getElementById('actBus');
+  const addr = document.getElementById('actAddr');
+  const pmin = document.getElementById('actParamMin');
+  const pmax = document.getElementById('actParamMax');
+  const pdef = document.getElementById('actParamDef');
+  const cooldown = document.getElementById('actCooldown');
+
+  if (type === 0) {
+    behavior.value = '2';
+    bus.value = '1';
+    addr.value = '0x40';
+    pmin.value = '15'; pmax.value = '165'; pdef.value = '90'; cooldown.value = '50';
+  } else if (type === 1) {
+    behavior.value = '0';
+    bus.value = '0';
+    addr.value = '0x20';
+    pmin.value = '8'; pmax.value = '30'; pdef.value = '15'; cooldown.value = '200';
+  } else if (type === 2) {
+    behavior.value = '1';
+    bus.value = '3';
+    addr.value = '0x40';
+    pmin.value = '20'; pmax.value = '100'; pdef.value = '0'; cooldown.value = '100';
+  }
+  updateActuatorHelp();
+}
+
+function applyActuatorPreset() {
+  const preset = document.getElementById('actQuickPreset').value;
+  if (preset === 'solenoid_kick') {
+    document.getElementById('actType').value = '1';
+    applyTypeDefaults(1);
+    document.getElementById('actBehavior').value = '0';
+    document.getElementById('actName').value = document.getElementById('actName').value || 'Kick Solenoid';
+  } else if (preset === 'servo_hihat') {
+    document.getElementById('actType').value = '0';
+    applyTypeDefaults(0);
+    document.getElementById('actBehavior').value = '2';
+    document.getElementById('actName').value = document.getElementById('actName').value || 'HiHat Servo';
+  } else if (preset === 'motor_shaker') {
+    document.getElementById('actType').value = '2';
+    applyTypeDefaults(2);
+    document.getElementById('actBehavior').value = '1';
+    document.getElementById('actName').value = document.getElementById('actName').value || 'Shaker Motor';
+  }
+  updateActuatorHelp();
+}
+
 async function loadActuators() {
   const data = await api('actuators');
   if (data) { actuators = data; renderActuators(); }
@@ -491,6 +589,7 @@ function showAddActuator() {
   document.getElementById('actCooldown').value = '200';
   document.getElementById('actEnabled').checked = true;
   document.getElementById('actInverted').checked = false;
+  applyTypeDefaults(1);
   showModal('modalActuator');
 }
 
@@ -512,6 +611,7 @@ function editActuator(id) {
   document.getElementById('actCooldown').value = a.cooldownUs;
   document.getElementById('actEnabled').checked = a.enabled;
   document.getElementById('actInverted').checked = a.inverted;
+  updateActuatorHelp();
   showModal('modalActuator');
 }
 
@@ -532,6 +632,23 @@ async function saveActuator() {
     enabled: document.getElementById('actEnabled').checked,
     inverted: document.getElementById('actInverted').checked
   };
+
+  if (Number.isNaN(data.hwAddress) || Number.isNaN(data.hwPin)) {
+    toast('Adresse ou pin invalide', 'error');
+    return;
+  }
+  if (data.paramMin > data.paramMax) {
+    toast('Param Min doit être <= Param Max', 'error');
+    return;
+  }
+  if (data.paramDefault < data.paramMin || data.paramDefault > data.paramMax) {
+    toast('Paramètre par défaut hors plage', 'error');
+    return;
+  }
+  if (data.type === 0 && data.bus !== 1) {
+    toast('Servo: choisir bus PCA9685', 'error');
+    return;
+  }
   if (editId !== '') {
     await api('actuator?id=' + editId, 'PUT', data);
   } else {
@@ -943,6 +1060,11 @@ function toast(msg, type='success') {
   t.className = 'toast show ' + type;
   setTimeout(() => t.classList.remove('show'), 3000);
 }
+
+document.getElementById('actType').addEventListener('change', (e) => {
+  applyTypeDefaults(parseInt(e.target.value));
+});
+document.getElementById('actBus').addEventListener('change', updateActuatorHelp);
 
 window.addEventListener('load', init);
 </script>

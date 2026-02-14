@@ -31,10 +31,6 @@ public:
   bool begin();
   void update();
 
-  // Callback pour recompiler les pipelines apres modification
-  typedef void (*RecompileCallback)();
-  void setRecompileCallback(RecompileCallback cb) { _recompileCb = cb; }
-
 private:
   AsyncWebServer _server;
   AsyncWebSocket _ws;
@@ -47,10 +43,8 @@ private:
   Storage* _storage;
   Scheduler* _scheduler;
   EventProcessor* _eventProc;
-  RecompileCallback _recompileCb = nullptr;
 
   void _setupRoutes();
-  void _recompilePipelines();
 
   // Instruments CRUD
   void _handleGetInstruments(AsyncWebServerRequest* req);
@@ -82,6 +76,7 @@ private:
   void _handleGetStatus(AsyncWebServerRequest* req);
   void _handleScanI2C(AsyncWebServerRequest* req);
   void _handleGetMidiNotes(AsyncWebServerRequest* req);
+  void _handleGetCapabilities(AsyncWebServerRequest* req);
   void _handleSaveConfig(AsyncWebServerRequest* req);
 
   // WebSocket
@@ -93,6 +88,8 @@ private:
   void _sendError(AsyncWebServerRequest* req, int code, const char* msg);
   uint8_t _extractId(AsyncWebServerRequest* req, const char* param);
   void _wsBroadcast(const char* type, const JsonObject& data);
+
+  bool _validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg);
 };
 
 #endif // WEB_SERVER_H

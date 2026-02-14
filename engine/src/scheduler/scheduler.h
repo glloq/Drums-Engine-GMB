@@ -37,6 +37,12 @@ public:
   bool schedulePulseAt(uint8_t actuatorId, uint16_t value,
                        uint32_t durationUs, uint32_t executeAt);
 
+
+  // Planifier une sequence d'actions (multi-output)
+  bool scheduleActionSteps(const ActionStep* steps, uint8_t stepCount,
+                           uint8_t velocity, uint32_t timestamp,
+                           const uint16_t* globalVars);
+
   // Appeler dans loop() - traite les commandes pretes
   void update();
 

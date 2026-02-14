@@ -331,6 +331,9 @@ void compilePipelines() {
   // Reinitialiser
   memset(lookup.note_to_pipeline, 0xFF, sizeof(lookup.note_to_pipeline));
   lookup.pipeline_count = 0;
+  lookup.cc_route_count = 0;
+  memset(lookup.cc_to_first, 0xFF, sizeof(lookup.cc_to_first));
+  memset(lookup.cc_to_count, 0, sizeof(lookup.cc_to_count));
 
   // Pour chaque instrument, creer un pipeline par defaut
   // (tant que l'UI de construction de pipeline n'est pas prete)
@@ -342,51 +345,67 @@ void compilePipelines() {
     uint8_t pipeIdx = lookup.pipeline_count;
     CompiledPipeline& pipeline = lookup.pipelines[pipeIdx];
     pipeline.block_count = 0;
+    pipeline.output_actuator_id = 0xFF;
+    pipeline.note_on_count = 0;
+    pipeline.note_off_count = 0;
+    pipeline.cc_binding_count = 0;
 
-    // Trouver le premier actionneur actif de l'instrument
-    uint8_t outputActId = 0xFF;
-    for (uint8_t j = 0; j < inst->actuatorCount; j++) {
-      uint8_t actId = inst->actuatorIds[j];
-      Actuator* act = actuatorManager.getActuator(actId);
-      if (act && act->isEnabled()) {
-        outputActId = actId;
+    // Prefer explicit action model when instrument already provides it
+    if (inst->noteOnCount > 0 || inst->noteOffCount > 0) {
+      pipeline.note_on_count = min((uint8_t)MAX_ACTIONS_PER_EVENT, inst->noteOnCount);
+      pipeline.note_off_count = min((uint8_t)MAX_ACTIONS_PER_EVENT, inst->noteOffCount);
+      pipeline.cc_binding_count = min((uint8_t)MAX_CC_BINDINGS, inst->ccBindingCount);
 
-        // Generer un pipeline par defaut selon le type d'actionneur
+      for (uint8_t j = 0; j < pipeline.note_on_count; j++) {
+        pipeline.note_on_actions[j] = inst->noteOnActions[j];
+      }
+      for (uint8_t j = 0; j < pipeline.note_off_count; j++) {
+        pipeline.note_off_actions[j] = inst->noteOffActions[j];
+      }
+      for (uint8_t j = 0; j < pipeline.cc_binding_count; j++) {
+        pipeline.cc_bindings[j] = inst->ccBindings[j];
+      }
+    } else {
+      // Legacy migration path: generate default actions from actuator list
+      for (uint8_t j = 0; j < inst->actuatorCount; j++) {
+        uint8_t actId = inst->actuatorIds[j];
+        Actuator* act = actuatorManager.getActuator(actId);
+        if (!act || !act->isEnabled()) continue;
+
         const ActuatorConfig& cfg = act->getConfig();
 
-        if (cfg.type == ActuatorType::SOLENOID) {
-          // Solenoide: bloc TIME_PULSE (duree depend velocite)
-          CompiledBlock& pulseBlock = pipeline.blocks[pipeline.block_count];
-          pulseBlock.type = (uint8_t)BlockType::TIME;
-          pulseBlock.subtype = TIME_PULSE;
-          pulseBlock.param1 = cfg.paramMin;  // duree min (ms)
-          pulseBlock.param2 = cfg.paramMax;  // duree max (ms)
-          pipeline.block_count++;
-
-        } else if (cfg.type == ActuatorType::SERVO) {
-          // Servo: bloc OUTPUT_POSITION
-          CompiledBlock& posBlock = pipeline.blocks[pipeline.block_count];
-          posBlock.type = (uint8_t)BlockType::OUTPUT;
-          posBlock.subtype = OUT_POSITION;
-          posBlock.param1 = actId;
-          posBlock.param2 = 0;
-          pipeline.block_count++;
-
-        } else if (cfg.type == ActuatorType::PWM_MOTOR) {
-          // Moteur: bloc OUTPUT_PWM
-          CompiledBlock& pwmBlock = pipeline.blocks[pipeline.block_count];
-          pwmBlock.type = (uint8_t)BlockType::OUTPUT;
-          pwmBlock.subtype = OUT_PWM;
-          pwmBlock.param1 = actId;
-          pwmBlock.param2 = 0;
-          pipeline.block_count++;
+        if (pipeline.output_actuator_id == 0xFF) {
+          pipeline.output_actuator_id = actId;
         }
 
-        break; // Un pipeline par instrument pour V1
+        if (pipeline.note_on_count < MAX_ACTIONS_PER_EVENT) {
+          ActionStep& on = pipeline.note_on_actions[pipeline.note_on_count++];
+          on.actuator_id = actId;
+          on.value_source = (uint8_t)ValueSource::VELOCITY;
+          on.delay_ms = 0;
+          on.velocity_curve = CURVE_LINEAR;
+
+          if (cfg.type == ActuatorType::SOLENOID) {
+            on.command_type = (uint8_t)CommandType::PULSE;
+            on.duration_min_ms = cfg.paramMin;
+            on.duration_max_ms = cfg.paramMax;
+          } else if (cfg.type == ActuatorType::SERVO) {
+            on.command_type = (uint8_t)CommandType::POSITION;
+          } else if (cfg.type == ActuatorType::PWM_MOTOR) {
+            on.command_type = (uint8_t)CommandType::PWM;
+          }
+        }
+
+        if (pipeline.note_off_count < MAX_ACTIONS_PER_EVENT) {
+          ActionStep& off = pipeline.note_off_actions[pipeline.note_off_count++];
+          off.actuator_id = actId;
+          off.command_type = (uint8_t)CommandType::OFF;
+          off.value_source = (uint8_t)ValueSource::FIXED;
+          off.value_fixed = 0;
+          off.delay_ms = 0;
+        }
       }
     }
-
-    pipeline.output_actuator_id = outputActId;
 
     // Mapper la note MIDI vers ce pipeline
     lookup.note_to_pipeline[inst->midiNote] = pipeIdx;
@@ -394,8 +413,43 @@ void compilePipelines() {
     lookup.pipeline_count++;
   }
 
-  DBGF("[Pipeline] Compiled %d pipelines from %d instruments\n",
-       lookup.pipeline_count, instrumentManager.getInstrumentCount());
+  // Compiler la table de routage CC (phase 2)
+  for (uint8_t cc = 0; cc < 128; cc++) {
+    uint8_t first = lookup.cc_route_count;
+    uint8_t count = 0;
+
+    for (uint8_t p = 0; p < lookup.pipeline_count; p++) {
+      const CompiledPipeline& pipe = lookup.pipelines[p];
+      for (uint8_t i = 0; i < pipe.cc_binding_count; i++) {
+        const CCBinding& binding = pipe.cc_bindings[i];
+        if (binding.cc_number != cc || binding.actuator_id == 0xFF) continue;
+        if (lookup.cc_route_count >= MAX_CC_ROUTES) break;
+
+        CCRoutingEntry& route = lookup.cc_routes[lookup.cc_route_count++];
+        route.actuator_id = binding.actuator_id;
+        route.command_type = binding.command_type;
+        route.range_min = binding.range_min;
+        route.range_max = binding.range_max;
+        route.curve = binding.curve;
+        route.inverted = binding.inverted;
+        count++;
+      }
+      if (lookup.cc_route_count >= MAX_CC_ROUTES) break;
+    }
+
+    if (count > 0) {
+      lookup.cc_to_first[cc] = first;
+      lookup.cc_to_count[cc] = count;
+    }
+
+    if (lookup.cc_route_count >= MAX_CC_ROUTES) {
+      DBGLN("[Pipeline] CC route table full, truncating");
+      break;
+    }
+  }
+
+  DBGF("[Pipeline] Compiled %d pipelines from %d instruments, %d CC routes\n",
+       lookup.pipeline_count, instrumentManager.getInstrumentCount(), lookup.cc_route_count);
 }
 
 // ============================================================================

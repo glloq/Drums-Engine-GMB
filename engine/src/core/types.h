@@ -59,6 +59,19 @@ enum class CommandType : uint8_t {
   OFF                    // Arret
 };
 
+enum class ValueSource : uint8_t {
+  VELOCITY = 0,
+  FIXED,
+  CC_VAR,
+  INVERTED_VELOCITY
+};
+
+enum class RetriggerMode : uint8_t {
+  IGNORE = 0,
+  RESET,
+  STACK
+};
+
 // --- Evenement MIDI interne ---
 struct MidiEvent {
   uint8_t type;          // 0=note_on, 1=note_off, 2=cc, 3=pitch_bend, 4=aftertouch
@@ -82,6 +95,37 @@ struct ActuatorCommand {
   uint16_t value;          // valeur (angle, PWM, intensite)
   uint16_t duration;       // duree en microsecondes / 100 (pour tenir dans 16 bits)
   uint32_t execute_at;     // timestamp d'execution en microsecondes
+};
+
+struct ActionStep {
+  uint8_t actuator_id;
+  uint8_t command_type;
+  uint8_t value_source;
+  uint8_t value_fixed;
+  uint8_t cc_index;
+  uint16_t delay_ms;
+  uint16_t duration_min_ms;
+  uint16_t duration_max_ms;
+  uint8_t velocity_curve;
+
+  ActionStep()
+    : actuator_id(0xFF), command_type((uint8_t)CommandType::PULSE),
+      value_source((uint8_t)ValueSource::VELOCITY), value_fixed(0), cc_index(0),
+      delay_ms(0), duration_min_ms(0), duration_max_ms(0), velocity_curve(0) {}
+};
+
+struct CCBinding {
+  uint8_t cc_number;
+  uint8_t actuator_id;
+  uint8_t command_type;
+  uint8_t range_min;
+  uint8_t range_max;
+  uint8_t curve;
+  bool inverted;
+
+  CCBinding()
+    : cc_number(0), actuator_id(0xFF), command_type((uint8_t)CommandType::POSITION),
+      range_min(0), range_max(127), curve(0), inverted(false) {}
 };
 
 // --- Configuration d'un actionneur ---
@@ -129,11 +173,23 @@ struct InstrumentConfig {
 
   uint8_t pipelineId;      // Index dans la table des pipelines
 
+  ActionStep noteOnActions[MAX_ACTIONS_PER_EVENT];
+  uint8_t noteOnCount;
+
+  ActionStep noteOffActions[MAX_ACTIONS_PER_EVENT];
+  uint8_t noteOffCount;
+
+  CCBinding ccBindings[MAX_CC_BINDINGS];
+  uint8_t ccBindingCount;
+
+  uint8_t retriggerMode;
+
   bool enabled;
 
   InstrumentConfig()
     : id(0), midiNote(36), midiChannel(10),
-      actuatorCount(0), pipelineId(0xFF), enabled(true) {
+      actuatorCount(0), pipelineId(0xFF), noteOnCount(0), noteOffCount(0),
+      ccBindingCount(0), retriggerMode((uint8_t)RetriggerMode::IGNORE), enabled(true) {
     name[0] = '\0';
     strcpy(category, "drums");
     memset(actuatorIds, 0xFF, sizeof(actuatorIds));
@@ -174,12 +230,35 @@ constexpr uint8_t CURVE_EXPO   = 1;
 constexpr uint8_t CURVE_LOG    = 2;
 
 // --- Pipeline compile ---
+
+
+struct CCRoutingEntry {
+  uint8_t actuator_id;
+  uint8_t command_type;
+  uint8_t range_min;
+  uint8_t range_max;
+  uint8_t curve;
+  bool inverted;
+
+  CCRoutingEntry()
+    : actuator_id(0xFF), command_type((uint8_t)CommandType::POSITION),
+      range_min(0), range_max(127), curve(0), inverted(false) {}
+};
+
 struct CompiledPipeline {
   uint8_t block_count;
   uint8_t output_actuator_id;   // Actionneur de sortie
   CompiledBlock blocks[MAX_BLOCKS_PER_PIPELINE];
+  ActionStep note_on_actions[MAX_ACTIONS_PER_EVENT];
+  uint8_t note_on_count;
+  ActionStep note_off_actions[MAX_ACTIONS_PER_EVENT];
+  uint8_t note_off_count;
+  CCBinding cc_bindings[MAX_CC_BINDINGS];
+  uint8_t cc_binding_count;
 
-  CompiledPipeline() : block_count(0), output_actuator_id(0xFF) {
+  CompiledPipeline()
+    : block_count(0), output_actuator_id(0xFF),
+      note_on_count(0), note_off_count(0), cc_binding_count(0) {
     memset(blocks, 0, sizeof(blocks));
   }
 };
@@ -190,8 +269,15 @@ struct PipelineLookup {
   CompiledPipeline pipelines[MAX_PIPELINES];
   uint8_t pipeline_count;
 
-  PipelineLookup() : pipeline_count(0) {
+  CCRoutingEntry cc_routes[MAX_CC_ROUTES];
+  uint8_t cc_route_count;
+  uint8_t cc_to_first[128];          // 0xFF = aucun
+  uint8_t cc_to_count[128];          // nombre d'entrees consecutives
+
+  PipelineLookup() : pipeline_count(0), cc_route_count(0) {
     memset(note_to_pipeline, 0xFF, sizeof(note_to_pipeline));
+    memset(cc_to_first, 0xFF, sizeof(cc_to_first));
+    memset(cc_to_count, 0, sizeof(cc_to_count));
   }
 };
 

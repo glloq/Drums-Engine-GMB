@@ -29,6 +29,7 @@ enum class ActuatorType : uint8_t {
   SERVO = 0,
   SOLENOID,
   PWM_MOTOR,
+  MOTOR_OPTICAL,
   TYPE_COUNT
 };
 
@@ -40,6 +41,7 @@ enum class ActuatorBehavior : uint8_t {
   SERVO_STRIKE,          // Oscillation (maracas, shaker)
   COMB_BRUSH,            // Peigne/brosse
   PITCH_BEND,            // Tension de peau
+  MOTOR_OPTICAL_TRACK,    // Moteur avec capteur optique
   BEHAVIOR_COUNT
 };
 
@@ -275,8 +277,9 @@ struct PipelineLookup {
   uint8_t cc_route_count;
   uint8_t cc_to_first[128];          // 0xFF = aucun
   uint8_t cc_to_count[128];          // nombre d'entrees consecutives
+  uint16_t cc_route_dropped;         // routes ignorees (table pleine)
 
-  PipelineLookup() : pipeline_count(0), cc_route_count(0) {
+  PipelineLookup() : pipeline_count(0), cc_route_count(0), cc_route_dropped(0) {
     memset(note_to_pipeline, 0xFF, sizeof(note_to_pipeline));
     memset(cc_to_first, 0xFF, sizeof(cc_to_first));
     memset(cc_to_count, 0, sizeof(cc_to_count));
@@ -321,6 +324,7 @@ inline const char* actuatorTypeName(ActuatorType t) {
     case ActuatorType::SERVO:      return "Servo";
     case ActuatorType::SOLENOID:   return "Solenoid";
     case ActuatorType::PWM_MOTOR:  return "PWM Motor";
+    case ActuatorType::MOTOR_OPTICAL: return "Motor Optical";
     default:                       return "Unknown";
   }
 }
@@ -333,6 +337,7 @@ inline const char* actuatorBehaviorName(ActuatorBehavior b) {
     case ActuatorBehavior::SERVO_STRIKE:    return "Servo Strike";
     case ActuatorBehavior::COMB_BRUSH:      return "Comb/Brush";
     case ActuatorBehavior::PITCH_BEND:      return "Pitch Bend";
+    case ActuatorBehavior::MOTOR_OPTICAL_TRACK: return "Motor Optical";
     default:                               return "Unknown";
   }
 }

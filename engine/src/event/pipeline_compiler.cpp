@@ -53,6 +53,7 @@ static void parseActionAndCcBindings(const JsonObject& inst, CompiledPipeline& p
 
 static void buildCcRoutingTable(PipelineLookup& lookup) {
   lookup.cc_route_count = 0;
+  lookup.cc_route_dropped = 0;
   memset(lookup.cc_to_first, 0xFF, sizeof(lookup.cc_to_first));
   memset(lookup.cc_to_count, 0, sizeof(lookup.cc_to_count));
 
@@ -65,7 +66,10 @@ static void buildCcRoutingTable(PipelineLookup& lookup) {
       for (uint8_t i = 0; i < pipeline.cc_binding_count; i++) {
         const CCBinding& binding = pipeline.cc_bindings[i];
         if (binding.cc_number != cc || binding.actuator_id == 0xFF) continue;
-        if (lookup.cc_route_count >= MAX_CC_ROUTES) break;
+        if (lookup.cc_route_count >= MAX_CC_ROUTES) {
+          lookup.cc_route_dropped++;
+          continue;
+        }
 
         CCRoutingEntry& route = lookup.cc_routes[lookup.cc_route_count++];
         route.actuator_id = binding.actuator_id;
@@ -76,7 +80,6 @@ static void buildCcRoutingTable(PipelineLookup& lookup) {
         route.inverted = binding.inverted;
         count++;
       }
-      if (lookup.cc_route_count >= MAX_CC_ROUTES) break;
     }
 
     if (count > 0) {
@@ -84,10 +87,6 @@ static void buildCcRoutingTable(PipelineLookup& lookup) {
       lookup.cc_to_count[cc] = count;
     }
 
-    if (lookup.cc_route_count >= MAX_CC_ROUTES) {
-      DBGLN("[Compiler] CC route table full, truncating");
-      break;
-    }
   }
 }
 
@@ -143,6 +142,7 @@ bool PipelineCompiler::compileAll(const JsonArray& instruments, PipelineLookup& 
   memset(lookup.note_to_pipeline, 0xFF, sizeof(lookup.note_to_pipeline));
   lookup.pipeline_count = 0;
   lookup.cc_route_count = 0;
+  lookup.cc_route_dropped = 0;
   memset(lookup.cc_to_first, 0xFF, sizeof(lookup.cc_to_first));
   memset(lookup.cc_to_count, 0, sizeof(lookup.cc_to_count));
 
@@ -197,13 +197,14 @@ bool PipelineCompiler::compileAll(const JsonArray& instruments, PipelineLookup& 
 
   buildCcRoutingTable(lookup);
 
-  DBGF("[Compiler] Compiled %d pipelines, %d CC routes\n", lookup.pipeline_count, lookup.cc_route_count);
+  DBGF("[Compiler] Compiled %d pipelines, %d CC routes (%d dropped)\n", lookup.pipeline_count, lookup.cc_route_count, lookup.cc_route_dropped);
   return true;
 }
 
 void PipelineCompiler::lookupToJson(const PipelineLookup& lookup, JsonObject& obj) {
   obj["pipeline_count"] = lookup.pipeline_count;
   obj["cc_route_count"] = lookup.cc_route_count;
+  obj["cc_route_dropped"] = lookup.cc_route_dropped;
 
   JsonArray noteMap = obj["note_map"].to<JsonArray>();
   for (uint8_t i = 0; i < 128; i++) {

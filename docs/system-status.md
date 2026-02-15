@@ -12,10 +12,12 @@ Le moteur supporte désormais un modèle instrument orienté actions multi-étap
 - Routage CC Phase 2:
   - table compilée (`cc_routes`, `cc_to_first`, `cc_to_count`)
   - dispatch runtime anti-flood (5ms)
-  - endpoint debug `/api/cc-routes`
+  - endpoint debug `/api/cc-routes` (avec compteur `dropped`)
+- diagnostics runtime CC exposés dans `/api/status` (rx/throttled/routed/unrouted)
 - API templates:
   - `/api/templates`
   - `/api/instruments/from-template`
+- Validation serveur renforcée du payload instrument (midi note/channel, counts, enums, courbes, IDs actuateurs existants, doublons CC).
 - UI instruments Phase 3:
   - éditeurs NoteOn/NoteOff/CC bindings
   - retrigger mode
@@ -28,10 +30,10 @@ Le moteur supporte désormais un modèle instrument orienté actions multi-étap
 - Pas de build CI/compilation firmware validée dans cet environnement (`pio` absent).
 - Les templates avancés restent génériques (pas de calibration hardware automatique).
 - Le renderer Mappings UI est informatif, pas encore un graphe complet éditable.
-- Cas “motor optical” dédié non implémenté (nouveau type hardware/ISR à faire).
+- Support initial “motor optical” ajouté (type actuateur + suivi capteur en watchdog), limité à `GPIO_DIRECT`; version ISR/hardware dédiée reste à finaliser.
 
 ## Priorités suivantes recommandées
 1. Ajouter validation serveur détaillée sur payload actions/CC (ranges, IDs existants).
-2. Ajouter endpoint de diagnostic temps réel (compteurs anti-flood CC, erreurs scheduler).
-3. Implémenter type actuateur motor optical (HAL + feedback + ISR).
-4. Ajouter tests d’intégration API (templates, test-action, cc-routes).
+2. Implémenter type actuateur motor optical (HAL + feedback + ISR).
+3. Ajouter tests d’intégration API (templates, test-action, cc-routes, status diagnostics).
+4. Ajouter alarmes UI sur `cc_route_dropped` > 0 et overflow scheduler.

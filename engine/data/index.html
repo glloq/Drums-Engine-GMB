@@ -763,6 +763,12 @@ const INSTRUMENT_TEMPLATES = {
     noteOnActions: [{commandType:0, valueSource:0, delayMs:0, durationMinMs:10, durationMaxMs:30, velocityCurve:0}],
     noteOffActions: [{commandType:3, valueSource:1, valueFixed:0, delayMs:0}],
     ccBindings: [{ccNumber:127, commandType:1, rangeMin:30, rangeMax:110, curve:0, inverted:false}]
+  },
+  motorOptical: {
+    name: 'Motor Optical', category:'other', midiNote:60, midiChannel:10,
+    noteOnActions: [{commandType:1, valueSource:0, delayMs:0, velocityCurve:0}],
+    noteOffActions: [{commandType:3, valueSource:1, valueFixed:0, delayMs:0}],
+    ccBindings: []
   }
 };
 
@@ -853,17 +859,57 @@ async function showCreateInstrumentFromTemplate() {
     return;
   }
 
-  const names = templates.map(t => t.id).join(' / ');
+  const names = templates.map(t => `${t.id}${t.actuatorSlots ? ` (${t.actuatorSlots} act.)` : ''}`).join(' / ');
   const key = prompt('Template: ' + names, templates[0].id);
   if (!key) return;
 
-  const localMap = { kick: 'kick', hihat: 'hihat', cymbal_mute: 'cymbalMute', double_hit: 'doubleHit', shaker: 'shaker', brush: 'brush', timpani: 'timpani' };
-  if (INSTRUMENT_TEMPLATES[localMap[key]]) {
-    showAddInstrument(INSTRUMENT_TEMPLATES[localMap[key]]);
+  const selected = templates.find(t => t.id === key);
+  if (!selected) {
+    toast('Template inconnu', 'error');
     return;
   }
 
-  const created = await api('instruments/from-template', 'POST', {template: key});
+  const slots = Number(selected.actuatorSlots || 0);
+  const actuatorIds = [];
+  if (slots > 0) {
+    const available = (actuators || []).map(a => `${a.id}:${a.name}`).join(', ');
+    const typeNameById = Object.fromEntries(((capabilities && capabilities.actuatorTypes) || []).map(t => [t.id, t.name]));
+    const behaviorNameById = Object.fromEntries(((capabilities && capabilities.actuatorBehaviors) || []).map(b => [b.id, b.name]));
+    const hintLines = (selected.slotHints || []).map(h => {
+      const parts = [];
+      if (h.requiredType !== undefined) parts.push(`type=${typeNameById[h.requiredType] || h.requiredType}`);
+      if (h.requiredBehavior !== undefined) parts.push(`behavior=${behaviorNameById[h.requiredBehavior] || h.requiredBehavior}`);
+      return `slot ${h.slot ?? '?'}: ${parts.join(', ')}`;
+    });
+    const hintText = hintLines.length ? `\nContraintes: ${hintLines.join(' | ')}` : '';
+    const raw = prompt(`Actuator IDs (ordre template, ${slots} requis)\nDisponibles: ${available}${hintText}`, '');
+    if (!raw) return;
+    const parsed = raw.split(',').map(v => Number(String(v).trim())).filter(v => !Number.isNaN(v));
+    if (parsed.length < slots) {
+      toast(`Il faut au moins ${slots} actuatorId(s)`, 'error');
+      return;
+    }
+    for (let i = 0; i < slots; i++) actuatorIds.push(parsed[i]);
+  }
+
+  const localMap = { kick: 'kick', hihat: 'hihat', cymbal_mute: 'cymbalMute', double_hit: 'doubleHit', shaker: 'shaker', brush: 'brush', timpani: 'timpani', motor_optical: 'motorOptical' };
+  if (INSTRUMENT_TEMPLATES[localMap[key]]) {
+    const t = JSON.parse(JSON.stringify(INSTRUMENT_TEMPLATES[localMap[key]]));
+    if (actuatorIds.length) {
+      const patchId = (obj, idx) => {
+        if (obj && Number.isFinite(actuatorIds[idx])) obj.actuatorId = actuatorIds[idx];
+      };
+      if (Array.isArray(t.noteOnActions)) t.noteOnActions.forEach((a, i) => patchId(a, Math.min(i, actuatorIds.length - 1)));
+      if (Array.isArray(t.noteOffActions)) t.noteOffActions.forEach((a) => patchId(a, 0));
+      if (Array.isArray(t.ccBindings)) t.ccBindings.forEach((b) => patchId(b, Math.min(1, actuatorIds.length - 1)));
+    }
+    showAddInstrument(t);
+    return;
+  }
+
+  const payload = {template: key};
+  if (actuatorIds.length) payload.actuatorIds = actuatorIds;
+  const created = await api('instruments/from-template', 'POST', payload);
   if (!created) return;
   await loadInstruments();
   toast('Instrument créé depuis template', 'success');

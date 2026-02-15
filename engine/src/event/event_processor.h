@@ -28,6 +28,13 @@
 
 class EventProcessor {
 public:
+  struct CcDispatchStats {
+    uint32_t received = 0;
+    uint32_t throttled = 0;
+    uint32_t routed_commands = 0;
+    uint32_t routed_batches = 0;
+    uint32_t unrouted = 0;
+  };
   EventProcessor(Scheduler* scheduler, EngineState* state);
 
   // Traiter un evenement MIDI
@@ -36,6 +43,7 @@ public:
   // Acces a la table de lookup
   PipelineLookup& getLookup() { return _lookup; }
   const PipelineLookup& getLookup() const { return _lookup; }
+  const CcDispatchStats& getCcDispatchStats() const { return _ccStats; }
 
   // Recharger/compiler les tables
   void recompileLookup();
@@ -46,6 +54,8 @@ private:
   PipelineLookup _lookup;
   uint32_t _lastCcDispatchUs[128];
   bool _noteActive[128];
+
+  CcDispatchStats _ccStats;
 
   // Executer un pipeline sur une valeur
   void _executePipeline(uint8_t pipelineIdx, uint8_t value, uint32_t timestamp);

@@ -5,6 +5,7 @@ EventProcessor::EventProcessor(Scheduler* scheduler, EngineState* state)
   : _scheduler(scheduler), _state(state) {
   memset(_lastCcDispatchUs, 0, sizeof(_lastCcDispatchUs));
   memset(_noteActive, 0, sizeof(_noteActive));
+  _ccStats = {};
 }
 
 void EventProcessor::processMidiEvent(const MidiEvent& ev) {
@@ -73,6 +74,7 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
 }
 
 void EventProcessor::_processCcEvent(const MidiEvent& ev) {
+  _ccStats.received++;
   if (ev.data1 < MAX_GLOBAL_VARS) {
     _state->setVariable(ev.data1, ev.data2);
   }
@@ -80,14 +82,19 @@ void EventProcessor::_processCcEvent(const MidiEvent& ev) {
   // Anti-flood: max 1 dispatch batch per CC every 5ms
   uint32_t lastTs = _lastCcDispatchUs[ev.data1];
   if (lastTs != 0 && (ev.timestamp - lastTs) < 5000) {
+    _ccStats.throttled++;
     return;
   }
   _lastCcDispatchUs[ev.data1] = ev.timestamp;
 
   uint8_t first = _lookup.cc_to_first[ev.data1];
   uint8_t count = _lookup.cc_to_count[ev.data1];
-  if (first == 0xFF || count == 0) return;
+  if (first == 0xFF || count == 0) {
+    _ccStats.unrouted++;
+    return;
+  }
 
+  _ccStats.routed_batches++;
   for (uint8_t i = 0; i < count; i++) {
     uint8_t routeIdx = first + i;
     if (routeIdx >= _lookup.cc_route_count) break;
@@ -106,6 +113,7 @@ void EventProcessor::_processCcEvent(const MidiEvent& ev) {
     cmd.duration = 0;
     cmd.execute_at = ev.timestamp;
     _scheduler->scheduleCommand(cmd);
+    _ccStats.routed_commands++;
   }
 }
 
@@ -164,6 +172,7 @@ void EventProcessor::_executePipeline(uint8_t pipelineIdx, uint8_t value, uint32
     cmd.duration = 0;
     cmd.execute_at = timestamp + delayAccum;
     _scheduler->scheduleCommand(cmd);
+    _ccStats.routed_commands++;
   }
 }
 
@@ -331,9 +340,11 @@ uint8_t EventProcessor::_applyVelocityCurve(uint8_t value, uint8_t curveType) {
 void EventProcessor::recompileLookup() {
   memset(_lookup.note_to_pipeline, 0xFF, sizeof(_lookup.note_to_pipeline));
   _lookup.cc_route_count = 0;
+  _lookup.cc_route_dropped = 0;
   memset(_lookup.cc_to_first, 0xFF, sizeof(_lookup.cc_to_first));
   memset(_lookup.cc_to_count, 0, sizeof(_lookup.cc_to_count));
   memset(_lastCcDispatchUs, 0, sizeof(_lastCcDispatchUs));
   memset(_noteActive, 0, sizeof(_noteActive));
+  _ccStats = {};
   DBGF("[EventProc] Lookup recompiled (%d pipelines)\n", _lookup.pipeline_count);
 }

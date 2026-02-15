@@ -95,6 +95,7 @@ private:
   void _wsBroadcast(const char* type, const JsonObject& data);
 
   bool _validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg);
+  bool _validateInstrumentConfig(InstrumentConfig& cfg, const char*& errMsg);
   void _recompileLookupFromInstruments();
 };
 

@@ -55,7 +55,8 @@ Actuator* ActuatorFactory::createAndRegister(const ActuatorConfig& config) {
       break;
     }
 
-    case ActuatorType::PWM_MOTOR: {
+    case ActuatorType::PWM_MOTOR:
+    case ActuatorType::MOTOR_OPTICAL: {
       if (_motorIdx >= MAX_ACTUATORS) return nullptr;
       HalDriver* driver = _getDriver(config.bus, config.hwAddress);
       if (!driver) {

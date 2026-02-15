@@ -137,7 +137,8 @@ void ActuatorManager::testActuator(uint8_t id, uint8_t value) {
       act->execute(cmd);
       break;
     }
-    case ActuatorType::PWM_MOTOR: {
+    case ActuatorType::PWM_MOTOR:
+    case ActuatorType::MOTOR_OPTICAL: {
       ActuatorCommand cmd;
       cmd.actuator_id = id;
       cmd.command_type = (uint8_t)CommandType::PWM;

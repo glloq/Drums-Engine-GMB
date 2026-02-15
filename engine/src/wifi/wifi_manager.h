@@ -4,17 +4,20 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <ESPmDNS.h>
+#include <DNSServer.h>
 #include <LittleFS.h>
 #include <ArduinoJson.h>
 #include <ESPAsyncWebServer.h>
 #include "../core/config.h"
 
 // ============================================================================
-// WiFiManager - Gestion WiFi avec credentials LittleFS
+// WiFiManager - Gestion WiFi avec credentials LittleFS + portail captif
 // ============================================================================
 // Charge les credentials WiFi depuis /wifi.json sur LittleFS.
 // Si le fichier n'existe pas ou la connexion echoue, demarre en mode AP
-// avec portail captif pour permettre la configuration via l'API REST.
+// avec portail captif DNS pour rediriger vers la page du moteur.
+//
+// Bouton BOOT (GPIO 0) : appui > 3s = bascule en mode AP hotspot
 //
 // API REST :
 //   GET  /api/wifi   -> statut WiFi (ssid, ip, mode, rssi)
@@ -26,6 +29,7 @@
 
 #define WIFI_CONFIG_FILE  "/wifi.json"
 #define WIFI_MAX_ATTEMPTS 30    // 30 x 500ms = 15s timeout
+#define DNS_PORT          53
 
 class WiFiManager {
 public:
@@ -37,6 +41,12 @@ public:
 
   // Enregistrer les routes API sur un serveur web existant
   void registerRoutes(AsyncWebServer* server);
+
+  // Appeler regulierement pour traiter les requetes DNS captives
+  void update();
+
+  // Basculer en mode AP (appele depuis le bouton BOOT)
+  void switchToAP();
 
   // Etat de la connexion
   bool isConnected() const;
@@ -50,6 +60,8 @@ private:
   String _ssid;
   String _password;
   String _hostname;
+  DNSServer _dnsServer;
+  bool _dnsRunning;
 
   // Charger les credentials depuis /wifi.json
   bool _loadCredentials();
@@ -60,8 +72,11 @@ private:
   // Tenter la connexion STA
   bool _connectSTA();
 
-  // Demarrer le mode AP
+  // Demarrer le mode AP + DNS captif
   void _startAP();
+
+  // Arreter le DNS captif
+  void _stopDNS();
 
   // Demarrer mDNS avec les services
   void _startMDNS();

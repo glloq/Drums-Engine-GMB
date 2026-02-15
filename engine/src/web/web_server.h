@@ -16,9 +16,10 @@
 #include "../scheduler/scheduler.h"
 #include "../event/event_processor.h"
 #include "../event/pipeline_compiler.h"
+#include "api_auth.h"
 
 // ============================================================================
-// WebServerManager - REST API + WebSocket
+// WebServerManager - REST API + WebSocket + Auth + Rate-Limiting
 // ============================================================================
 
 class WebServerManager {
@@ -32,9 +33,21 @@ public:
   bool begin();
   void update();
 
+  // Set callback for pipeline recompilation after instrument mutations
+  void setRecompileCallback(void (*cb)()) { _recompileCb = cb; }
+
+  // Expose server for external route registration (WiFiManager, etc.)
+  AsyncWebServer& getServer() { return _server; }
+
+  // Get API token for display at boot
+  String getApiToken() const { return _auth.getToken(); }
+
 private:
   AsyncWebServer _server;
   AsyncWebSocket _ws;
+  ApiAuth _auth;
+  RateLimiter _rateLimiter;
+  void (*_recompileCb)() = nullptr;
 
   InstrumentManager* _instrMgr;
   ActuatorManager* _actMgr;
@@ -83,6 +96,9 @@ private:
   void _handleGetTemplates(AsyncWebServerRequest* req);
   void _handleCreateInstrumentFromTemplate(AsyncWebServerRequest* req, uint8_t* data, size_t len);
   void _handleSaveConfig(AsyncWebServerRequest* req);
+  void _handleGetLogs(AsyncWebServerRequest* req);
+  void _handleClearLogs(AsyncWebServerRequest* req);
+  void _handleGetAuthToken(AsyncWebServerRequest* req);
 
   // WebSocket
   void _onWsEvent(AsyncWebSocket* server, AsyncWebSocketClient* client,

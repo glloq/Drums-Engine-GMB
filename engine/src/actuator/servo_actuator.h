@@ -33,6 +33,13 @@ private:
   bool _combBrushHigh = false;
   uint32_t _combBrushPeriodUs = 120000;
 
+  // Hi-hat controller state
+  uint8_t _lastCcValue = 0;
+  bool _splashActive = false;
+  uint32_t _splashStartUs = 0;
+  uint8_t _splashReturnAngle = 0;
+  static constexpr uint32_t SPLASH_DURATION_US = 80000; // 80ms splash open
+
   void _moveToAngle(uint8_t angle);
 };
 

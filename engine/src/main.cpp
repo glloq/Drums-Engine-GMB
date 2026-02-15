@@ -36,6 +36,7 @@
 #include "core/config.h"
 #include "core/types.h"
 #include "core/global_state.h"
+#include "core/error_log.h"
 
 // HAL
 #include "hal/i2c_scanner.h"
@@ -66,6 +67,9 @@
 
 // Storage
 #include "storage/storage.h"
+
+// WiFi
+#include "wifi/wifi_manager.h"
 
 // Web
 #include "web/web_server.h"
@@ -114,6 +118,7 @@ InstrumentManager instrumentManager(&actuatorManager, &scheduler);
 MidiEngine midiEngine(&eventProcessor, &instrumentManager);
 LoopEngine loopEngine(&instrumentManager);
 Storage storage;
+WiFiManager wifiManager;
 WebServerManager webServer(&instrumentManager, &actuatorManager,
                             &actuatorFactory,
                             &loopEngine, &midiEngine, &storage,
@@ -187,51 +192,6 @@ void appCoreTask(void* param) {
 
     vTaskDelay(1);
   }
-}
-
-// ============================================================================
-// WiFi connection
-// ============================================================================
-bool connectWiFi() {
-  DBGF("[WiFi] Connecting to '%s'...\n", WIFI_SSID);
-  WiFi.mode(WIFI_STA);
-  WiFi.setHostname(WIFI_HOSTNAME);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
-  int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED && attempts < 30) {
-    delay(500);
-    DBG(".");
-    attempts++;
-  }
-
-  if (WiFi.status() == WL_CONNECTED) {
-    DBGLN("");
-    DBGF("[WiFi] Connected! IP: %s\n", WiFi.localIP().toString().c_str());
-
-    if (MDNS.begin(WIFI_HOSTNAME)) {
-      MDNS.addService("apple-midi", "udp", RTP_MIDI_PORT);
-      MDNS.addService("http", "tcp", WEB_PORT);
-      DBGF("[mDNS] %s.local\n", WIFI_HOSTNAME);
-    }
-    return true;
-  }
-
-  DBGLN("\n[WiFi] STA connection failed!");
-
-  if (WIFI_AP_FALLBACK) {
-    DBGF("[WiFi] Starting AP: '%s'\n", WIFI_AP_SSID);
-    WiFi.mode(WIFI_AP);
-    WiFi.softAP(WIFI_AP_SSID, WIFI_AP_PASSWORD);
-    DBGF("[WiFi] AP IP: %s\n", WiFi.softAPIP().toString().c_str());
-
-    if (MDNS.begin(WIFI_HOSTNAME)) {
-      MDNS.addService("http", "tcp", WEB_PORT);
-    }
-    return true;
-  }
-
-  return false;
 }
 
 // ============================================================================
@@ -504,6 +464,10 @@ void setup() {
     DBGLN("[FATAL] Storage init failed!");
   }
 
+  // 1b. Error logging (depends on LittleFS)
+  ErrorLog::begin();
+  ErrorLog::info("Drums Engine starting...");
+
   // 2. Hardware (I2C, GPIO, LEDC)
   initHardware();
 
@@ -525,17 +489,19 @@ void setup() {
   // 6. Hardware timer pour scheduler precis
   setupSchedulerTimer();
 
-  // 7. WiFi
-  if (!connectWiFi()) {
+  // 7. WiFi (credentials from /wifi.json, AP fallback)
+  if (!wifiManager.begin()) {
     DBGLN("[FATAL] WiFi init failed!");
+    ErrorLog::error("WiFi init failed");
   }
 
   // 8. MIDI over WiFi
   midiEngine.begin();
 
-  // 9. Web Server
+  // 9. Web Server (includes auth, rate-limiting, WiFi API, logs API)
   webServer.setRecompileCallback(compilePipelines);
   webServer.begin();
+  wifiManager.registerRoutes(&webServer.getServer());
 
   // 10. FreeRTOS tasks
   // RT Core: Scheduler + MIDI sur Core 1, priorite haute
@@ -546,7 +512,10 @@ void setup() {
 
   DBGLN("============================================");
   DBGLN("  Engine Ready!");
-  DBGF("  Web UI:       http://%s.local\n", WIFI_HOSTNAME);
+  DBGF("  WiFi mode:    %s\n", wifiManager.isAPMode() ? "AP" : "STA");
+  DBGF("  Web UI:       http://%s.local\n", wifiManager.getHostname().c_str());
+  DBGF("  IP:           %s\n", wifiManager.getIP().c_str());
+  DBGF("  API Token:    %s\n", webServer.getApiToken().c_str());
   DBGF("  MIDI:         %s (port %d)\n", MIDI_SESSION_NAME, RTP_MIDI_PORT);
   DBGF("  Instruments:  %d\n", instrumentManager.getInstrumentCount());
   DBGF("  Actuators:    %d (configs: %d)\n",
@@ -558,6 +527,8 @@ void setup() {
   DBGF("  RTOS tasks:   RT_Core (pri 5, core 1)\n");
   DBGF("                App_Core (pri 2, core 0)\n");
   DBGLN("============================================");
+
+  ErrorLog::info("Engine ready");
 }
 
 // ============================================================================

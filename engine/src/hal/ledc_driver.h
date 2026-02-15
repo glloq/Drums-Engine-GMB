@@ -24,6 +24,7 @@ public:
 
 private:
   bool _initialized[16];
+  uint8_t _channelPin[16];  // Maps channel -> pin (ESP32 v3.x uses pin-based API)
 };
 
 #endif // LEDC_DRIVER_H

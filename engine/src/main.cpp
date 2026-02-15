@@ -75,6 +75,17 @@
 #include "web/web_server.h"
 
 // ============================================================================
+// Forward declarations
+// ============================================================================
+void initHardware();
+void loadConfiguration();
+void compilePipelines();
+void loadLoops();
+void setupSchedulerTimer();
+void rtCoreTask(void* param);
+void appCoreTask(void* param);
+
+// ============================================================================
 // HAL Drivers (statiques)
 // ============================================================================
 

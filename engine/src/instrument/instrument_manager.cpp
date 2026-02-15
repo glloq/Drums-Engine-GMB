@@ -217,6 +217,51 @@ void InstrumentManager::instrumentToJson(const InstrumentConfig& inst, JsonObjec
   for (uint8_t j = 0; j < inst.actuatorCount; j++) {
     actIds.add(inst.actuatorIds[j]);
   }
+
+  obj["retriggerMode"] = inst.retriggerMode;
+
+  JsonArray noteOn = obj["noteOnActions"].to<JsonArray>();
+  for (uint8_t j = 0; j < inst.noteOnCount; j++) {
+    const ActionStep& step = inst.noteOnActions[j];
+    JsonObject s = noteOn.add<JsonObject>();
+    s["actuatorId"] = step.actuator_id;
+    s["commandType"] = step.command_type;
+    s["valueSource"] = step.value_source;
+    s["valueFixed"] = step.value_fixed;
+    s["ccIndex"] = step.cc_index;
+    s["delayMs"] = step.delay_ms;
+    s["durationMinMs"] = step.duration_min_ms;
+    s["durationMaxMs"] = step.duration_max_ms;
+    s["velocityCurve"] = step.velocity_curve;
+  }
+
+  JsonArray noteOff = obj["noteOffActions"].to<JsonArray>();
+  for (uint8_t j = 0; j < inst.noteOffCount; j++) {
+    const ActionStep& step = inst.noteOffActions[j];
+    JsonObject s = noteOff.add<JsonObject>();
+    s["actuatorId"] = step.actuator_id;
+    s["commandType"] = step.command_type;
+    s["valueSource"] = step.value_source;
+    s["valueFixed"] = step.value_fixed;
+    s["ccIndex"] = step.cc_index;
+    s["delayMs"] = step.delay_ms;
+    s["durationMinMs"] = step.duration_min_ms;
+    s["durationMaxMs"] = step.duration_max_ms;
+    s["velocityCurve"] = step.velocity_curve;
+  }
+
+  JsonArray cc = obj["ccBindings"].to<JsonArray>();
+  for (uint8_t j = 0; j < inst.ccBindingCount; j++) {
+    const CCBinding& binding = inst.ccBindings[j];
+    JsonObject b = cc.add<JsonObject>();
+    b["ccNumber"] = binding.cc_number;
+    b["actuatorId"] = binding.actuator_id;
+    b["commandType"] = binding.command_type;
+    b["rangeMin"] = binding.range_min;
+    b["rangeMax"] = binding.range_max;
+    b["curve"] = binding.curve;
+    b["inverted"] = binding.inverted;
+  }
 }
 
 bool InstrumentManager::fromJson(const JsonArray& arr) {
@@ -252,6 +297,60 @@ bool InstrumentManager::instrumentFromJson(const JsonObject& obj, InstrumentConf
       if (inst.actuatorCount >= MAX_ACTUATORS_PER_INST) break;
       inst.actuatorIds[inst.actuatorCount] = v.as<uint8_t>();
       inst.actuatorCount++;
+    }
+  }
+
+  inst.retriggerMode = obj["retriggerMode"] | (uint8_t)RetriggerMode::IGNORE;
+
+  inst.noteOnCount = 0;
+  JsonArray noteOn = obj["noteOnActions"].as<JsonArray>();
+  if (!noteOn.isNull()) {
+    for (JsonObject stepObj : noteOn) {
+      if (inst.noteOnCount >= MAX_ACTIONS_PER_EVENT) break;
+      ActionStep& step = inst.noteOnActions[inst.noteOnCount++];
+      step.actuator_id = stepObj["actuatorId"] | 0xFF;
+      step.command_type = stepObj["commandType"] | (uint8_t)CommandType::PULSE;
+      step.value_source = stepObj["valueSource"] | (uint8_t)ValueSource::VELOCITY;
+      step.value_fixed = stepObj["valueFixed"] | 0;
+      step.cc_index = stepObj["ccIndex"] | 0;
+      step.delay_ms = stepObj["delayMs"] | 0;
+      step.duration_min_ms = stepObj["durationMinMs"] | 0;
+      step.duration_max_ms = stepObj["durationMaxMs"] | 0;
+      step.velocity_curve = stepObj["velocityCurve"] | CURVE_LINEAR;
+    }
+  }
+
+  inst.noteOffCount = 0;
+  JsonArray noteOff = obj["noteOffActions"].as<JsonArray>();
+  if (!noteOff.isNull()) {
+    for (JsonObject stepObj : noteOff) {
+      if (inst.noteOffCount >= MAX_ACTIONS_PER_EVENT) break;
+      ActionStep& step = inst.noteOffActions[inst.noteOffCount++];
+      step.actuator_id = stepObj["actuatorId"] | 0xFF;
+      step.command_type = stepObj["commandType"] | (uint8_t)CommandType::OFF;
+      step.value_source = stepObj["valueSource"] | (uint8_t)ValueSource::FIXED;
+      step.value_fixed = stepObj["valueFixed"] | 0;
+      step.cc_index = stepObj["ccIndex"] | 0;
+      step.delay_ms = stepObj["delayMs"] | 0;
+      step.duration_min_ms = stepObj["durationMinMs"] | 0;
+      step.duration_max_ms = stepObj["durationMaxMs"] | 0;
+      step.velocity_curve = stepObj["velocityCurve"] | CURVE_LINEAR;
+    }
+  }
+
+  inst.ccBindingCount = 0;
+  JsonArray cc = obj["ccBindings"].as<JsonArray>();
+  if (!cc.isNull()) {
+    for (JsonObject bindObj : cc) {
+      if (inst.ccBindingCount >= MAX_CC_BINDINGS) break;
+      CCBinding& binding = inst.ccBindings[inst.ccBindingCount++];
+      binding.cc_number = bindObj["ccNumber"] | 0;
+      binding.actuator_id = bindObj["actuatorId"] | 0xFF;
+      binding.command_type = bindObj["commandType"] | (uint8_t)CommandType::POSITION;
+      binding.range_min = bindObj["rangeMin"] | 0;
+      binding.range_max = bindObj["rangeMax"] | 127;
+      binding.curve = bindObj["curve"] | CURVE_LINEAR;
+      binding.inverted = bindObj["inverted"] | false;
     }
   }
 

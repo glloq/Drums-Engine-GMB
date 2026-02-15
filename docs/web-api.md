@@ -41,6 +41,17 @@ Base URL: `http://<ip-esp32>/`
 - `GET /api/cc-routes`
 - `POST /api/save`
 
+### WiFi
+- `GET /api/wifi` — statut WiFi (mode, ssid, ip, rssi)
+- `POST /api/wifi` — configurer credentials WiFi (redemarrage auto)
+
+### Securite
+- `GET /api/auth-token` — obtenir le token API (acces local uniquement)
+
+### Logs
+- `GET /api/logs` — logs recents (ring buffer) + optionnel `?full=1` pour le fichier complet
+- `DELETE /api/logs` — vider les logs
+
 ## Payloads utiles
 
 ### `POST /api/instruments/from-template`
@@ -120,10 +131,67 @@ Expose un snapshot runtime, incluant diagnostics CC:
 - Endpoint: `/ws`
 - Usage: diffusion d'état et supervision temps réel côté UI.
 
-## Notes d'implémentation
+## Authentification et securite
+
+### Bearer Token
+Toutes les requetes **POST, PUT, DELETE** necessitent un header `Authorization: Bearer <token>`.
+Les requetes **GET** sont exemptes d'authentification.
+
+Le token est un hex de 16 caracteres, genere automatiquement au premier boot et stocke dans `/auth.json` sur LittleFS.
+Pour le recuperer: `GET /api/auth-token` ou dans la sortie Serial au boot.
+
+Exemple:
+```bash
+curl -X POST http://midipercussion.local/api/save \
+  -H "Authorization: Bearer abc123def456789a"
+```
+
+### Rate-limiting
+Chaque IP est limitee a **30 requetes/seconde** sur les endpoints mutants (POST/PUT/DELETE).
+Au-dela, le serveur repond `429 Too Many Requests`.
+
+### Codes d'erreur
+| Code | Signification |
+|------|---------------|
+| 200 | Succes |
+| 201 | Ressource creee |
+| 400 | Payload invalide / validation echouee |
+| 401 | Token manquant ou invalide |
+| 404 | Endpoint ou ressource inexistant |
+| 429 | Rate-limit depasse |
+| 500 | Erreur interne |
+
+## Logging persistant
+
+Les erreurs/warnings sont enregistres dans `/error.log` sur LittleFS (max 8KB, rotation auto).
+Un ring buffer de 16 entrees recentes est accessible via `/api/logs`.
+
+Reponse `GET /api/logs`:
+```json
+{
+  "entryCount": 5,
+  "recent": [
+    {"uptimeS": 42, "level": 0, "message": "WiFi init failed"},
+    {"uptimeS": 43, "level": 2, "message": "Engine ready"}
+  ]
+}
+```
+Niveaux: `0` = ERROR, `1` = WARN, `2` = INFO.
+
+## Configuration WiFi
+
+Les credentials sont charges depuis `/wifi.json` sur LittleFS. Si absent ou connexion echouee, le systeme demarre en mode AP (`MidiPerc-Setup`/`midiperc`).
+
+`POST /api/wifi`:
+```json
+{"ssid": "MonReseau", "password": "MonMotDePasse", "hostname": "midipercussion"}
+```
+Le systeme sauvegarde et redemarre automatiquement.
+
+## Notes d'implementation
 - Les handlers renvoient JSON.
-- La validation JSON est faite côté firmware avec `ArduinoJson`.
-- Les opérations CRUD instruments recompilent le lookup pipeline/CC et persistent dans LittleFS.
+- La validation JSON est faite cote firmware avec `ArduinoJson`.
+- Les operations CRUD instruments recompilent le lookup pipeline/CC et persistent dans LittleFS.
 
 
 ## Validation instrument renforcée
@@ -132,6 +200,12 @@ Expose un snapshot runtime, incluant diagnostics CC:
 - Les doublons CC (`ccNumber + actuatorId + commandType`) sont rejetés.
 - Les plages inversées sont normalisées automatiquement (`min/max` pour durées et range CC).
 
+
+## Hi-hat controller (HIHAT_CONTROLLER)
+- Behavior servo dedie au controle hi-hat par pedale (CC#4).
+- Sur commande `POSITION`: mappe CC 0-127 vers l'angle servo (0=ouvert, 127=ferme).
+- Sur commande `PULSE`: declenche un "splash" — ouverture rapide pendant 80ms puis retour a la position courante.
+- Template `hihat` utilise ce behavior pour le slot servo (slot 1).
 
 ## Notes moteur optical
 - Type actuateur `MOTOR_OPTICAL` exposé dans `GET /api/capabilities`.

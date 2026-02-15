@@ -1,7 +1,7 @@
 # Audit projet — Livrable Production
 
-**Date**: 2026-02-15
-**Version auditee**: branche `main` (commit 828615c)
+**Date initiale**: 2026-02-15 (commit 828615c)
+**Mise a jour**: 2026-02-15 (commit 2bea7b2 — tous les sprints implementes)
 
 ---
 
@@ -11,23 +11,23 @@
 |---|---|---|
 | Architecture 6 couches | 100% | DONE |
 | HAL (GPIO, LEDC, MCP23017, PCA9685) | 100% | DONE |
-| Actuators (Servo, Solenoid, Motor) | 90% | Motor optical ISR manquant |
+| Actuators (Servo, Solenoid, Motor) | 100% | DONE — ISR hardware implemente |
 | Scheduler temps reel | 100% | DONE |
 | Event Processor + Pipeline | 100% | DONE |
 | MIDI Engine (rtpMIDI WiFi) | 100% | DONE |
 | Instrument Manager + CRUD | 100% | DONE |
 | Loop Engine | 100% | DONE |
-| Storage LittleFS | 100% | DONE |
-| Web Server REST API | 95% | Rate-limiting manquant |
-| UI Web embarquee | 85% | Pipeline editor manquant |
+| Storage LittleFS | 100% | DONE — versioning v2 ajoute |
+| Web Server REST API | 100% | DONE — auth + rate-limiting + modules |
+| UI Web embarquee | 90% | Pipeline editor manquant, alarmes runtime OK |
 | Templates (8 presets) | 90% | Pas de calibration auto |
 | Routage CC compile | 100% | DONE |
-| Documentation | 80% | Guides deploy/troubleshoot manquants |
-| Tests automatises | 5% | CRITIQUE — quasi absent |
-| CI/CD | 0% | CRITIQUE — aucun pipeline |
-| Securite | 20% | CRITIQUE — pas d'auth, creds hardcodes |
+| Documentation | 95% | Guides deploy, API, architecture a jour |
+| Tests automatises | 70% | Script curl 31 tests, CI manquant |
+| CI/CD | 0% | Pipeline CI a configurer |
+| Securite | 90% | Auth Bearer + rate-limit + WiFi externalise |
 
-**Avancement global estime: ~75%**
+**Avancement global estime: ~93%**
 
 ---
 
@@ -66,19 +66,13 @@
 
 ### PRIORITE CRITIQUE (P0) — Bloquant livrable
 
-#### 3.1 Securite: Externaliser les credentials WiFi
-- **Fichier**: `engine/src/core/config.h:15-19`
-- **Probleme**: SSID/password WiFi hardcodes dans le code source
-- **Impact**: Impossible de deployer en production sans recompiler
-- **Action**: Implementer un portail de configuration WiFi (mode AP + page setup) ou charger les credentials depuis LittleFS (`/wifi.json`)
-- **Effort**: Moyen
+#### 3.1 ~~Securite: Externaliser les credentials WiFi~~ IMPLEMENTE
+- **Fichiers**: `engine/src/wifi/wifi_manager.h/.cpp`, `engine/src/core/config.h`
+- **Implementation**: WiFiManager charge credentials depuis `/wifi.json` sur LittleFS. Si absent/echoue, mode AP avec portail REST (`POST /api/wifi`). SSID/PASSWORD supprimes de config.h.
 
-#### 3.2 Securite: Ajouter authentification API
-- **Fichier**: `engine/src/web/web_server.cpp`
-- **Probleme**: Aucune authentification sur les endpoints REST
-- **Impact**: N'importe qui sur le reseau peut modifier/supprimer la configuration
-- **Action**: Implementer au minimum une authentification basique (token ou basic auth) sur les endpoints de modification (POST/PUT/DELETE)
-- **Effort**: Moyen
+#### 3.2 ~~Securite: Ajouter authentification API~~ IMPLEMENTE
+- **Fichiers**: `engine/src/web/api_auth.h/.cpp`
+- **Implementation**: Token Bearer 16-hex genere au 1er boot, stocke dans `/auth.json`. Tous les POST/PUT/DELETE proteges. GET exemptes. Endpoint `GET /api/auth-token` pour recuperer le token.
 
 #### 3.3 Validation build firmware
 - **Fichier**: `engine/platformio.ini`
@@ -86,73 +80,51 @@
 - **Impact**: Risque de regression non detectee, pas de binaire valide
 - **Action**: Configurer un environnement PlatformIO, valider la compilation complete, generer le binaire `.bin`
 - **Effort**: Faible
+- **Statut**: RESTE A FAIRE (necessite environnement PlatformIO)
 
-#### 3.4 Tests de non-regression API
-- **Probleme**: Aucun test automatise
-- **Impact**: Chaque modification risque de casser l'existant sans detection
-- **Action minimum**: Creer une suite de tests HTTP (curl/pytest/Postman) couvrant:
-  - CRUD actuateurs (creation, lecture, modification, suppression)
-  - CRUD instruments (avec actions, CC bindings)
-  - Creation depuis template
-  - Validation des payloads invalides (type/bus incompatible, ranges)
-  - Endpoints diagnostics (status, cc-routes)
-- **Effort**: Moyen
+#### 3.4 ~~Tests de non-regression API~~ IMPLEMENTE
+- **Fichier**: `tests/test_api.sh`
+- **Implementation**: Script bash 31 tests curl couvrant CRUD, auth, validation, rate-limiting, cleanup. Execution: `./tests/test_api.sh [URL] [TOKEN]`
 
 ---
 
 ### PRIORITE HAUTE (P1) — Important pour fiabilite production
 
-#### 3.5 Rate-limiting API
-- **Fichier**: `engine/src/web/web_server.cpp`
-- **Probleme**: Pas de limitation de debit sur les endpoints
-- **Impact**: Un client defaillant peut saturer le serveur web et perturber le temps reel
-- **Action**: Ajouter un rate-limiter simple (max requetes/sec par IP ou global)
-- **Effort**: Faible
+#### 3.5 ~~Rate-limiting API~~ IMPLEMENTE
+- **Fichier**: `engine/src/web/api_auth.h/.cpp`
+- **Implementation**: RateLimiter 30 req/s par IP, 8 clients, eviction LRU. Reponse 429 Too Many Requests. Applique a tous les POST/PUT/DELETE.
 
-#### 3.6 Logging persistant des erreurs
-- **Probleme**: Les erreurs sont uniquement envoyees sur Serial, perdues si non branche
-- **Impact**: Impossible de diagnostiquer les problemes en production
-- **Action**: Logger les erreurs critiques dans un fichier LittleFS rotatif (`/error.log`) et les exposer via `/api/logs`
-- **Effort**: Moyen
+#### 3.6 ~~Logging persistant des erreurs~~ IMPLEMENTE
+- **Fichiers**: `engine/src/core/error_log.h/.cpp`
+- **Implementation**: Ring buffer 16 entrees en RAM + fichier `/error.log` LittleFS (max 8KB, rotation auto). API: `GET /api/logs`, `DELETE /api/logs`. Niveaux ERROR/WARN/INFO.
 
-#### 3.7 Finaliser Motor Optical ISR
-- **Fichier**: `engine/src/actuator/motor_actuator.cpp`
-- **Probleme**: Le suivi capteur optique fonctionne en polling watchdog, pas en interruption hardware
-- **Impact**: Precision limitee pour le comptage tours/frappeur moteur
-- **Action**: Implementer le mode ISR avec `attachInterrupt()` sur le pin capteur
-- **Effort**: Moyen
+#### 3.7 ~~Finaliser Motor Optical ISR~~ IMPLEMENTE
+- **Fichiers**: `engine/src/actuator/motor_actuator.h/.cpp`
+- **Implementation**: `attachInterrupt()` IRAM_ATTR sur pin capteur + `portMUX` spinlock pour compteur atomique ISR/main-thread. Remplace le polling par interruption hardware.
 
-#### 3.8 Guide de deploiement
-- **Probleme**: Aucun guide pour flasher, configurer le WiFi, preparer le hardware
-- **Impact**: Deploiement impossible sans connaissance interne du projet
-- **Action**: Ecrire un `docs/deployment-guide.md` couvrant:
-  - Prerequis materiel (ESP32, I2C, actionneurs)
-  - Installation PlatformIO
-  - Compilation et flash firmware
-  - Upload du filesystem (UI web)
-  - Configuration WiFi initiale
-  - Verification via scan I2C et test actuateur
-- **Effort**: Faible
+#### 3.8 ~~Guide de deploiement~~ IMPLEMENTE
+- **Fichier**: `docs/deployment-guide.md`
+- **Implementation**: 8 sections: prerequis materiel, installation PlatformIO, compilation/flash, WiFi, securite, MIDI, verification, depannage.
 
 ---
 
 ### PRIORITE MOYENNE (P2) — Ameliorations qualite
 
-#### 3.9 Alarmes UI sur erreurs runtime
-- **Probleme**: `cc_route_dropped > 0` et overflow scheduler non signales dans l'UI
-- **Action**: Ajouter indicateurs visuels dans le dashboard status
+#### 3.9 ~~Alarmes UI sur erreurs runtime~~ IMPLEMENTE
+- **Fichier**: `engine/data/index.html`
+- **Implementation**: Badges colores dans le dashboard pour scheduler overflow, CC dropped, jitter, memoire basse.
 
-#### 3.10 Migration/versioning explicite du format config
-- **Probleme**: Pas de numero de version dans les fichiers JSON de config
-- **Action**: Ajouter un champ `version` et un mecanisme de migration automatique
+#### 3.10 ~~Migration/versioning explicite du format config~~ IMPLEMENTE
+- **Fichier**: `engine/src/storage/storage.cpp`
+- **Implementation**: Format v2 `{"version":2,"actuators":[...]}`. Retrocompatible: lecture v1 (array brut) transparente.
 
-#### 3.11 Hi-hat expert behaviors
-- **Probleme**: Splashes et conditions multiples non calibres
-- **Action**: Finaliser les comportements hi-hat avances avec calibration
+#### 3.11 ~~Hi-hat expert behaviors~~ IMPLEMENTE
+- **Fichiers**: `engine/src/core/types.h`, `engine/src/actuator/servo_actuator.h/.cpp`
+- **Implementation**: Behavior `HIHAT_CONTROLLER` (enum 7): controle CC#4 continu + splash 80ms sur PULSE. Template `hihat` mis a jour.
 
-#### 3.12 Refactoring web_server.cpp
-- **Probleme**: Fichier monolithique avec tous les handlers
-- **Action**: Separer en modules (actuator_routes, instrument_routes, system_routes)
+#### 3.12 ~~Refactoring web_server.cpp~~ IMPLEMENTE
+- **Fichiers**: `engine/src/web/routes_actuator.cpp`, `routes_instrument.cpp`, `routes_loop.cpp`, `routes_system.cpp`
+- **Implementation**: web_server.cpp scinde en 5 fichiers (core 306L + 4 modules routes). Header inchange.
 
 ---
 
@@ -171,26 +143,26 @@
 
 ---
 
-## 5. Plan d'action ordonne pour livrable 100%
+## 5. Plan d'action — Etat d'avancement
 
 ```
-SPRINT 1 — Socle securite & build (BLOQUANT)
-├── [P0] 3.1 Externaliser credentials WiFi
-├── [P0] 3.2 Ajouter authentification API minimum
-├── [P0] 3.3 Valider compilation firmware + generer binaire
-└── [P0] 3.4 Suite de tests API de base
+SPRINT 1 — Socle securite & build
+├── [DONE] 3.1 Externaliser credentials WiFi (WiFiManager + /wifi.json)
+├── [DONE] 3.2 Ajouter authentification API (Bearer token + /auth.json)
+├── [TODO] 3.3 Valider compilation firmware (necessite environnement PlatformIO)
+└── [DONE] 3.4 Suite de tests API (tests/test_api.sh, 31 tests)
 
 SPRINT 2 — Fiabilite production
-├── [P1] 3.5 Rate-limiting API
-├── [P1] 3.6 Logging persistant erreurs
-├── [P1] 3.7 Finaliser motor optical ISR
-└── [P1] 3.8 Guide de deploiement complet
+├── [DONE] 3.5 Rate-limiting API (30 req/s/IP)
+├── [DONE] 3.6 Logging persistant (/error.log 8KB + /api/logs)
+├── [DONE] 3.7 Motor optical ISR (attachInterrupt + portMUX)
+└── [DONE] 3.8 Guide de deploiement (docs/deployment-guide.md)
 
 SPRINT 3 — Qualite & polish
-├── [P2] 3.9 Alarmes UI runtime
-├── [P2] 3.10 Versioning format config
-├── [P2] 3.11 Hi-hat expert behaviors
-└── [P2] 3.12 Refactoring web_server modulaire
+├── [DONE] 3.9 Alarmes UI runtime (overflow, jitter, memoire)
+├── [DONE] 3.10 Versioning config (format v2)
+├── [DONE] 3.11 Hi-hat controller (HIHAT_CONTROLLER + splash)
+└── [DONE] 3.12 Refactoring web_server (5 modules)
 ```
 
 ---
@@ -199,10 +171,12 @@ SPRINT 3 — Qualite & polish
 
 Le projet **Drums-Engine-MIDI** dispose d'une architecture solide et d'un coeur temps reel fonctionnel. Les couches MIDI, Scheduler, Actuator et Event sont operationnelles. L'API REST et l'UI web couvrent les cas d'usage principaux.
 
-**Pour un livrable production, 4 actions sont bloquantes:**
-1. **Securiser** les credentials et l'acces API
-2. **Valider** la compilation firmware
-3. **Tester** automatiquement les endpoints critiques
-4. **Documenter** le deploiement
+**11 des 12 actions identifiees ont ete implementees.** La seule action restante est la **validation de compilation firmware** (3.3) qui necessite un environnement PlatformIO.
 
-Le projet est estime a **75% d'avancement**. Les sprints 1 et 2 couvrent le chemin critique vers un livrable production fiable. Le sprint 3 porte sur la qualite et la maintenabilite a long terme.
+**Actions completees:**
+- Securite: credentials WiFi externalisees + auth Bearer + rate-limiting
+- Fiabilite: logging persistant + motor ISR hardware + guide deploiement
+- Qualite: alarmes UI + versioning config + hi-hat controller + web_server modulaire
+- Tests: 31 tests API automatises (tests/test_api.sh)
+
+Le projet est estime a **~93% d'avancement**. Le chemin restant vers 100% est la mise en place d'un pipeline CI/CD avec validation de compilation.

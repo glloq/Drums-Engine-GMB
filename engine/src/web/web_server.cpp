@@ -225,6 +225,7 @@ void WebServerManager::_setupRoutes() {
 
   _server.on("/api/logs", HTTP_DELETE,
     [this](AsyncWebServerRequest* req) {
+      if (!_rateLimiter.checkRate(req)) return;
       if (!_auth.checkAuth(req)) return;
       _handleClearLogs(req);
     });
@@ -299,8 +300,15 @@ uint8_t WebServerManager::_extractId(AsyncWebServerRequest* req, const char* par
 }
 
 void WebServerManager::_recompileLookupFromInstruments() {
-  JsonDocument doc;
-  JsonArray arr = doc.to<JsonArray>();
-  _instrMgr->toJson(arr);
-  PipelineCompiler::compileAll(arr, _eventProc->getLookup());
+  if (_recompileCb) {
+    // Use external callback (compilePipelines from main.cpp) which handles
+    // the full instrument->pipeline recompilation with actuator resolution
+    _recompileCb();
+  } else {
+    // Fallback: recompile from JSON representation
+    JsonDocument doc;
+    JsonArray arr = doc.to<JsonArray>();
+    _instrMgr->toJson(arr);
+    PipelineCompiler::compileAll(arr, _eventProc->getLookup());
+  }
 }

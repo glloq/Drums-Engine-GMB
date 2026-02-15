@@ -2,7 +2,8 @@
 
 WiFiManager::WiFiManager()
   : _apMode(false),
-    _hostname(WIFI_HOSTNAME) {}
+    _hostname(WIFI_HOSTNAME),
+    _dnsRunning(false) {}
 
 // ============================================================================
 // begin() - Point d'entree principal
@@ -28,6 +29,34 @@ bool WiFiManager::begin() {
 }
 
 // ============================================================================
+// update() - Traiter les requetes DNS captives (appeler regulierement)
+// ============================================================================
+
+void WiFiManager::update() {
+  if (_dnsRunning) {
+    _dnsServer.processNextRequest();
+  }
+}
+
+// ============================================================================
+// switchToAP() - Basculer en mode AP depuis STA (bouton BOOT)
+// ============================================================================
+
+void WiFiManager::switchToAP() {
+  if (_apMode) return;  // Deja en mode AP
+
+  DBGLN("[WiFi] Switching to AP mode (button press)");
+
+  // Deconnecter le STA
+  WiFi.disconnect(true);
+  delay(100);
+
+  // Demarrer le mode AP + DNS captif
+  _startAP();
+  _startMDNS();
+}
+
+// ============================================================================
 // registerRoutes() - Enregistrer les endpoints API WiFi
 // ============================================================================
 
@@ -41,6 +70,27 @@ void WiFiManager::registerRoutes(AsyncWebServer* server) {
     [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
       if (index == 0) _handlePostWifi(req, data, len);
     });
+
+  // Captive portal: rediriger les requetes de detection de portail
+  // Android/iOS/Windows envoient des requetes specifiques pour detecter les portails captifs
+  server->on("/generate_204", HTTP_GET, [this](AsyncWebServerRequest* req) {
+    req->redirect("http://" + getIP() + "/");
+  });
+  server->on("/hotspot-detect.html", HTTP_GET, [this](AsyncWebServerRequest* req) {
+    req->redirect("http://" + getIP() + "/");
+  });
+  server->on("/connecttest.txt", HTTP_GET, [this](AsyncWebServerRequest* req) {
+    req->redirect("http://" + getIP() + "/");
+  });
+  server->on("/canonical.html", HTTP_GET, [this](AsyncWebServerRequest* req) {
+    req->redirect("http://" + getIP() + "/");
+  });
+  server->on("/success.txt", HTTP_GET, [this](AsyncWebServerRequest* req) {
+    req->send(200, "text/plain", "success");
+  });
+  server->on("/ncsi.txt", HTTP_GET, [this](AsyncWebServerRequest* req) {
+    req->redirect("http://" + getIP() + "/");
+  });
 }
 
 // ============================================================================
@@ -142,6 +192,9 @@ bool WiFiManager::_saveCredentials(const char* ssid, const char* password, const
 bool WiFiManager::_connectSTA() {
   DBGF("[WiFi] Connecting to '%s'...\n", _ssid.c_str());
 
+  // Arreter le DNS captif si actif
+  _stopDNS();
+
   WiFi.mode(WIFI_STA);
   WiFi.setHostname(_hostname.c_str());
   WiFi.begin(_ssid.c_str(), _password.c_str());
@@ -166,7 +219,7 @@ bool WiFiManager::_connectSTA() {
 }
 
 // ============================================================================
-// Mode AP
+// Mode AP + DNS captif
 // ============================================================================
 
 void WiFiManager::_startAP() {
@@ -176,7 +229,20 @@ void WiFiManager::_startAP() {
   WiFi.softAP(WIFI_AP_SSID, WIFI_AP_PASSWORD);
   _apMode = true;
 
+  // Demarrer le serveur DNS captif : toutes les requetes DNS -> IP du AP
+  _dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
+  _dnsRunning = true;
+
   DBGF("[WiFi] AP IP: %s\n", WiFi.softAPIP().toString().c_str());
+  DBGLN("[WiFi] Captive DNS started - all domains redirect to AP");
+}
+
+void WiFiManager::_stopDNS() {
+  if (_dnsRunning) {
+    _dnsServer.stop();
+    _dnsRunning = false;
+    DBGLN("[WiFi] Captive DNS stopped");
+  }
 }
 
 // ============================================================================

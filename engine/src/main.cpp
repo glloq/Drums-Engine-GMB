@@ -37,6 +37,7 @@
 #include "core/types.h"
 #include "core/global_state.h"
 #include "core/error_log.h"
+#include "core/status_led.h"
 
 // HAL
 #include "hal/i2c_scanner.h"
@@ -130,6 +131,13 @@ MidiEngine midiEngine(&eventProcessor, &instrumentManager);
 LoopEngine loopEngine(&instrumentManager);
 Storage storage;
 WiFiManager wifiManager;
+StatusLed statusLed;
+
+// Boot button (GPIO 0) long-press tracking
+static volatile uint32_t _bootBtnPressStart = 0;
+static volatile bool _bootBtnHandled = false;
+#define BOOT_LONG_PRESS_MS 3000
+
 WebServerManager webServer(&instrumentManager, &actuatorManager,
                             &actuatorFactory,
                             &loopEngine, &midiEngine, &storage,
@@ -191,7 +199,7 @@ void rtCoreTask(void* param) {
   }
 }
 
-// Task Core 0: Web + Loop (basse priorite)
+// Task Core 0: Web + Loop + LED + Boot button (basse priorite)
 void appCoreTask(void* param) {
   DBGLN("[RTOS] App Core task started (Core 0)");
   for (;;) {
@@ -200,6 +208,30 @@ void appCoreTask(void* param) {
 
     // WebSocket cleanup
     webServer.update();
+
+    // DNS captif (traiter les requetes en mode AP)
+    wifiManager.update();
+
+    // LED de statut
+    statusLed.update();
+
+    // Bouton BOOT (GPIO 0) - detection appui long 3s
+    bool btnPressed = (digitalRead(BOOT_BUTTON_PIN) == LOW);
+    if (btnPressed) {
+      if (_bootBtnPressStart == 0) {
+        _bootBtnPressStart = millis();
+        _bootBtnHandled = false;
+      } else if (!_bootBtnHandled && (millis() - _bootBtnPressStart >= BOOT_LONG_PRESS_MS)) {
+        _bootBtnHandled = true;
+        DBGLN("[BOOT] Long press detected -> switching to AP mode");
+        ErrorLog::info("Boot button: AP mode activated");
+        wifiManager.switchToAP();
+        statusLed.setPattern(LedPattern::AP_MODE);
+      }
+    } else {
+      _bootBtnPressStart = 0;
+      _bootBtnHandled = false;
+    }
 
     vTaskDelay(1);
   }
@@ -462,6 +494,11 @@ void setup() {
   delay(500);
   #endif
 
+  // 0. LED de statut + bouton BOOT
+  statusLed.begin();
+  statusLed.setPattern(LedPattern::BOOTING);
+  pinMode(BOOT_BUTTON_PIN, INPUT_PULLUP);
+
   DBGLN("============================================");
   DBGLN("  Drums Engine - Modular RT Percussion");
   DBGLN("============================================");
@@ -473,6 +510,7 @@ void setup() {
   // 1. Storage (LittleFS)
   if (!storage.begin()) {
     DBGLN("[FATAL] Storage init failed!");
+    statusLed.setPattern(LedPattern::ERROR_BLINK);
   }
 
   // 1b. Error logging (depends on LittleFS)
@@ -504,6 +542,10 @@ void setup() {
   if (!wifiManager.begin()) {
     DBGLN("[FATAL] WiFi init failed!");
     ErrorLog::error("WiFi init failed");
+    statusLed.setPattern(LedPattern::ERROR_BLINK);
+  } else {
+    // LED selon le mode WiFi
+    statusLed.setPattern(wifiManager.isAPMode() ? LedPattern::AP_MODE : LedPattern::CONNECTED);
   }
 
   // 8. MIDI over WiFi
@@ -537,6 +579,9 @@ void setup() {
   DBGF("  Scheduler:    %d Hz hw timer\n", SCHEDULER_TICK_HZ);
   DBGF("  RTOS tasks:   RT_Core (pri 5, core 1)\n");
   DBGF("                App_Core (pri 2, core 0)\n");
+  DBGF("  LED statut:   GPIO %d (%s)\n", STATUS_LED_PIN,
+       wifiManager.isAPMode() ? "clignotement lent = AP" : "fixe = connecte");
+  DBGF("  Bouton BOOT:  GPIO %d (3s = hotspot)\n", BOOT_BUTTON_PIN);
   DBGLN("============================================");
 
   ErrorLog::info("Engine ready");

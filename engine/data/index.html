@@ -996,7 +996,7 @@ function editInstrument(id) {
 function buildActuatorChecklist(selectedIds) {
   const el = document.getElementById('instrActuatorChecklist');
   if (actuators.length === 0) {
-    el.innerHTML = '<span style="color:var(--fg2);font-size:0.85em;">Aucun actionneur disponible. Creez-en d'abord dans l'onglet Actionneurs.</span>';
+    el.innerHTML = '<span style="color:var(--fg2);font-size:0.85em;">Aucun actionneur disponible. Creez-en d\u0027abord dans l\u0027onglet Actionneurs.</span>';
     return;
   }
   el.innerHTML = actuators.map(a => `

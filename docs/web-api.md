@@ -172,3 +172,5 @@ Expose un snapshot runtime, incluant diagnostics CC:
 - En cas de mismatch type/comportement de l'actuateur, la requête est rejetée avant création.
 
 - Pour `shaker`/`brush`, la validation de slot impose actuellement un actuateur de type `PWM_MOTOR`.
+
+- L'UI effectue une pré-validation des `slotHints` (type/behavior) avant appel API pour retour utilisateur immédiat.

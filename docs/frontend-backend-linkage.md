@@ -22,10 +22,16 @@ Ce document vérifie le raccord UI ↔ API pour le modèle action/CC.
 | Sauvegarde | `api('save', 'POST')` | `POST /api/save` |
 
 ## Points validés
+- Les templates frontend couvrent maintenant aussi `motor_optical` (fallback local + route backend).
 - L'éditeur instrument expose `retriggerMode`, `noteOnActions`, `noteOffActions`, `ccBindings`.
+- La création depuis template consomme `actuatorSlots` et `slotHints` (GET `/api/templates`) et envoie `actuatorIds[]` vers POST `/api/instruments/from-template`; le backend valide aussi les `slotHints` critiques par template.
 - Le backend sérialise/désérialise ces champs et recompille les lookups après mutation.
 - L'onglet Mappings affiche un résumé des routes CC compilées.
 
 ## Limites connues
 - Le rendu Mappings reste simplifié pour la partie pipeline/action graph.
 - Le test d'action (`/api/instruments/test-action`) teste une action unitaire (index), pas une macro multi-action complète.
+
+- Le frontend utilise `capabilities.actuatorTypes` + `capabilities.actuatorBehaviors` pour afficher des contraintes de slot lisibles lors de la création depuis template.
+
+- Le frontend applique une pré-validation locale des `slotHints` (actuator type/behavior) avant `POST /api/instruments/from-template`.

@@ -5,7 +5,7 @@
 - [x] `ActionStep`, `CCBinding`, `ValueSource`, `RetriggerMode`
 - [x] Exécution NoteOn/NoteOff via `scheduleActionSteps()`
 - [x] Fallback legacy via `actuatorIds`
-- [~] Validation stricte des payloads actions à compléter
+- [x] Validation serveur de base des payloads actions/CC (bornes, enums, counts)
 
 ## Phase 2 — Routage CC temps réel
 **Statut: implémentée (MVP)**
@@ -32,8 +32,8 @@
 **Statut: partiellement implémentée**
 - [x] Servo `PITCH_BEND` (mapping centré)
 - [x] Servo oscillant `COMB_BRUSH`/`SERVO_STRIKE`
-- [~] Templates avancés (double_hit, shaker, brush, timpani)
-- [ ] Motor optical dédié (nouveau type + HAL + ISR)
+- [x] Templates avancés validés (double_hit, shaker, brush, timpani, motor_optical)
+- [~] Motor optical dédié (type + tracking watchdog implémentés; HAL/ISR dédiés à finaliser)
 - [ ] Hi-hat expert (splashes/conditions multiples calibrées)
 
 ## Risques / dette technique

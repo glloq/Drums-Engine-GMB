@@ -890,6 +890,28 @@ async function showCreateInstrumentFromTemplate() {
       return;
     }
     for (let i = 0; i < slots; i++) actuatorIds.push(parsed[i]);
+
+    const slotHints = selected.slotHints || [];
+    for (const hint of slotHints) {
+      const slot = Number(hint.slot ?? -1);
+      if (slot < 0 || slot >= actuatorIds.length) continue;
+      const targetId = actuatorIds[slot];
+      const target = (actuators || []).find(a => a.id === targetId);
+      if (!target) {
+        toast(`Actuator ID ${targetId} introuvable`, 'error');
+        return;
+      }
+      if (hint.requiredType !== undefined && Number(target.type) !== Number(hint.requiredType)) {
+        const wanted = ((capabilities && capabilities.actuatorTypes) || []).find(t => t.id === hint.requiredType)?.name || hint.requiredType;
+        toast(`Slot ${slot}: type attendu ${wanted}`, 'error');
+        return;
+      }
+      if (hint.requiredBehavior !== undefined && Number(target.behavior) !== Number(hint.requiredBehavior)) {
+        const wantedB = ((capabilities && capabilities.actuatorBehaviors) || []).find(b => b.id === hint.requiredBehavior)?.name || hint.requiredBehavior;
+        toast(`Slot ${slot}: behavior attendu ${wantedB}`, 'error');
+        return;
+      }
+    }
   }
 
   const localMap = { kick: 'kick', hihat: 'hihat', cymbal_mute: 'cymbalMute', double_hit: 'doubleHit', shaker: 'shaker', brush: 'brush', timpani: 'timpani', motor_optical: 'motorOptical' };

@@ -42,3 +42,6 @@ Le moteur suit une architecture descendante:
 - Routage CC compilé: en production (MVP)
 - UI éditeur instruments complexes: en production (MVP)
 - Comportements spécialisés Phase 5: partiels
+
+
+- Actuateur `MOTOR_OPTICAL`: pilotage moteur + suivi capteur optique (front montant) dans le watchdog d'actuateur.

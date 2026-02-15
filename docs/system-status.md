@@ -15,8 +15,8 @@ Le moteur supporte désormais un modèle instrument orienté actions multi-étap
   - endpoint debug `/api/cc-routes` (avec compteur `dropped`)
 - diagnostics runtime CC exposés dans `/api/status` (rx/throttled/routed/unrouted)
 - API templates:
-  - `/api/templates`
-  - `/api/instruments/from-template`
+  - `/api/templates` (avec `slotHints`)
+  - `/api/instruments/from-template` (validation stricte des slots)
 - Validation serveur renforcée du payload instrument (midi note/channel, counts, enums, courbes, IDs actuateurs existants, doublons CC).
 - UI instruments Phase 3:
   - éditeurs NoteOn/NoteOff/CC bindings

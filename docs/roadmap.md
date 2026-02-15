@@ -22,21 +22,32 @@
 - [~] UX avancée (drag/drop ordre, validation inline, duplication)
 
 ## Phase 4 — API/Storage V2
-**Statut: partiellement implémentée**
+**Statut: implementee**
 - [x] CRUD instruments incluant actions/CC/retrigger
 - [x] Templates API (`/api/templates`, `/api/instruments/from-template`)
-- [x] Recompilation lookup après mutations instruments
-- [ ] Migration/versioning explicite de format config à formaliser
+- [x] Recompilation lookup apres mutations instruments
+- [x] Versioning format config (v2 avec wrapper objet, retrocompatible v1)
 
-## Phase 5 — Comportements spécialisés
-**Statut: partiellement implémentée**
-- [x] Servo `PITCH_BEND` (mapping centré)
+## Phase 5 — Comportements specialises
+**Statut: implementee**
+- [x] Servo `PITCH_BEND` (mapping centre)
 - [x] Servo oscillant `COMB_BRUSH`/`SERVO_STRIKE`
-- [x] Templates avancés validés (double_hit, shaker, brush, timpani, motor_optical)
-- [~] Motor optical dédié (type + tracking watchdog implémentés; HAL/ISR dédiés à finaliser)
-- [ ] Hi-hat expert (splashes/conditions multiples calibrées)
+- [x] Templates avances valides (double_hit, shaker, brush, timpani, motor_optical)
+- [x] Motor optical dedie (ISR hardware `attachInterrupt` + `portMUX` spinlock)
+- [x] Hi-hat controller (`HIHAT_CONTROLLER`: controle CC#4 + splash 80ms)
+
+## Phase 6 — Production readiness (NOUVEAU)
+**Statut: implementee (11/12 actions)**
+- [x] WiFiManager: credentials `/wifi.json` + mode AP fallback
+- [x] ApiAuth: Bearer token + rate-limiting 30 req/s/IP
+- [x] ErrorLog: logging persistant `/error.log` 8KB rotatif + `/api/logs`
+- [x] Alarmes UI: overflow scheduler, CC dropped, jitter, memoire
+- [x] Refactoring web_server en 5 modules
+- [x] Tests API: `tests/test_api.sh` (31 tests curl)
+- [x] Guide deploiement: `docs/deployment-guide.md`
+- [ ] Pipeline CI/CD (compilation PlatformIO automatisee)
 
 ## Risques / dette technique
-- Très gros diffs historiques dans certains fichiers critiques (web_server/index) → prioriser refactor modulaire.
-- Couverture tests automatisés encore faible.
-- Dépendance environnement outillage (`pio`) pour validation complète firmware.
+- Couverture tests: script curl fonctionnel mais pas de CI automatise.
+- Dependance environnement outillage (`pio`) pour validation complete firmware.
+- Pipeline editor UI non implemente (vision long terme).

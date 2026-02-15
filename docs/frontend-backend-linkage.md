@@ -20,8 +20,19 @@ Ce document vérifie le raccord UI ↔ API pour le modèle action/CC.
 | Statut système | `api('status')` | `GET /api/status` |
 | Scan I2C | `api('scan-i2c')` | `GET /api/scan-i2c` |
 | Sauvegarde | `api('save', 'POST')` | `POST /api/save` |
+| WiFi statut | `api('wifi')` | `GET /api/wifi` |
+| WiFi configuration | `api('wifi', 'POST', ...)` | `POST /api/wifi` |
+| Token API | `api('auth-token')` | `GET /api/auth-token` |
+| Logs recents | `api('logs')` | `GET /api/logs` |
+| Effacer logs | `api('logs', 'DELETE')` | `DELETE /api/logs` |
 
-## Points validés
+## Securite API
+- Toutes les requetes **POST/PUT/DELETE** necessitent un header `Authorization: Bearer <token>`.
+- Les requetes **GET** sont exemptes d'authentification.
+- Rate-limiting: 30 req/s par IP sur les endpoints mutants.
+- Le frontend doit stocker le token et l'inclure dans chaque requete mutante.
+
+## Points valides
 - Les templates frontend couvrent maintenant aussi `motor_optical` (fallback local + route backend).
 - L'éditeur instrument expose `retriggerMode`, `noteOnActions`, `noteOffActions`, `ccBindings`.
 - La création depuis template consomme `actuatorSlots` et `slotHints` (GET `/api/templates`) et envoie `actuatorIds[]` vers POST `/api/instruments/from-template`; le backend valide aussi les `slotHints` critiques par template.

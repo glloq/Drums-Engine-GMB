@@ -11,9 +11,11 @@ Ce dossier regroupe la documentation utile et maintenue du projet.
 6. [`roadmap.md`](roadmap.md) — plan d'évolution.
 7. [`ui-v1.md`](ui-v1.md) — structure UI cible.
 8. [`code-audit.md`](code-audit.md) — audit du code actuel et plan de modifications.
-9. [`frontend-backend-linkage.md`](frontend-backend-linkage.md) — contrôle des liaisons UI/API.
+9. [`frontend-backend-linkage.md`](frontend-backend-linkage.md) — controle des liaisons UI/API.
+10. [`deployment-guide.md`](deployment-guide.md) — guide de deploiement complet (flash, WiFi, securite, MIDI).
+11. [`production-readiness.md`](production-readiness.md) — audit production et etat d'avancement des actions.
 
-## Règles de maintenance
+## Regles de maintenance
 - Toute nouvelle doc doit être ajoutée ici (pas à la racine).
 - Privilégier des fichiers `.md` nommés clairement.
 - Documenter l'état réel du code (`engine/src`) avant la vision long terme.

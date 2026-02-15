@@ -422,3 +422,57 @@ pio run -t upload && pio run -t uploadfs
 ### LED de statut
 
 Le firmware actuel **n'implemente pas de LED de statut**. Si necessaire, une LED peut etre ajoutee sur un GPIO libre pour indiquer l'etat WiFi ou l'activite MIDI.
+
+### Erreur Arduino IDE: "bootloader.bin était inattendu"
+
+Si vous rencontrez cette erreur lors de la compilation avec Arduino IDE :
+
+```
+\Drums-Engine-MIDI\engine\bootloader.bin était inattendu.
+exit status 1
+Compilation error: exit status 1
+```
+
+**Causes et solutions :**
+
+1. **Mauvais schema de partition** (cause la plus frequente) :
+   - Outils > Partition Scheme > Selectionner **"Default 4MB with spiffs"** ou **"Default"**
+   - Eviter les schemas "Minimal" ou "No OTA"
+
+2. **Nettoyer le cache de compilation** :
+   - Fermer Arduino IDE
+   - Supprimer le dossier temporaire de compilation :
+     - **Windows** : `%TEMP%\arduino_build_*` et `%TEMP%\arduino_cache_*`
+     - **macOS** : `~/Library/Arduino15/tmp/` et `/var/folders/.../T/arduino_*`
+     - **Linux** : `/tmp/arduino_build_*` et `/tmp/arduino_cache_*`
+   - Redemarrer Arduino IDE et recompiler
+
+3. **Verifier la version du package ESP32** :
+   - Outils > Board Manager > Rechercher "esp32"
+   - Verifier que **"esp32 by Espressif Systems"** est installe en version >= 2.0.0
+   - Si probleme persiste, desinstaller et reinstaller le package ESP32
+
+4. **Verifier la selection de la carte** :
+   - Outils > Board > **"ESP32 Dev Module"** (pas "ESP32-WROOM-DA Module" ou autre variante)
+   - Outils > Flash Size > **4MB**
+   - Outils > Upload Speed > **921600**
+
+5. **Chemin de projet trop long (Windows)** :
+   - Si le projet est dans un chemin long comme `\Downloads\Drums-Engine-MIDI-main\engine\`
+   - Deplacer le projet vers un chemin plus court : `C:\Projects\Drums-Engine-MIDI\`
+   - Les chemins longs peuvent causer des erreurs de compilation sous Windows
+
+6. **Fichiers de build residuels** :
+   - Supprimer le dossier `engine/build/` s'il existe
+   - Supprimer tous les fichiers `.bin`, `.elf`, `.hex` dans `engine/`
+
+**Verification apres correction :**
+
+Apres avoir applique ces solutions, la compilation devrait afficher :
+
+```
+Sketch uses XXXXX bytes (XX%) of program storage space. Maximum is XXXXXX bytes.
+Global variables use XXXXX bytes (XX%) of dynamic memory.
+```
+
+Si l'erreur persiste, utiliser **PlatformIO** comme alternative (plus stable pour les projets complexes).

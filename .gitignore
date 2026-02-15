@@ -1,0 +1,51 @@
+# ============================================================================
+# Drums-Engine-MIDI - Git ignore
+# ============================================================================
+
+# Build artifacts (PlatformIO)
+engine/.pio/
+engine/.pioenvs/
+engine/.piolibdeps/
+engine/.vscode/.browse.c_cpp.db*
+engine/.vscode/c_cpp_properties.json
+engine/.vscode/launch.json
+
+# Build artifacts (Arduino IDE)
+engine/build/
+*.elf
+*.bin
+*.hex
+*.map
+*.eep
+*.lss
+*.sym
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Temporary files
+*.tmp
+*.log
+*.bak
+
+# LittleFS build artifacts
+engine/littlefs_build/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+ENV/
+.venv

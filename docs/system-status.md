@@ -1,32 +1,37 @@
-# État des lieux actuel
+# État des lieux actuel (mise à jour)
 
 ## Résumé
-Le système actuel est opérationnel sur ESP32 (Arduino + FreeRTOS) avec une architecture modulaire et une UI web embarquée.
+Le moteur supporte désormais un modèle instrument orienté actions multi-étapes (NoteOn/NoteOff) avec routage CC compilé et éditeur UI dédié.
 
-## Capacités déjà implémentées
-- Scheduler temps réel basé sur timer hardware (`SCHEDULER_TICK_HZ=1000`).
-- Traitement MIDI et routage vers pipelines compilés.
-- Gestion d'actionneurs: solénoïde, servo, moteur PWM.
-- HAL I2C/GPIO/LEDC pour MCP23017, PCA9685, GPIO natif.
-- API web REST + WebSocket pour CRUD instruments/actionneurs/boucles.
-- Endpoint de capacités (`/api/capabilities`) exploité par l'UI pour guider les choix type↔bus.
-- Persistance LittleFS (`actuators.json`, `instruments.json`, `loops`).
-- Support de migration de configuration legacy V4 dans la couche storage.
+## Capacités implémentées
+- Scheduler temps réel (timer hardware, queue statique, watchdog).
+- Exécution action-step:
+  - `ActionStep` NoteOn/NoteOff (jusqu'à 4 étapes / événement)
+  - `ValueSource`: velocity, fixed, CC var, inverted velocity
+  - courbes velocity et delays par étape
+- Routage CC Phase 2:
+  - table compilée (`cc_routes`, `cc_to_first`, `cc_to_count`)
+  - dispatch runtime anti-flood (5ms)
+  - endpoint debug `/api/cc-routes`
+- API templates:
+  - `/api/templates`
+  - `/api/instruments/from-template`
+- UI instruments Phase 3:
+  - éditeurs NoteOn/NoteOff/CC bindings
+  - retrigger mode
+  - tests action unitaire (`/api/instruments/test-action`)
+- Comportements servo avancés (Phase 5 partielle):
+  - `PITCH_BEND` (mapping centré)
+  - `COMB_BRUSH`/`SERVO_STRIKE` oscillants via watchdog
 
-## Limites identifiées
-- Pipelines V1 encore volontairement minimalistes (construction avancée incomplète).
-- Portabilité hors ESP32 non finalisée.
-- Benchmarks latence/jitter sous charge à formaliser dans une méthode unique.
-- Peu de documentation de référence orientée exploitation (tests, diagnostics, troubleshooting).
+## Limites restantes
+- Pas de build CI/compilation firmware validée dans cet environnement (`pio` absent).
+- Les templates avancés restent génériques (pas de calibration hardware automatique).
+- Le renderer Mappings UI est informatif, pas encore un graphe complet éditable.
+- Cas “motor optical” dédié non implémenté (nouveau type hardware/ISR à faire).
 
-## Priorités court terme
-1. Stabiliser les tests de performance temps réel.
-2. Renforcer la validation des payloads API et la gestion d'erreurs.
-3. Finaliser le flux UI → compilation pipeline.
-4. Mettre en place une documentation opérationnelle de test matériel.
-
-## À prévoir (moyen/long terme)
-- Blocs avancés (humanize, random, LFO, sync externe).
-- Portabilité ESP-IDF natif / Linux RT.
-- Outils de diagnostic (traces, métriques exportables).
-- Stratégie CI avec tests d'intégration embarqués/simulés.
+## Priorités suivantes recommandées
+1. Ajouter validation serveur détaillée sur payload actions/CC (ranges, IDs existants).
+2. Ajouter endpoint de diagnostic temps réel (compteurs anti-flood CC, erreurs scheduler).
+3. Implémenter type actuateur motor optical (HAL + feedback + ISR).
+4. Ajouter tests d’intégration API (templates, test-action, cc-routes).

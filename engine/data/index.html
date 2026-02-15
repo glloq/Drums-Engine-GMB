@@ -736,6 +736,33 @@ const INSTRUMENT_TEMPLATES = {
       {commandType:3, valueSource:1, valueFixed:0, delayMs:0}
     ],
     ccBindings: []
+  },
+  doubleHit: {
+    name: 'Tom double frappe', category:'drums', midiNote:45, midiChannel:10,
+    noteOnActions: [
+      {commandType:0, valueSource:0, delayMs:0, durationMinMs:8, durationMaxMs:22, velocityCurve:0},
+      {commandType:0, valueSource:0, delayMs:0, durationMinMs:8, durationMaxMs:22, velocityCurve:0}
+    ],
+    noteOffActions: [{commandType:3, valueSource:1, valueFixed:0, delayMs:0}],
+    ccBindings: []
+  },
+  shaker: {
+    name: 'Shaker', category:'latin', midiNote:82, midiChannel:10,
+    noteOnActions: [{commandType:2, valueSource:0, delayMs:0, velocityCurve:0}],
+    noteOffActions: [{commandType:3, valueSource:1, valueFixed:0, delayMs:0}],
+    ccBindings: []
+  },
+  brush: {
+    name: 'Brush', category:'drums', midiNote:38, midiChannel:10,
+    noteOnActions: [{commandType:2, valueSource:0, delayMs:0, velocityCurve:0}],
+    noteOffActions: [{commandType:3, valueSource:1, valueFixed:0, delayMs:0}],
+    ccBindings: [{ccNumber:1, commandType:2, rangeMin:20, rangeMax:127, curve:0, inverted:false}]
+  },
+  timpani: {
+    name: 'Timpani', category:'drums', midiNote:47, midiChannel:10,
+    noteOnActions: [{commandType:0, valueSource:0, delayMs:0, durationMinMs:10, durationMaxMs:30, velocityCurve:0}],
+    noteOffActions: [{commandType:3, valueSource:1, valueFixed:0, delayMs:0}],
+    ccBindings: [{ccNumber:127, commandType:1, rangeMin:30, rangeMax:110, curve:0, inverted:false}]
   }
 };
 
@@ -830,7 +857,7 @@ async function showCreateInstrumentFromTemplate() {
   const key = prompt('Template: ' + names, templates[0].id);
   if (!key) return;
 
-  const localMap = { kick: 'kick', hihat: 'hihat', cymbal_mute: 'cymbalMute' };
+  const localMap = { kick: 'kick', hihat: 'hihat', cymbal_mute: 'cymbalMute', double_hit: 'doubleHit', shaker: 'shaker', brush: 'brush', timpani: 'timpani' };
   if (INSTRUMENT_TEMPLATES[localMap[key]]) {
     showAddInstrument(INSTRUMENT_TEMPLATES[localMap[key]]);
     return;

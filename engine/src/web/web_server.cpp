@@ -527,6 +527,7 @@ void WebServerManager::_handleGetStatus(AsyncWebServerRequest* req) {
 
   // Event Engine
   obj["pipeline_count"] = _eventProc->getLookup().pipeline_count;
+  obj["cc_route_count"] = _eventProc->getLookup().cc_route_count;
 
   // Loops
   obj["loop_count"] = _loopEngine->getLoopCount();
@@ -652,6 +653,30 @@ void WebServerManager::_handleGetTemplates(AsyncWebServerRequest* req) {
   t3["midiNote"] = 49;
   t3["category"] = "cymbals";
 
+  JsonObject t4 = arr.add<JsonObject>();
+  t4["id"] = "double_hit";
+  t4["name"] = "Tom double frappe";
+  t4["midiNote"] = 45;
+  t4["category"] = "drums";
+
+  JsonObject t5 = arr.add<JsonObject>();
+  t5["id"] = "shaker";
+  t5["name"] = "Shaker / Maracas";
+  t5["midiNote"] = 82;
+  t5["category"] = "latin";
+
+  JsonObject t6 = arr.add<JsonObject>();
+  t6["id"] = "brush";
+  t6["name"] = "Brush (Comb)";
+  t6["midiNote"] = 38;
+  t6["category"] = "drums";
+
+  JsonObject t7 = arr.add<JsonObject>();
+  t7["id"] = "timpani";
+  t7["name"] = "Timpani pitch";
+  t7["midiNote"] = 47;
+  t7["category"] = "drums";
+
   _sendJson(req, 200, doc);
 }
 
@@ -718,6 +743,54 @@ void WebServerManager::_handleCreateInstrumentFromTemplate(AsyncWebServerRequest
     inst.noteOffActions[0].delay_ms = 50;
     inst.noteOffActions[1].command_type = (uint8_t)CommandType::OFF;
     inst.noteOffActions[1].value_source = (uint8_t)ValueSource::FIXED;
+  } else if (strcmp(tpl, "double_hit") == 0) {
+    strlcpy(inst.name, "Tom double frappe", sizeof(inst.name));
+    strlcpy(inst.category, "drums", sizeof(inst.category));
+    inst.noteOnCount = 2;
+    inst.noteOnActions[0].command_type = (uint8_t)CommandType::PULSE;
+    inst.noteOnActions[0].value_source = (uint8_t)ValueSource::VELOCITY;
+    inst.noteOnActions[0].duration_min_ms = 8;
+    inst.noteOnActions[0].duration_max_ms = 22;
+    inst.noteOnActions[1] = inst.noteOnActions[0];
+    inst.noteOffCount = 1;
+    inst.noteOffActions[0].command_type = (uint8_t)CommandType::OFF;
+    inst.noteOffActions[0].value_source = (uint8_t)ValueSource::FIXED;
+  } else if (strcmp(tpl, "shaker") == 0) {
+    strlcpy(inst.name, "Shaker / Maracas", sizeof(inst.name));
+    strlcpy(inst.category, "latin", sizeof(inst.category));
+    inst.noteOnCount = 1;
+    inst.noteOnActions[0].command_type = (uint8_t)CommandType::PWM;
+    inst.noteOnActions[0].value_source = (uint8_t)ValueSource::VELOCITY;
+    inst.noteOffCount = 1;
+    inst.noteOffActions[0].command_type = (uint8_t)CommandType::OFF;
+    inst.noteOffActions[0].value_source = (uint8_t)ValueSource::FIXED;
+  } else if (strcmp(tpl, "brush") == 0) {
+    strlcpy(inst.name, "Brush", sizeof(inst.name));
+    strlcpy(inst.category, "drums", sizeof(inst.category));
+    inst.noteOnCount = 1;
+    inst.noteOnActions[0].command_type = (uint8_t)CommandType::PWM;
+    inst.noteOnActions[0].value_source = (uint8_t)ValueSource::VELOCITY;
+    inst.ccBindingCount = 1;
+    inst.ccBindings[0].cc_number = 1;
+    inst.ccBindings[0].command_type = (uint8_t)CommandType::PWM;
+    inst.ccBindings[0].range_min = 20;
+    inst.ccBindings[0].range_max = 127;
+    inst.noteOffCount = 1;
+    inst.noteOffActions[0].command_type = (uint8_t)CommandType::OFF;
+    inst.noteOffActions[0].value_source = (uint8_t)ValueSource::FIXED;
+  } else if (strcmp(tpl, "timpani") == 0) {
+    strlcpy(inst.name, "Timpani", sizeof(inst.name));
+    strlcpy(inst.category, "drums", sizeof(inst.category));
+    inst.noteOnCount = 1;
+    inst.noteOnActions[0].command_type = (uint8_t)CommandType::PULSE;
+    inst.noteOnActions[0].value_source = (uint8_t)ValueSource::VELOCITY;
+    inst.noteOnActions[0].duration_min_ms = 10;
+    inst.noteOnActions[0].duration_max_ms = 30;
+    inst.ccBindingCount = 1;
+    inst.ccBindings[0].cc_number = 127;
+    inst.ccBindings[0].command_type = (uint8_t)CommandType::POSITION;
+    inst.ccBindings[0].range_min = 30;
+    inst.ccBindings[0].range_max = 110;
   } else {
     _sendError(req, 400, "Unknown template");
     return;

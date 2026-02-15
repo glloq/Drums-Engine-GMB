@@ -90,6 +90,13 @@ void WebServerManager::_setupRoutes() {
       if (index == 0) _handleTestInstrument(req, data, len);
     });
 
+  _server.on("/api/instruments/test-action", HTTP_POST,
+    [](AsyncWebServerRequest* req) {},
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) _handleTestInstrumentAction(req, data, len);
+    });
+
   _server.on("/api/test/actuator", HTTP_POST,
     [](AsyncWebServerRequest* req) {},
     nullptr,
@@ -140,6 +147,19 @@ void WebServerManager::_setupRoutes() {
   _server.on("/api/capabilities", HTTP_GET,
     [this](AsyncWebServerRequest* req) { _handleGetCapabilities(req); });
 
+  _server.on("/api/cc-routes", HTTP_GET,
+    [this](AsyncWebServerRequest* req) { _handleGetCcRoutes(req); });
+
+  _server.on("/api/templates", HTTP_GET,
+    [this](AsyncWebServerRequest* req) { _handleGetTemplates(req); });
+
+  _server.on("/api/instruments/from-template", HTTP_POST,
+    [](AsyncWebServerRequest* req) {},
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) _handleCreateInstrumentFromTemplate(req, data, len);
+    });
+
   _server.on("/api/save", HTTP_POST,
     [this](AsyncWebServerRequest* req) { _handleSaveConfig(req); });
 
@@ -178,6 +198,7 @@ void WebServerManager::_handleCreateInstrument(AsyncWebServerRequest* req, uint8
 
   if (idx < 0) { _sendError(req, 507, "Max instruments reached"); return; }
 
+  _recompileLookupFromInstruments();
   _storage->saveInstruments(*_instrMgr);
 
   JsonDocument resp;
@@ -198,6 +219,7 @@ void WebServerManager::_handleUpdateInstrument(AsyncWebServerRequest* req, uint8
     _sendError(req, 404, "Instrument not found"); return;
   }
 
+  _recompileLookupFromInstruments();
   _storage->saveInstruments(*_instrMgr);
   _sendError(req, 200, "Updated");
 }
@@ -207,6 +229,7 @@ void WebServerManager::_handleDeleteInstrument(AsyncWebServerRequest* req) {
   if (!_instrMgr->removeInstrument(id)) {
     _sendError(req, 404, "Instrument not found"); return;
   }
+  _recompileLookupFromInstruments();
   _storage->saveInstruments(*_instrMgr);
   _sendError(req, 200, "Deleted");
 }
@@ -348,6 +371,48 @@ void WebServerManager::_handleTestInstrument(AsyncWebServerRequest* req, uint8_t
 
 // --- Loops ---
 
+void WebServerManager::_handleTestInstrumentAction(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
+  JsonDocument doc;
+  if (deserializeJson(doc, data, len)) {
+    _sendError(req, 400, "Invalid JSON");
+    return;
+  }
+
+  uint8_t id = doc["id"] | 0xFF;
+  const char* eventType = doc["event"] | "on";
+  uint8_t index = doc["index"] | 0;
+  uint8_t velocity = doc["velocity"] | 80;
+
+  InstrumentConfig* inst = _instrMgr->getInstrument(id);
+  if (!inst) {
+    _sendError(req, 404, "Instrument not found");
+    return;
+  }
+
+  const ActionStep* steps = nullptr;
+  uint8_t count = 0;
+  if (strcmp(eventType, "off") == 0) {
+    steps = inst->noteOffActions;
+    count = inst->noteOffCount;
+  } else {
+    steps = inst->noteOnActions;
+    count = inst->noteOnCount;
+  }
+
+  if (index >= count) {
+    _sendError(req, 400, "Action index out of range");
+    return;
+  }
+
+  bool ok = _scheduler->scheduleActionSteps(&steps[index], 1, velocity, micros(), nullptr);
+  if (!ok) {
+    _sendError(req, 507, "Scheduler queue full");
+    return;
+  }
+
+  _sendError(req, 200, "Action test scheduled");
+}
+
 void WebServerManager::_handleGetLoops(AsyncWebServerRequest* req) {
   JsonDocument doc;
   JsonArray arr = doc.to<JsonArray>();
@@ -462,6 +527,7 @@ void WebServerManager::_handleGetStatus(AsyncWebServerRequest* req) {
 
   // Event Engine
   obj["pipeline_count"] = _eventProc->getLookup().pipeline_count;
+  obj["cc_route_count"] = _eventProc->getLookup().cc_route_count;
 
   // Loops
   obj["loop_count"] = _loopEngine->getLoopCount();
@@ -530,6 +596,226 @@ void WebServerManager::_handleGetCapabilities(AsyncWebServerRequest* req) {
   doc["maxActuatorsPerInstrument"] = MAX_ACTUATORS_PER_INST;
 
   _sendJson(req, 200, doc);
+}
+
+void WebServerManager::_handleGetCcRoutes(AsyncWebServerRequest* req) {
+  const PipelineLookup& lookup = _eventProc->getLookup();
+  JsonDocument doc;
+  doc["count"] = lookup.cc_route_count;
+
+  JsonArray routes = doc["routes"].to<JsonArray>();
+  for (uint8_t cc = 0; cc < 128; cc++) {
+    uint8_t first = lookup.cc_to_first[cc];
+    uint8_t count = lookup.cc_to_count[cc];
+    if (first == 0xFF || count == 0) continue;
+
+    JsonObject ccObj = routes.add<JsonObject>();
+    ccObj["cc"] = cc;
+    JsonArray entries = ccObj["entries"].to<JsonArray>();
+
+    for (uint8_t i = 0; i < count; i++) {
+      uint8_t routeIdx = first + i;
+      if (routeIdx >= lookup.cc_route_count) break;
+      const CCRoutingEntry& route = lookup.cc_routes[routeIdx];
+
+      JsonObject e = entries.add<JsonObject>();
+      e["actuatorId"] = route.actuator_id;
+      e["commandType"] = route.command_type;
+      e["rangeMin"] = route.range_min;
+      e["rangeMax"] = route.range_max;
+      e["curve"] = route.curve;
+      e["inverted"] = route.inverted;
+    }
+  }
+
+  _sendJson(req, 200, doc);
+}
+
+void WebServerManager::_handleGetTemplates(AsyncWebServerRequest* req) {
+  JsonDocument doc;
+  JsonArray arr = doc.to<JsonArray>();
+
+  JsonObject t1 = arr.add<JsonObject>();
+  t1["id"] = "kick";
+  t1["name"] = "Kick simple";
+  t1["midiNote"] = 36;
+  t1["category"] = "drums";
+
+  JsonObject t2 = arr.add<JsonObject>();
+  t2["id"] = "hihat";
+  t2["name"] = "Hi-Hat (CC4 + servo)";
+  t2["midiNote"] = 42;
+  t2["category"] = "cymbals";
+
+  JsonObject t3 = arr.add<JsonObject>();
+  t3["id"] = "cymbal_mute";
+  t3["name"] = "Cymbal + mute";
+  t3["midiNote"] = 49;
+  t3["category"] = "cymbals";
+
+  JsonObject t4 = arr.add<JsonObject>();
+  t4["id"] = "double_hit";
+  t4["name"] = "Tom double frappe";
+  t4["midiNote"] = 45;
+  t4["category"] = "drums";
+
+  JsonObject t5 = arr.add<JsonObject>();
+  t5["id"] = "shaker";
+  t5["name"] = "Shaker / Maracas";
+  t5["midiNote"] = 82;
+  t5["category"] = "latin";
+
+  JsonObject t6 = arr.add<JsonObject>();
+  t6["id"] = "brush";
+  t6["name"] = "Brush (Comb)";
+  t6["midiNote"] = 38;
+  t6["category"] = "drums";
+
+  JsonObject t7 = arr.add<JsonObject>();
+  t7["id"] = "timpani";
+  t7["name"] = "Timpani pitch";
+  t7["midiNote"] = 47;
+  t7["category"] = "drums";
+
+  _sendJson(req, 200, doc);
+}
+
+void WebServerManager::_handleCreateInstrumentFromTemplate(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
+  JsonDocument doc;
+  if (deserializeJson(doc, data, len)) {
+    _sendError(req, 400, "Invalid JSON");
+    return;
+  }
+
+  const char* tpl = doc["template"] | "";
+  if (!tpl || tpl[0] == '\0') {
+    _sendError(req, 400, "template required");
+    return;
+  }
+
+  InstrumentConfig inst;
+  strlcpy(inst.name, doc["name"] | "Template Instrument", sizeof(inst.name));
+  strlcpy(inst.category, doc["category"] | "drums", sizeof(inst.category));
+  inst.midiNote = doc["midiNote"] | 36;
+  inst.midiChannel = doc["midiChannel"] | 10;
+  inst.enabled = true;
+
+  if (strcmp(tpl, "kick") == 0) {
+    strlcpy(inst.name, "Kick simple", sizeof(inst.name));
+    inst.noteOnCount = 1;
+    inst.noteOnActions[0].command_type = (uint8_t)CommandType::PULSE;
+    inst.noteOnActions[0].value_source = (uint8_t)ValueSource::VELOCITY;
+    inst.noteOnActions[0].duration_min_ms = 8;
+    inst.noteOnActions[0].duration_max_ms = 25;
+    inst.noteOffCount = 1;
+    inst.noteOffActions[0].command_type = (uint8_t)CommandType::OFF;
+    inst.noteOffActions[0].value_source = (uint8_t)ValueSource::FIXED;
+  } else if (strcmp(tpl, "hihat") == 0) {
+    strlcpy(inst.name, "Hi-Hat", sizeof(inst.name));
+    strlcpy(inst.category, "cymbals", sizeof(inst.category));
+    inst.noteOnCount = 2;
+    inst.noteOnActions[0].command_type = (uint8_t)CommandType::PULSE;
+    inst.noteOnActions[0].value_source = (uint8_t)ValueSource::VELOCITY;
+    inst.noteOnActions[0].duration_min_ms = 8;
+    inst.noteOnActions[0].duration_max_ms = 25;
+    inst.noteOnActions[1].command_type = (uint8_t)CommandType::POSITION;
+    inst.noteOnActions[1].value_source = (uint8_t)ValueSource::CC_VAR;
+    inst.noteOnActions[1].cc_index = 4;
+
+    inst.ccBindingCount = 1;
+    inst.ccBindings[0].cc_number = 4;
+    inst.ccBindings[0].command_type = (uint8_t)CommandType::POSITION;
+    inst.ccBindings[0].range_min = 30;
+    inst.ccBindings[0].range_max = 150;
+  } else if (strcmp(tpl, "cymbal_mute") == 0) {
+    strlcpy(inst.name, "Cymbal + mute", sizeof(inst.name));
+    strlcpy(inst.category, "cymbals", sizeof(inst.category));
+    inst.noteOnCount = 1;
+    inst.noteOnActions[0].command_type = (uint8_t)CommandType::PULSE;
+    inst.noteOnActions[0].value_source = (uint8_t)ValueSource::VELOCITY;
+    inst.noteOnActions[0].duration_min_ms = 8;
+    inst.noteOnActions[0].duration_max_ms = 20;
+
+    inst.noteOffCount = 2;
+    inst.noteOffActions[0].command_type = (uint8_t)CommandType::POSITION;
+    inst.noteOffActions[0].value_source = (uint8_t)ValueSource::FIXED;
+    inst.noteOffActions[0].value_fixed = 20;
+    inst.noteOffActions[0].delay_ms = 50;
+    inst.noteOffActions[1].command_type = (uint8_t)CommandType::OFF;
+    inst.noteOffActions[1].value_source = (uint8_t)ValueSource::FIXED;
+  } else if (strcmp(tpl, "double_hit") == 0) {
+    strlcpy(inst.name, "Tom double frappe", sizeof(inst.name));
+    strlcpy(inst.category, "drums", sizeof(inst.category));
+    inst.noteOnCount = 2;
+    inst.noteOnActions[0].command_type = (uint8_t)CommandType::PULSE;
+    inst.noteOnActions[0].value_source = (uint8_t)ValueSource::VELOCITY;
+    inst.noteOnActions[0].duration_min_ms = 8;
+    inst.noteOnActions[0].duration_max_ms = 22;
+    inst.noteOnActions[1] = inst.noteOnActions[0];
+    inst.noteOffCount = 1;
+    inst.noteOffActions[0].command_type = (uint8_t)CommandType::OFF;
+    inst.noteOffActions[0].value_source = (uint8_t)ValueSource::FIXED;
+  } else if (strcmp(tpl, "shaker") == 0) {
+    strlcpy(inst.name, "Shaker / Maracas", sizeof(inst.name));
+    strlcpy(inst.category, "latin", sizeof(inst.category));
+    inst.noteOnCount = 1;
+    inst.noteOnActions[0].command_type = (uint8_t)CommandType::PWM;
+    inst.noteOnActions[0].value_source = (uint8_t)ValueSource::VELOCITY;
+    inst.noteOffCount = 1;
+    inst.noteOffActions[0].command_type = (uint8_t)CommandType::OFF;
+    inst.noteOffActions[0].value_source = (uint8_t)ValueSource::FIXED;
+  } else if (strcmp(tpl, "brush") == 0) {
+    strlcpy(inst.name, "Brush", sizeof(inst.name));
+    strlcpy(inst.category, "drums", sizeof(inst.category));
+    inst.noteOnCount = 1;
+    inst.noteOnActions[0].command_type = (uint8_t)CommandType::PWM;
+    inst.noteOnActions[0].value_source = (uint8_t)ValueSource::VELOCITY;
+    inst.ccBindingCount = 1;
+    inst.ccBindings[0].cc_number = 1;
+    inst.ccBindings[0].command_type = (uint8_t)CommandType::PWM;
+    inst.ccBindings[0].range_min = 20;
+    inst.ccBindings[0].range_max = 127;
+    inst.noteOffCount = 1;
+    inst.noteOffActions[0].command_type = (uint8_t)CommandType::OFF;
+    inst.noteOffActions[0].value_source = (uint8_t)ValueSource::FIXED;
+  } else if (strcmp(tpl, "timpani") == 0) {
+    strlcpy(inst.name, "Timpani", sizeof(inst.name));
+    strlcpy(inst.category, "drums", sizeof(inst.category));
+    inst.noteOnCount = 1;
+    inst.noteOnActions[0].command_type = (uint8_t)CommandType::PULSE;
+    inst.noteOnActions[0].value_source = (uint8_t)ValueSource::VELOCITY;
+    inst.noteOnActions[0].duration_min_ms = 10;
+    inst.noteOnActions[0].duration_max_ms = 30;
+    inst.ccBindingCount = 1;
+    inst.ccBindings[0].cc_number = 127;
+    inst.ccBindings[0].command_type = (uint8_t)CommandType::POSITION;
+    inst.ccBindings[0].range_min = 30;
+    inst.ccBindings[0].range_max = 110;
+  } else {
+    _sendError(req, 400, "Unknown template");
+    return;
+  }
+
+  int idx = _instrMgr->addInstrument(inst);
+  if (idx < 0) {
+    _sendError(req, 507, "Max instruments reached");
+    return;
+  }
+
+  _recompileLookupFromInstruments();
+  _storage->saveInstruments(*_instrMgr);
+
+  JsonDocument resp;
+  JsonObject obj = resp.to<JsonObject>();
+  _instrMgr->instrumentToJson(*_instrMgr->getInstrumentByIndex(idx), obj);
+  _sendJson(req, 201, resp);
+}
+
+void WebServerManager::_recompileLookupFromInstruments() {
+  JsonDocument doc;
+  JsonArray arr = doc.to<JsonArray>();
+  _instrMgr->toJson(arr);
+  PipelineCompiler::compileAll(arr, _eventProc->getLookup());
 }
 
 void WebServerManager::_handleSaveConfig(AsyncWebServerRequest* req) {

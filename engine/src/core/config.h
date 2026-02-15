@@ -46,7 +46,10 @@
 #define MAX_ACTUATORS_PER_INST 8
 #define MAX_PIPELINES        32
 #define MAX_BLOCKS_PER_PIPELINE 8
-#define MAX_GLOBAL_VARS      16
+#define MAX_GLOBAL_VARS      128
+#define MAX_ACTIONS_PER_EVENT 4
+#define MAX_CC_BINDINGS       4
+#define MAX_CC_ROUTES         16
 #define MAX_LOOPS            8
 #define MAX_LOOP_EVENTS      256
 

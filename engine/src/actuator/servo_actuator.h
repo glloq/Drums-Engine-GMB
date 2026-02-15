@@ -20,6 +20,7 @@ public:
   void init() override;
   void execute(const ActuatorCommand& cmd) override;
   void stop() override;
+  bool checkTimeout(uint32_t nowUs) override;
 
   // Position actuelle du servo
   uint8_t getCurrentAngle() const { return _currentAngle; }
@@ -27,6 +28,10 @@ public:
 private:
   PCA9685Driver* _driver;
   uint8_t _currentAngle;
+  bool _combBrushRunning = false;
+  uint32_t _lastCombBrushStepUs = 0;
+  bool _combBrushHigh = false;
+  uint32_t _combBrushPeriodUs = 120000;
 
   void _moveToAngle(uint8_t angle);
 };

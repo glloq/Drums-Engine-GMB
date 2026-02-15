@@ -82,6 +82,13 @@ input[type=checkbox] { width: auto; }
 .quick-actions { display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; margin-bottom: 10px; }
 .hint { font-size:0.8em; color: var(--fg2); margin-top:4px; }
 
+.action-editor { background: var(--bg); border: 1px solid #3e3e55; border-radius: var(--radius); padding: 10px; margin-bottom: 8px; }
+.action-editor h4 { margin-bottom: 8px; font-size: 0.9em; display:flex; justify-content:space-between; align-items:center; }
+.binding-editor { background: var(--bg); border: 1px solid #3e3e55; border-radius: var(--radius); padding: 10px; margin-bottom: 8px; }
+.editor-toolbar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
+.editor-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:8px; }
+.small-select, .small-input { font-size:0.82em; padding:6px 8px; }
+
 /* Loop Grid */
 .loop-grid { display: grid; gap: 2px; margin-top: 12px; }
 .loop-cell { width: 100%; aspect-ratio: 1; background: var(--bg); border-radius: 3px; cursor: pointer; transition: background 0.1s; border: 1px solid #333; }
@@ -137,9 +144,12 @@ input[type=checkbox] { width: auto; }
 
   <!-- ====== INSTRUMENTS TAB ====== -->
   <div class="panel" id="tab-instruments">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:8px;flex-wrap:wrap;">
       <h2>Instruments (<span id="instrCount">0</span>)</h2>
-      <button class="btn btn-primary" onclick="showAddInstrument()">+ Ajouter</button>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-secondary" onclick="showCreateInstrumentFromTemplate()">Depuis template</button>
+        <button class="btn btn-primary" onclick="showAddInstrument()">+ Ajouter</button>
+      </div>
     </div>
     <div id="instrumentList"></div>
   </div>
@@ -302,7 +312,7 @@ input[type=checkbox] { width: auto; }
 
 <!-- ====== MODAL: Add/Edit Instrument ====== -->
 <div class="modal-overlay" id="modalInstrument">
-  <div class="modal">
+  <div class="modal" style="max-width:900px;">
     <h2 id="modalInstrTitle">Nouvel Instrument</h2>
     <input type="hidden" id="editInstrId" value="">
     <div class="form-row">
@@ -319,6 +329,14 @@ input[type=checkbox] { width: auto; }
           <option value="other">Autre</option>
         </select>
       </div>
+      <div class="form-group" style="max-width:160px;">
+        <label>Retrigger</label>
+        <select id="instrRetriggerMode">
+          <option value="0">Ignore</option>
+          <option value="1">Reset</option>
+          <option value="2">Stack</option>
+        </select>
+      </div>
     </div>
     <div class="form-row">
       <div class="form-group">
@@ -331,11 +349,31 @@ input[type=checkbox] { width: auto; }
           <option value="0">Tous</option>
         </select>
       </div>
+      <div class="form-group" style="display:flex;align-items:flex-end;">
+        <label><input type="checkbox" id="instrEnabled" checked> Active</label>
+      </div>
     </div>
+
     <div class="form-group">
-      <label>Actionneurs assignes</label>
+      <label>Actionneurs assignes (legacy fallback)</label>
       <div class="checkbox-list" id="instrActuatorChecklist"></div>
     </div>
+
+    <div class="card" style="margin-bottom:10px;">
+      <h3><span>NoteOn Actions</span><button class="btn btn-sm btn-secondary" onclick="addActionStep('on')">+ Action</button></h3>
+      <div id="noteOnActionsEditor"></div>
+    </div>
+
+    <div class="card" style="margin-bottom:10px;">
+      <h3><span>NoteOff Actions</span><button class="btn btn-sm btn-secondary" onclick="addActionStep('off')">+ Action</button></h3>
+      <div id="noteOffActionsEditor"></div>
+    </div>
+
+    <div class="card" style="margin-bottom:10px;">
+      <h3><span>CC Bindings</span><button class="btn btn-sm btn-secondary" onclick="addCcBinding()">+ Binding</button></h3>
+      <div id="ccBindingsEditor"></div>
+    </div>
+
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal('modalInstrument')">Annuler</button>
       <button class="btn btn-primary" onclick="saveInstrument()">Enregistrer</button>
@@ -674,6 +712,64 @@ async function testActuator(id) {
 // ====================================================================
 // INSTRUMENTS
 // ====================================================================
+const INSTRUMENT_TEMPLATES = {
+  kick: {
+    name: 'Kick simple', category: 'drums', midiNote: 36, midiChannel: 10,
+    noteOnActions: [{commandType:0, valueSource:0, delayMs:0, durationMinMs:8, durationMaxMs:25, velocityCurve:0}],
+    noteOffActions: [{commandType:3, valueSource:1, valueFixed:0, delayMs:0}],
+    ccBindings: []
+  },
+  hihat: {
+    name: 'Hi-Hat (solenoid + CC4 servo)', category:'cymbals', midiNote:42, midiChannel:10,
+    noteOnActions: [
+      {commandType:0, valueSource:0, delayMs:0, durationMinMs:8, durationMaxMs:25, velocityCurve:1},
+      {commandType:1, valueSource:2, ccIndex:4, delayMs:0, velocityCurve:0}
+    ],
+    noteOffActions: [{commandType:3, valueSource:1, valueFixed:0, delayMs:0}],
+    ccBindings: [{ccNumber:4, commandType:1, rangeMin:30, rangeMax:150, curve:0, inverted:false}]
+  },
+  cymbalMute: {
+    name: 'Cymbal + mute servo', category:'cymbals', midiNote:49, midiChannel:10,
+    noteOnActions: [{commandType:0, valueSource:0, delayMs:0, durationMinMs:8, durationMaxMs:20, velocityCurve:0}],
+    noteOffActions: [
+      {commandType:1, valueSource:1, valueFixed:20, delayMs:50, velocityCurve:0},
+      {commandType:3, valueSource:1, valueFixed:0, delayMs:0}
+    ],
+    ccBindings: []
+  },
+  doubleHit: {
+    name: 'Tom double frappe', category:'drums', midiNote:45, midiChannel:10,
+    noteOnActions: [
+      {commandType:0, valueSource:0, delayMs:0, durationMinMs:8, durationMaxMs:22, velocityCurve:0},
+      {commandType:0, valueSource:0, delayMs:0, durationMinMs:8, durationMaxMs:22, velocityCurve:0}
+    ],
+    noteOffActions: [{commandType:3, valueSource:1, valueFixed:0, delayMs:0}],
+    ccBindings: []
+  },
+  shaker: {
+    name: 'Shaker', category:'latin', midiNote:82, midiChannel:10,
+    noteOnActions: [{commandType:2, valueSource:0, delayMs:0, velocityCurve:0}],
+    noteOffActions: [{commandType:3, valueSource:1, valueFixed:0, delayMs:0}],
+    ccBindings: []
+  },
+  brush: {
+    name: 'Brush', category:'drums', midiNote:38, midiChannel:10,
+    noteOnActions: [{commandType:2, valueSource:0, delayMs:0, velocityCurve:0}],
+    noteOffActions: [{commandType:3, valueSource:1, valueFixed:0, delayMs:0}],
+    ccBindings: [{ccNumber:1, commandType:2, rangeMin:20, rangeMax:127, curve:0, inverted:false}]
+  },
+  timpani: {
+    name: 'Timpani', category:'drums', midiNote:47, midiChannel:10,
+    noteOnActions: [{commandType:0, valueSource:0, delayMs:0, durationMinMs:10, durationMaxMs:30, velocityCurve:0}],
+    noteOffActions: [{commandType:3, valueSource:1, valueFixed:0, delayMs:0}],
+    ccBindings: [{ccNumber:127, commandType:1, rangeMin:30, rangeMax:110, curve:0, inverted:false}]
+  }
+};
+
+let editNoteOnActions = [];
+let editNoteOffActions = [];
+let editCcBindings = [];
+
 async function loadInstruments() {
   const data = await api('instruments');
   if (data) { instruments = data; renderInstruments(); }
@@ -692,6 +788,9 @@ function renderInstruments() {
     const actNames = (inst.actuatorIds || [])
       .filter(id => id !== 255)
       .map(id => { const a = actuators.find(x => x.id === id); return a ? a.name : 'ID:'+id; });
+    const onCount = (inst.noteOnActions || []).length;
+    const offCount = (inst.noteOffActions || []).length;
+    const ccCount = (inst.ccBindings || []).length;
     return `
     <div class="list-item">
       <div class="item-header">
@@ -699,10 +798,15 @@ function renderInstruments() {
           <strong>${inst.name}</strong>
           <span class="badge">${inst.category}</span>
           <span class="badge">${inst.midiNote} - ${noteName}</span>
+          <span class="badge badge-green">On:${onCount}</span>
+          <span class="badge badge-warn">Off:${offCount}</span>
+          <span class="badge">CC:${ccCount}</span>
           ${!inst.enabled ? '<span class="badge badge-warn">OFF</span>' : ''}
         </span>
         <span>
           <button class="btn btn-sm btn-success" onclick="testInstrument(${inst.id})">Test</button>
+          <button class="btn btn-sm btn-secondary" onclick="testInstrumentAction(${inst.id}, 'on', 0)">Test On#1</button>
+          <button class="btn btn-sm btn-secondary" onclick="testInstrumentAction(${inst.id}, 'off', 0)">Test Off#1</button>
           <button class="btn btn-sm btn-secondary" onclick="editInstrument(${inst.id})">Modifier</button>
           <button class="btn btn-sm btn-danger" onclick="deleteInstrument(${inst.id})">Suppr</button>
         </span>
@@ -710,20 +814,77 @@ function renderInstruments() {
       <div class="item-detail">
         Ch: ${inst.midiChannel === 0 ? 'Tous' : inst.midiChannel}
         | Actionneurs: ${actNames.length > 0 ? actNames.join(', ') : '<em>aucun</em>'}
-        ${inst.pipelineId !== undefined && inst.pipelineId !== 255 ? '| Pipeline #' + inst.pipelineId : ''}
+        | Retrigger: ${inst.retriggerMode ?? 0}
       </div>
     </div>`;
   }).join('');
 }
 
-function showAddInstrument() {
+function defaultActionStep(isOff=false) {
+  return {
+    actuatorId: (actuators[0] ? actuators[0].id : 255),
+    commandType: isOff ? 3 : 0,
+    valueSource: isOff ? 1 : 0,
+    valueFixed: 0,
+    ccIndex: 0,
+    delayMs: 0,
+    durationMinMs: isOff ? 0 : 8,
+    durationMaxMs: isOff ? 0 : 25,
+    velocityCurve: 0
+  };
+}
+
+function defaultCcBinding() {
+  return {
+    ccNumber: 4,
+    actuatorId: (actuators[0] ? actuators[0].id : 255),
+    commandType: 1,
+    rangeMin: 0,
+    rangeMax: 127,
+    curve: 0,
+    inverted: false
+  };
+}
+
+async function showCreateInstrumentFromTemplate() {
+  const templates = await api('templates');
+  if (!templates || templates.length === 0) {
+    toast('Aucun template disponible', 'error');
+    return;
+  }
+
+  const names = templates.map(t => t.id).join(' / ');
+  const key = prompt('Template: ' + names, templates[0].id);
+  if (!key) return;
+
+  const localMap = { kick: 'kick', hihat: 'hihat', cymbal_mute: 'cymbalMute', double_hit: 'doubleHit', shaker: 'shaker', brush: 'brush', timpani: 'timpani' };
+  if (INSTRUMENT_TEMPLATES[localMap[key]]) {
+    showAddInstrument(INSTRUMENT_TEMPLATES[localMap[key]]);
+    return;
+  }
+
+  const created = await api('instruments/from-template', 'POST', {template: key});
+  if (!created) return;
+  await loadInstruments();
+  toast('Instrument créé depuis template', 'success');
+}
+
+function showAddInstrument(template=null) {
   document.getElementById('modalInstrTitle').textContent = 'Nouvel Instrument';
   document.getElementById('editInstrId').value = '';
-  document.getElementById('instrName').value = '';
-  document.getElementById('instrCategory').value = 'drums';
-  document.getElementById('instrMidiNote').value = '36';
-  document.getElementById('instrMidiChannel').value = '10';
+  document.getElementById('instrName').value = template?.name || '';
+  document.getElementById('instrCategory').value = template?.category || 'drums';
+  document.getElementById('instrMidiNote').value = String(template?.midiNote ?? 36);
+  document.getElementById('instrMidiChannel').value = String(template?.midiChannel ?? 10);
+  document.getElementById('instrRetriggerMode').value = '0';
+  document.getElementById('instrEnabled').checked = true;
   buildActuatorChecklist([]);
+
+  editNoteOnActions = (template?.noteOnActions || [defaultActionStep(false)]).map(v => ({...defaultActionStep(false), ...v}));
+  editNoteOffActions = (template?.noteOffActions || [defaultActionStep(true)]).map(v => ({...defaultActionStep(true), ...v}));
+  editCcBindings = (template?.ccBindings || []).map(v => ({...defaultCcBinding(), ...v}));
+  renderActionEditors();
+
   showModal('modalInstrument');
 }
 
@@ -734,17 +895,26 @@ function editInstrument(id) {
   document.getElementById('editInstrId').value = id;
   document.getElementById('instrName').value = inst.name;
   document.getElementById('instrCategory').value = inst.category;
-  document.getElementById('instrMidiNote').value = inst.midiNote;
-  document.getElementById('instrMidiChannel').value = inst.midiChannel;
+  document.getElementById('instrMidiNote').value = String(inst.midiNote);
+  document.getElementById('instrMidiChannel').value = String(inst.midiChannel);
+  document.getElementById('instrRetriggerMode').value = String(inst.retriggerMode ?? 0);
+  document.getElementById('instrEnabled').checked = inst.enabled !== false;
+
   const assignedIds = (inst.actuatorIds || []).filter(x => x !== 255);
   buildActuatorChecklist(assignedIds);
+
+  editNoteOnActions = (inst.noteOnActions || []).map(v => ({...defaultActionStep(false), ...v}));
+  editNoteOffActions = (inst.noteOffActions || []).map(v => ({...defaultActionStep(true), ...v}));
+  editCcBindings = (inst.ccBindings || []).map(v => ({...defaultCcBinding(), ...v}));
+  renderActionEditors();
+
   showModal('modalInstrument');
 }
 
 function buildActuatorChecklist(selectedIds) {
   const el = document.getElementById('instrActuatorChecklist');
   if (actuators.length === 0) {
-    el.innerHTML = '<span style="color:var(--fg2);font-size:0.85em;">Aucun actionneur disponible. Creez-en d\'abord dans l\'onglet Actionneurs.</span>';
+    el.innerHTML = '<span style="color:var(--fg2);font-size:0.85em;">Aucun actionneur disponible. Creez-en d'abord dans l'onglet Actionneurs.</span>';
     return;
   }
   el.innerHTML = actuators.map(a => `
@@ -755,18 +925,96 @@ function buildActuatorChecklist(selectedIds) {
   `).join('');
 }
 
+function actuatorOptions(selected) {
+  return actuators.map(a => `<option value="${a.id}" ${a.id===selected?'selected':''}>${a.name} (#${a.id})</option>`).join('');
+}
+
+function actionEditorRow(step, idx, type) {
+  return `<div class="action-editor">
+    <h4>Action ${idx+1}
+      <button class="btn btn-sm btn-danger" onclick="removeActionStep('${type}', ${idx})">X</button>
+    </h4>
+    <div class="editor-grid">
+      <div><label>Actuateur</label><select class="small-select" onchange="updateActionField('${type}',${idx},'actuatorId',this.value)">${actuatorOptions(step.actuatorId)}</select></div>
+      <div><label>Commande</label><select class="small-select" onchange="updateActionField('${type}',${idx},'commandType',this.value)"><option value="0" ${step.commandType==0?'selected':''}>PULSE</option><option value="1" ${step.commandType==1?'selected':''}>POSITION</option><option value="2" ${step.commandType==2?'selected':''}>PWM</option><option value="3" ${step.commandType==3?'selected':''}>OFF</option></select></div>
+      <div><label>Source</label><select class="small-select" onchange="updateActionField('${type}',${idx},'valueSource',this.value)"><option value="0" ${step.valueSource==0?'selected':''}>Velocity</option><option value="1" ${step.valueSource==1?'selected':''}>Fixe</option><option value="2" ${step.valueSource==2?'selected':''}>CC Var</option><option value="3" ${step.valueSource==3?'selected':''}>Inv Velocity</option></select></div>
+      <div><label>Valeur fixe</label><input class="small-input" type="number" min="0" max="127" value="${step.valueFixed||0}" onchange="updateActionField('${type}',${idx},'valueFixed',this.value)"></div>
+      <div><label>CC Index</label><input class="small-input" type="number" min="0" max="127" value="${step.ccIndex||0}" onchange="updateActionField('${type}',${idx},'ccIndex',this.value)"></div>
+      <div><label>Délai (ms)</label><input class="small-input" type="number" min="0" max="2000" value="${step.delayMs||0}" onchange="updateActionField('${type}',${idx},'delayMs',this.value)"></div>
+      <div><label>Durée min</label><input class="small-input" type="number" min="0" max="1000" value="${step.durationMinMs||0}" onchange="updateActionField('${type}',${idx},'durationMinMs',this.value)"></div>
+      <div><label>Durée max</label><input class="small-input" type="number" min="0" max="1000" value="${step.durationMaxMs||0}" onchange="updateActionField('${type}',${idx},'durationMaxMs',this.value)"></div>
+      <div><label>Courbe</label><select class="small-select" onchange="updateActionField('${type}',${idx},'velocityCurve',this.value)"><option value="0" ${step.velocityCurve==0?'selected':''}>Linear</option><option value="1" ${step.velocityCurve==1?'selected':''}>Expo</option><option value="2" ${step.velocityCurve==2?'selected':''}>Log</option></select></div>
+    </div>
+  </div>`;
+}
+
+function ccBindingRow(binding, idx) {
+  return `<div class="binding-editor">
+    <h4>CC Binding ${idx+1}<button class="btn btn-sm btn-danger" onclick="removeCcBinding(${idx})">X</button></h4>
+    <div class="editor-grid">
+      <div><label>CC #</label><input class="small-input" type="number" min="0" max="127" value="${binding.ccNumber}" onchange="updateCcField(${idx},'ccNumber',this.value)"></div>
+      <div><label>Actuateur</label><select class="small-select" onchange="updateCcField(${idx},'actuatorId',this.value)">${actuatorOptions(binding.actuatorId)}</select></div>
+      <div><label>Commande</label><select class="small-select" onchange="updateCcField(${idx},'commandType',this.value)"><option value="1" ${binding.commandType==1?'selected':''}>POSITION</option><option value="2" ${binding.commandType==2?'selected':''}>PWM</option></select></div>
+      <div><label>Min</label><input class="small-input" type="number" min="0" max="255" value="${binding.rangeMin}" onchange="updateCcField(${idx},'rangeMin',this.value)"></div>
+      <div><label>Max</label><input class="small-input" type="number" min="0" max="255" value="${binding.rangeMax}" onchange="updateCcField(${idx},'rangeMax',this.value)"></div>
+      <div><label>Courbe</label><select class="small-select" onchange="updateCcField(${idx},'curve',this.value)"><option value="0" ${binding.curve==0?'selected':''}>Linear</option><option value="1" ${binding.curve==1?'selected':''}>Expo</option><option value="2" ${binding.curve==2?'selected':''}>Log</option></select></div>
+      <div style="display:flex;align-items:flex-end;"><label><input type="checkbox" ${binding.inverted?'checked':''} onchange="updateCcField(${idx},'inverted',this.checked)"> Inverser</label></div>
+    </div>
+  </div>`;
+}
+
+function renderActionEditors() {
+  document.getElementById('noteOnActionsEditor').innerHTML = editNoteOnActions.map((s,i)=>actionEditorRow(s,i,'on')).join('') || '<div class="hint">Aucune action NoteOn</div>';
+  document.getElementById('noteOffActionsEditor').innerHTML = editNoteOffActions.map((s,i)=>actionEditorRow(s,i,'off')).join('') || '<div class="hint">Aucune action NoteOff</div>';
+  document.getElementById('ccBindingsEditor').innerHTML = editCcBindings.map((b,i)=>ccBindingRow(b,i)).join('') || '<div class="hint">Aucun binding CC</div>';
+}
+
+function addActionStep(type) {
+  if (type === 'on') {
+    if (editNoteOnActions.length >= 4) return toast('Max 4 actions NoteOn', 'error');
+    editNoteOnActions.push(defaultActionStep(false));
+  } else {
+    if (editNoteOffActions.length >= 4) return toast('Max 4 actions NoteOff', 'error');
+    editNoteOffActions.push(defaultActionStep(true));
+  }
+  renderActionEditors();
+}
+function removeActionStep(type, idx) {
+  if (type === 'on') editNoteOnActions.splice(idx, 1);
+  else editNoteOffActions.splice(idx, 1);
+  renderActionEditors();
+}
+function updateActionField(type, idx, field, value) {
+  const list = type === 'on' ? editNoteOnActions : editNoteOffActions;
+  list[idx][field] = (field === 'inverted') ? Boolean(value) : Number(value);
+}
+
+function addCcBinding() {
+  if (editCcBindings.length >= 4) return toast('Max 4 CC bindings', 'error');
+  editCcBindings.push(defaultCcBinding());
+  renderActionEditors();
+}
+function removeCcBinding(idx) { editCcBindings.splice(idx,1); renderActionEditors(); }
+function updateCcField(idx, field, value) { editCcBindings[idx][field] = (field === 'inverted') ? Boolean(value) : Number(value); }
+
 async function saveInstrument() {
   const editId = document.getElementById('editInstrId').value;
   const checkedBoxes = document.querySelectorAll('#instrActuatorChecklist input[type=checkbox]:checked');
   const actIds = Array.from(checkedBoxes).map(cb => parseInt(cb.value));
+
   const data = {
     name: document.getElementById('instrName').value || 'Unnamed',
     category: document.getElementById('instrCategory').value,
     midiNote: parseInt(document.getElementById('instrMidiNote').value),
     midiChannel: parseInt(document.getElementById('instrMidiChannel').value),
-    enabled: true,
-    actuatorIds: actIds
+    retriggerMode: parseInt(document.getElementById('instrRetriggerMode').value),
+    enabled: document.getElementById('instrEnabled').checked,
+    actuatorIds: actIds,
+    noteOnActions: editNoteOnActions,
+    noteOffActions: editNoteOffActions,
+    ccBindings: editCcBindings
   };
+
   if (editId !== '') {
     await api('instrument?id=' + editId, 'PUT', data);
   } else {
@@ -789,6 +1037,16 @@ async function testInstrument(id) {
   toast('Test envoye', 'success');
 }
 
+async function testInstrumentAction(id, eventType='on', index=0) {
+  const ok = await api('instruments/test-action', 'POST', {
+    id: id,
+    event: eventType,
+    index: index,
+    velocity: 90
+  });
+  if (ok) toast('Test action programme', 'success');
+}
+
 // ====================================================================
 // MAPPINGS (read-only pipeline visualization)
 // ====================================================================
@@ -799,17 +1057,19 @@ const BLOCK_TYPE_NAMES = {
   3: {name:'OUTPUT', cls:'out', subtypes:{0:'Pulse',1:'Position',2:'PWM'}}
 };
 
-function refreshMappings() {
-  renderMappings();
+async function refreshMappings() {
+  await renderMappings();
   toast('Mappings actualises', 'success');
 }
 
-function renderMappings() {
+async function renderMappings() {
   const el = document.getElementById('mappingList');
   if (instruments.length === 0) {
     el.innerHTML = '<div class="empty-state"><p>Aucun instrument configure</p></div>';
     return;
   }
+
+  const ccRouteData = await api('cc-routes');
 
   el.innerHTML = instruments.filter(inst => inst.enabled).map(inst => {
     const noteInfo = midiNotes.find(n => n.note === inst.midiNote);
@@ -854,6 +1114,14 @@ function renderMappings() {
       ${pipelineHtml}
     </div>`;
   }).join('');
+
+  if (ccRouteData && ccRouteData.routes) {
+    const routeCards = ccRouteData.routes.map(r => {
+      const entries = (r.entries || []).map(e => `Act#${e.actuatorId} cmd=${e.commandType} [${e.rangeMin}-${e.rangeMax}]`).join(' | ');
+      return `<div class="list-item"><strong>CC${r.cc}</strong> → ${entries || '<em>aucune entree</em>'}</div>`;
+    }).join('');
+    el.innerHTML += `<div class="card"><h3>Routage CC compile (${ccRouteData.count||0})</h3>${routeCards || '<div class="hint">Aucune route CC</div>'}</div>`;
+  }
 }
 
 // ====================================================================
@@ -1050,7 +1318,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     tab.classList.add('active');
     document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
     // Refresh mappings when switching to that tab
-    if (tab.dataset.tab === 'mappings') renderMappings();
+    if (tab.dataset.tab === 'mappings') refreshMappings();
   });
 });
 

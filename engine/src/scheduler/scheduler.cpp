@@ -1,4 +1,5 @@
 #include "scheduler.h"
+#include <math.h>
 
 Scheduler::Scheduler(ActuatorManager* actuatorMgr)
   : _actuatorMgr(actuatorMgr), _dispatchCount(0),
@@ -41,6 +42,90 @@ bool Scheduler::schedulePulseAt(uint8_t actuatorId, uint16_t value,
   cmdOff.execute_at = executeAt + durationUs;
 
   return _queue.push(cmdOff);
+}
+
+
+bool Scheduler::scheduleActionSteps(const ActionStep* steps, uint8_t stepCount,
+                                    uint8_t velocity, uint32_t timestamp,
+                                    const uint16_t* globalVars) {
+  if (!steps || stepCount == 0) return true;
+
+  auto applyCurve = [](uint8_t inputValue, uint8_t curve) -> uint8_t {
+    float normalized = inputValue / 127.0f;
+    switch (curve) {
+      case CURVE_EXPO:
+        return (uint8_t)(normalized * normalized * 127.0f);
+      case CURVE_LOG:
+        return (uint8_t)(sqrtf(normalized) * 127.0f);
+      case CURVE_LINEAR:
+      default:
+        return inputValue;
+    }
+  };
+
+  bool allScheduled = true;
+
+  for (uint8_t i = 0; i < stepCount; i++) {
+    const ActionStep& step = steps[i];
+    if (step.actuator_id == 0xFF) continue;
+
+    uint8_t curvedVelocity = applyCurve(velocity, step.velocity_curve);
+
+    uint16_t value = 0;
+    switch ((ValueSource)step.value_source) {
+      case ValueSource::VELOCITY:
+        value = curvedVelocity;
+        break;
+      case ValueSource::FIXED:
+        value = step.value_fixed;
+        break;
+      case ValueSource::CC_VAR:
+        value = (globalVars && step.cc_index < MAX_GLOBAL_VARS) ? globalVars[step.cc_index] : 0;
+        if (value > 127) value = 127;
+        break;
+      case ValueSource::INVERTED_VELOCITY:
+        value = 127 - curvedVelocity;
+        break;
+      default:
+        value = curvedVelocity;
+        break;
+    }
+
+    uint32_t executeAt = timestamp + ((uint32_t)step.delay_ms * 1000);
+    CommandType cmdType = (CommandType)step.command_type;
+
+    if (cmdType == CommandType::PULSE) {
+      uint16_t minMs = step.duration_min_ms;
+      uint16_t maxMs = step.duration_max_ms;
+      if (maxMs < minMs) {
+        uint16_t t = minMs;
+        minMs = maxMs;
+        maxMs = t;
+      }
+
+      uint32_t durationUs = (maxMs > minMs)
+        ? map(curvedVelocity, 0, 127, (uint32_t)minMs * 1000, (uint32_t)maxMs * 1000)
+        : (uint32_t)maxMs * 1000;
+
+      if (!schedulePulseAt(step.actuator_id, value, durationUs, executeAt)) {
+        allScheduled = false;
+      }
+      continue;
+    }
+
+    ActuatorCommand cmd;
+    cmd.actuator_id = step.actuator_id;
+    cmd.command_type = (uint8_t)cmdType;
+    cmd.value = value;
+    cmd.duration = 0;
+    cmd.execute_at = executeAt;
+
+    if (!scheduleCommand(cmd)) {
+      allScheduled = false;
+    }
+  }
+
+  return allScheduled;
 }
 
 void Scheduler::update() {

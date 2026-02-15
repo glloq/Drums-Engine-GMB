@@ -83,6 +83,7 @@ void loadConfiguration();
 void compilePipelines();
 void loadLoops();
 void setupSchedulerTimer();
+void initTask(void* param);
 void rtCoreTask(void* param);
 void appCoreTask(void* param);
 
@@ -486,27 +487,10 @@ void loadLoops() {
 }
 
 // ============================================================================
-// Setup
+// Init Task - initialisation lourde dans une tache avec 32KB de stack
+// (le loopTask Arduino n'a que 8KB, insuffisant pour WiFi+JSON+Web+MIDI)
 // ============================================================================
-void setup() {
-  #if DEBUG_SERIAL
-  Serial.begin(DEBUG_BAUD);
-  delay(500);
-  #endif
-
-  // 0. LED de statut + bouton BOOT
-  statusLed.begin();
-  statusLed.setPattern(LedPattern::BOOTING);
-  pinMode(BOOT_BUTTON_PIN, INPUT_PULLUP);
-
-  DBGLN("============================================");
-  DBGLN("  Drums Engine - Modular RT Percussion");
-  DBGLN("============================================");
-  DBGLN("  Architecture: 6-layer pipeline");
-  DBGLN("  Scheduler: hw timer + ring buffer");
-  DBGLN("  RTOS: dual-core task separation");
-  DBGLN("============================================");
-
+void initTask(void* param) {
   // 1. Storage (LittleFS)
   if (!storage.begin()) {
     DBGLN("[FATAL] Storage init failed!");
@@ -586,13 +570,41 @@ void setup() {
   DBGLN("============================================");
 
   ErrorLog::info("Engine ready");
+
+  // Init terminee, supprimer cette tache (libere les 32KB de stack)
+  vTaskDelete(nullptr);
 }
 
 // ============================================================================
-// Main loop (fallback - les taches principales sont dans FreeRTOS tasks)
+// Setup - minimal, delegue l'init lourde a une tache avec plus de stack
+// ============================================================================
+void setup() {
+  #if DEBUG_SERIAL
+  Serial.begin(DEBUG_BAUD);
+  delay(500);
+  #endif
+
+  // LED de statut + bouton BOOT (leger, pas de risque de stack overflow)
+  statusLed.begin();
+  statusLed.setPattern(LedPattern::BOOTING);
+  pinMode(BOOT_BUTTON_PIN, INPUT_PULLUP);
+
+  DBGLN("============================================");
+  DBGLN("  Drums Engine - Modular RT Percussion");
+  DBGLN("============================================");
+  DBGLN("  Architecture: 6-layer pipeline");
+  DBGLN("  Scheduler: hw timer + ring buffer");
+  DBGLN("  RTOS: dual-core task separation");
+  DBGLN("============================================");
+
+  // Lancer l'initialisation lourde dans une tache dediee (32KB stack)
+  // Le loopTask Arduino n'a que 8KB, insuffisant pour WiFi+JSON+Web+MIDI
+  xTaskCreatePinnedToCore(initTask, "Init", 32768, nullptr, 5, nullptr, 1);
+}
+
+// ============================================================================
+// Main loop (inactif - tout tourne dans les FreeRTOS tasks)
 // ============================================================================
 void loop() {
-  // Le loop Arduino sert de watchdog / fallback
-  // Les taches principales tournent dans les FreeRTOS tasks
-  vTaskDelay(100); // Ceder le CPU, tout est dans les tasks
+  vTaskDelay(portMAX_DELAY);
 }

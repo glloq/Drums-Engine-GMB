@@ -29,6 +29,12 @@ Installer via Library Manager (Croquis > Inclure une bibliotheque > Gerer) :
 - **ESPAsyncWebServer** >= 1.2.3 : https://github.com/me-no-dev/ESPAsyncWebServer
 - **AsyncTCP** >= 1.1.1 : https://github.com/me-no-dev/AsyncTCP
 
+**Incluses avec ESP32 Arduino Core** (aucune installation requise) :
+- **DNSServer** - Pour le portail captif WiFi
+- **WiFi** - Gestion WiFi STA/AP
+- **ESPmDNS** - Service mDNS (.local)
+- **LittleFS** - Systeme de fichiers
+
 Telecharger les ZIP depuis GitHub et installer via :
 Croquis > Inclure une bibliotheque > Ajouter une bibliotheque .ZIP
 

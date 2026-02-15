@@ -33,11 +33,20 @@ public:
     _lastToggle = 0;
     _ledState = false;
     _blinkPhase = 0;
+
+    #ifdef DEBUG_SERIAL
+    Serial.printf("[LED] StatusLed initialized on GPIO %d\n", STATUS_LED_PIN);
+    #endif
   }
 
   void setPattern(LedPattern pattern) {
     _pattern = pattern;
     _blinkPhase = 0;
+
+    #ifdef DEBUG_SERIAL
+    const char* patternNames[] = {"OFF", "BOOTING", "AP_MODE", "CONNECTED", "ERROR_BLINK"};
+    Serial.printf("[LED] Pattern changed to: %s\n", patternNames[(uint8_t)pattern]);
+    #endif
   }
 
   LedPattern getPattern() const { return _pattern; }

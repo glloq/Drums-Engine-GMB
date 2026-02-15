@@ -111,6 +111,11 @@ input[type=checkbox] { width: auto; }
 .toast.success { border-left: 3px solid var(--success); }
 
 .empty-state { text-align: center; padding: 40px; color: var(--fg2); }
+
+.alarm-badge { padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; margin: 2px; display: inline-block; }
+.alarm-error { background: #f44336; color: white; }
+.alarm-warn { background: #ff9800; color: white; }
+.alarm-info { background: #2196f3; color: white; }
 </style>
 </head>
 <body>
@@ -170,6 +175,7 @@ input[type=checkbox] { width: auto; }
   <div class="panel" id="tab-system">
     <h2 style="margin-bottom:16px;">Systeme</h2>
     <div class="stat-grid" id="statGrid"></div>
+    <div id="status-alarms" style="margin-bottom:12px;"></div>
     <div class="grid-2">
       <div class="card">
         <h3>Actions</h3>
@@ -1359,6 +1365,19 @@ async function refreshStatus() {
     <div class="stat-card"><div class="stat-value">${Math.floor((data.uptime_s||0)/3600)}h${Math.floor(((data.uptime_s||0)%3600)/60)}m</div><div class="stat-label">Uptime</div></div>
     <div class="stat-card"><div class="stat-value">${data.loop_playing ? 'Lecture' : 'Arrete'}</div><div class="stat-label">Loop ${data.loop_playing ? data.loop_bpm + ' BPM' : ''}</div></div>
   `;
+
+  let alarms = '';
+  if (data.scheduler_overflow > 0)
+    alarms += '<span class="alarm-badge alarm-error">Scheduler overflow: ' + data.scheduler_overflow + '</span>';
+  if (data.cc_route_dropped > 0)
+    alarms += '<span class="alarm-badge alarm-warn">CC routes dropped: ' + data.cc_route_dropped + '</span>';
+  if (data.scheduler_max_jitter_us > 1000)
+    alarms += '<span class="alarm-badge alarm-warn">High jitter: ' + data.scheduler_max_jitter_us + 'us</span>';
+  if (data.free_heap < 20000)
+    alarms += '<span class="alarm-badge alarm-error">Low memory: ' + Math.round(data.free_heap/1024) + 'KB</span>';
+  if (alarms === '')
+    alarms = '<span class="alarm-badge alarm-info">All systems nominal</span>';
+  document.getElementById('status-alarms').innerHTML = alarms;
 }
 
 async function scanI2C() {

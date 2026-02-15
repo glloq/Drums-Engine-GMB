@@ -42,6 +42,7 @@ enum class ActuatorBehavior : uint8_t {
   COMB_BRUSH,            // Peigne/brosse
   PITCH_BEND,            // Tension de peau
   MOTOR_OPTICAL_TRACK,    // Moteur avec capteur optique
+  HIHAT_CONTROLLER,       // Servo hi-hat pedal controller (CC#4, splash detection)
   BEHAVIOR_COUNT
 };
 
@@ -338,6 +339,7 @@ inline const char* actuatorBehaviorName(ActuatorBehavior b) {
     case ActuatorBehavior::COMB_BRUSH:      return "Comb/Brush";
     case ActuatorBehavior::PITCH_BEND:      return "Pitch Bend";
     case ActuatorBehavior::MOTOR_OPTICAL_TRACK: return "Motor Optical";
+    case ActuatorBehavior::HIHAT_CONTROLLER:    return "Hi-Hat Controller";
     default:                               return "Unknown";
   }
 }

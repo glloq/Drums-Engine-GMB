@@ -56,7 +56,8 @@ static void actuatorConfigFromJson(const JsonObject& obj, ActuatorConfig& cfg) {
 
 bool Storage::saveActuators(const ActuatorFactory& factory) {
   JsonDocument doc;
-  JsonArray arr = doc.to<JsonArray>();
+  doc["version"] = 2;
+  JsonArray arr = doc["actuators"].to<JsonArray>();
 
   for (uint8_t i = 0; i < factory.getConfigCount(); i++) {
     JsonObject obj = arr.add<JsonObject>();
@@ -70,7 +71,17 @@ bool Storage::loadActuators(ActuatorFactory& factory) {
   JsonDocument doc;
   if (!_readJson(ACTUATORS_FILE, doc)) return false;
 
-  JsonArray arr = doc.as<JsonArray>();
+  JsonArray arr;
+  if (doc.is<JsonObject>() && doc["version"].is<int>()) {
+    // Version 2+: object wrapper with "actuators" array
+    DBGF("[Storage] Actuators config version %d\n", doc["version"].as<int>());
+    arr = doc["actuators"].as<JsonArray>();
+  } else {
+    // Legacy version 1: plain array at root
+    DBGLN("[Storage] Actuators config legacy format (v1)");
+    arr = doc.as<JsonArray>();
+  }
+
   uint8_t loaded = 0;
 
   for (JsonObject obj : arr) {
@@ -190,7 +201,8 @@ bool Storage::loadLegacyV4(ActuatorFactory& factory, InstrumentManager& mgr) {
 
 bool Storage::saveInstruments(const InstrumentManager& mgr) {
   JsonDocument doc;
-  JsonArray arr = doc.to<JsonArray>();
+  doc["version"] = 2;
+  JsonArray arr = doc["instruments"].to<JsonArray>();
   mgr.toJson(arr);
   return _writeJson(INSTRUMENTS_FILE, doc);
 }
@@ -198,7 +210,18 @@ bool Storage::saveInstruments(const InstrumentManager& mgr) {
 bool Storage::loadInstruments(InstrumentManager& mgr) {
   JsonDocument doc;
   if (!_readJson(INSTRUMENTS_FILE, doc)) return false;
-  JsonArray arr = doc.as<JsonArray>();
+
+  JsonArray arr;
+  if (doc.is<JsonObject>() && doc["version"].is<int>()) {
+    // Version 2+: object wrapper with "instruments" array
+    DBGF("[Storage] Instruments config version %d\n", doc["version"].as<int>());
+    arr = doc["instruments"].as<JsonArray>();
+  } else {
+    // Legacy version 1: plain array at root
+    DBGLN("[Storage] Instruments config legacy format (v1)");
+    arr = doc.as<JsonArray>();
+  }
+
   return mgr.fromJson(arr);
 }
 

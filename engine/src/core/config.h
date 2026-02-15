@@ -12,9 +12,8 @@
 // ============================================================================
 
 // --- WiFi ---
-#define WIFI_SSID         "MidiPercussion"
-#define WIFI_PASSWORD     "music1234"
-#define WIFI_AP_FALLBACK  true
+// Credentials are loaded from /wifi.json on LittleFS (see WiFiManager).
+// Only AP fallback defaults remain hardcoded here.
 #define WIFI_AP_SSID      "MidiPerc-Setup"
 #define WIFI_AP_PASSWORD  "midiperc"
 #define WIFI_HOSTNAME     "midipercussion"

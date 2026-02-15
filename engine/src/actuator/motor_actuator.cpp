@@ -1,20 +1,28 @@
 #include "motor_actuator.h"
 
+// --- Static member initialization ---
+volatile uint32_t MotorActuator::_isrEdgeCount = 0;
+MotorActuator* MotorActuator::_isrInstance = nullptr;
+portMUX_TYPE MotorActuator::_isrMux = portMUX_INITIALIZER_UNLOCKED;
+
 MotorActuator::MotorActuator(HalDriver* driver)
-  : _driver(driver), _currentSpeed(0),
-    _lastSensorState(false), _edgeCount(0), _targetEdges(0), _positionTracking(false) {}
+  : _driver(driver), _currentSpeed(0), _sensorPin(0),
+    _targetEdges(0), _positionTracking(false) {}
 
 void MotorActuator::init() {
   if (!_driver || !_driver->isReady()) return;
   _driver->pwmWrite(_config.hwPin, 0);
   _currentSpeed = 0;
   _active = false;
-  _edgeCount = 0;
   _targetEdges = 0;
   _positionTracking = false;
-  _lastSensorState = _driver->digitalRead(_config.hwAddress);
-  DBGF("[Actuator] Motor '%s' init (ch=%d, range=%d-%d)\n",
-       _config.name, _config.hwPin, _config.paramMin, _config.paramMax);
+
+  // Store sensor pin and configure as INPUT_PULLUP for interrupt use
+  _sensorPin = _config.hwAddress;
+  pinMode(_sensorPin, INPUT_PULLUP);
+
+  DBGF("[Actuator] Motor '%s' init (ch=%d, sensor pin=%d, range=%d-%d)\n",
+       _config.name, _config.hwPin, _sensorPin, _config.paramMin, _config.paramMax);
 }
 
 void MotorActuator::execute(const ActuatorCommand& cmd) {
@@ -47,17 +55,18 @@ void MotorActuator::execute(const ActuatorCommand& cmd) {
       uint16_t minEdges = (_config.paramMin == 0) ? 1 : _config.paramMin;
       uint16_t maxEdges = (_config.paramMax < minEdges) ? minEdges : _config.paramMax;
       _targetEdges = map(cmd.value, 0, 127, minEdges, maxEdges);
-      _edgeCount = 0;
       _positionTracking = (_targetEdges > 0);
-      _lastSensorState = _driver->digitalRead(_config.hwAddress);
+
+      // Arm the hardware interrupt for optical edge counting
+      _attachOpticalISR();
 
       uint16_t drive = (_config.paramDefault == 0) ? 128 : _config.paramDefault;
       if (drive > 255) drive = 255;
       _driver->pwmWrite(_config.hwPin, drive);
       _currentSpeed = drive;
       markActivation(now);
-      DBGF("[Actuator] Motor optical '%s' target edges=%lu (sensor pin=%d)\n",
-           _config.name, (unsigned long)_targetEdges, _config.hwAddress);
+      DBGF("[Actuator] Motor optical '%s' target edges=%lu (sensor pin=%d, ISR armed)\n",
+           _config.name, (unsigned long)_targetEdges, _sensorPin);
       break;
     }
 
@@ -70,37 +79,72 @@ void MotorActuator::execute(const ActuatorCommand& cmd) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// ISR - called on RISING edge of the optical sensor
+// Must be in IRAM, minimal work only (increment counter)
+// ---------------------------------------------------------------------------
+void IRAM_ATTR MotorActuator::_opticalISR() {
+  portENTER_CRITICAL_ISR(&_isrMux);
+  _isrEdgeCount++;
+  portEXIT_CRITICAL_ISR(&_isrMux);
+}
+
+// ---------------------------------------------------------------------------
+// Attach / Detach helpers
+// ---------------------------------------------------------------------------
+void MotorActuator::_attachOpticalISR() {
+  // Reset edge count atomically
+  portENTER_CRITICAL(&_isrMux);
+  _isrEdgeCount = 0;
+  portEXIT_CRITICAL(&_isrMux);
+
+  _isrInstance = this;
+  attachInterrupt(digitalPinToInterrupt(_sensorPin), _opticalISR, RISING);
+}
+
+void MotorActuator::_detachOpticalISR() {
+  detachInterrupt(digitalPinToInterrupt(_sensorPin));
+  _isrInstance = nullptr;
+}
+
+// ---------------------------------------------------------------------------
+// Optical tracking - reads ISR edge count, checks target, enforces timeout
+// ---------------------------------------------------------------------------
 void MotorActuator::_updateOpticalTracking(uint32_t nowUs) {
   if (!_positionTracking || _targetEdges == 0 || !_active) return;
 
-  bool sensor = _driver->digitalRead(_config.hwAddress);
-  if (!_lastSensorState && sensor) {
-    _edgeCount++;
-    if (_edgeCount >= _targetEdges) {
-      DBGF("[Actuator] Motor optical '%s' reached target (%lu)\n",
-           _config.name, (unsigned long)_edgeCount);
-      stop();
-      return;
-    }
-  }
-  _lastSensorState = sensor;
+  // Atomically read the edge count from the ISR
+  uint32_t edges;
+  portENTER_CRITICAL(&_isrMux);
+  edges = _isrEdgeCount;
+  portEXIT_CRITICAL(&_isrMux);
 
-  // safety against stalled sensor while tracking
+  if (edges >= _targetEdges) {
+    DBGF("[Actuator] Motor optical '%s' reached target (%lu edges)\n",
+         _config.name, (unsigned long)edges);
+    stop();
+    return;
+  }
+
+  // Safety against stalled sensor while tracking
   uint32_t elapsed = nowUs - _activationStartUs;
   if (elapsed >= MOTOR_MAX_CONTINUOUS_US) {
-    DBGF("[Safety] Motor optical '%s' timeout waiting for sensor (%lu edges)\n",
-         _config.name, (unsigned long)_edgeCount);
+    DBGF("[Safety] Motor optical '%s' timeout waiting for sensor (%lu/%lu edges)\n",
+         _config.name, (unsigned long)edges, (unsigned long)_targetEdges);
     stop();
   }
 }
 
 void MotorActuator::stop() {
   if (!_driver || !_driver->isReady()) return;
+
+  // Detach ISR before stopping the motor to avoid spurious counts
+  _detachOpticalISR();
+
   _driver->pwmWrite(_config.hwPin, 0);
   _currentSpeed = 0;
   _positionTracking = false;
   _targetEdges = 0;
-  _edgeCount = 0;
   markDeactivation();
 }
 

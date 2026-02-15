@@ -29,6 +29,11 @@ void ServoActuator::execute(const ActuatorCommand& cmd) {
         if (target < _config.paramMin) target = _config.paramMin;
         if (target > _config.paramMax) target = _config.paramMax;
         angle = (uint8_t)target;
+      } else if (_config.behavior == ActuatorBehavior::HIHAT_CONTROLLER) {
+        // CC#4 hi-hat control: 0=open (paramMin), 127=closed (paramMax)
+        _lastCcValue = cmd.value;
+        angle = map(cmd.value, 0, 127, _config.paramMin, _config.paramMax);
+        _splashActive = false;  // Cancel any active splash on new CC
       } else {
         angle = map(cmd.value, 0, 127, _config.paramMin, _config.paramMax);
       }
@@ -39,6 +44,15 @@ void ServoActuator::execute(const ActuatorCommand& cmd) {
     }
 
     case CommandType::PULSE: {
+      if (_config.behavior == ActuatorBehavior::HIHAT_CONTROLLER) {
+        // Splash: quickly open then return to current position
+        _splashReturnAngle = _currentAngle;
+        _splashActive = true;
+        _splashStartUs = now;
+        _moveToAngle(_config.paramMin);  // Open position
+        markActivation(now);
+        break;
+      }
       uint8_t strikeAngle = map(cmd.value, 0, 127, _config.paramMin, _config.paramMax);
       _combBrushRunning = false;
       _moveToAngle(strikeAngle);
@@ -93,6 +107,13 @@ bool ServoActuator::checkTimeout(uint32_t nowUs) {
       _moveToAngle(_combBrushHigh ? _config.paramMax : _config.paramMin);
       return false;
     }
+  }
+
+  // Hi-hat splash return
+  if (_splashActive && (nowUs - _splashStartUs >= SPLASH_DURATION_US)) {
+    _splashActive = false;
+    _moveToAngle(_splashReturnAngle);
+    return false;
   }
 
   if (_active) {

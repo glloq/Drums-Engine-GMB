@@ -126,7 +126,7 @@ bool PipelineCompiler::compileBlock(const JsonObject& json, CompiledBlock& block
   } else if (strcmp(typeStr, "time") == 0) {
     block.type = (uint8_t)BlockType::TIME;
   } else if (strcmp(typeStr, "output") == 0) {
-    block.type = (uint8_t)BlockType::OUTPUT;
+    block.type = (uint8_t)BlockType::OUTPUT_BLOCK;
   } else {
     return false;
   }

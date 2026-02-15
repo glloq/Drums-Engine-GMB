@@ -157,7 +157,7 @@ void EventProcessor::_executePipeline(uint8_t pipelineIdx, uint8_t value, uint32
         break;
       }
 
-      case BlockType::OUTPUT: {
+      case BlockType::OUTPUT_BLOCK: {
         _processOutputBlock(block, currentValue, timestamp, delayAccum);
         return;
       }

@@ -2,6 +2,7 @@
 #define ENGINE_TYPES_H
 
 #include <Arduino.h>
+#include "config.h"  // Include config.h first to get all macro definitions
 
 // ============================================================================
 // Drums Engine - Types fondamentaux
@@ -21,7 +22,7 @@ enum class BlockType : uint8_t {
   CONDITION = 0,
   TRANSFORM,
   TIME,
-  OUTPUT
+  OUTPUT_BLOCK  // Renamed from OUTPUT to avoid conflict with Arduino OUTPUT macro
 };
 
 // --- Types d'actionneurs ---
@@ -222,7 +223,7 @@ constexpr uint8_t TIME_PULSE   = 0;  // Impulsion
 constexpr uint8_t TIME_DELAY   = 1;  // Delai
 constexpr uint8_t TIME_RAMP    = 2;  // Ramping
 
-// Sous-types pour OUTPUT
+// Sous-types pour OUTPUT_BLOCK
 constexpr uint8_t OUT_PULSE    = 0;  // Sortie impulsion
 constexpr uint8_t OUT_POSITION = 1;  // Sortie position
 constexpr uint8_t OUT_PWM      = 2;  // Sortie PWM

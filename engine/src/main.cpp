@@ -558,10 +558,10 @@ void setup() {
 
   // 10. FreeRTOS tasks
   // RT Core: Scheduler + MIDI sur Core 1, priorite haute
-  xTaskCreatePinnedToCore(rtCoreTask, "RT_Core", 8192, nullptr, 5, nullptr, 1);
+  xTaskCreatePinnedToCore(rtCoreTask, "RT_Core", 16384, nullptr, 5, nullptr, 1);
 
   // App Core: Web + Loop sur Core 0, priorite basse
-  xTaskCreatePinnedToCore(appCoreTask, "App_Core", 8192, nullptr, 2, nullptr, 0);
+  xTaskCreatePinnedToCore(appCoreTask, "App_Core", 16384, nullptr, 2, nullptr, 0);
 
   DBGLN("============================================");
   DBGLN("  Engine Ready!");
@@ -577,11 +577,12 @@ void setup() {
   DBGF("  MCP modules:  %d\n", mcpCount);
   DBGF("  PCA modules:  %d\n", pcaCount);
   DBGF("  Scheduler:    %d Hz hw timer\n", SCHEDULER_TICK_HZ);
-  DBGF("  RTOS tasks:   RT_Core (pri 5, core 1)\n");
-  DBGF("                App_Core (pri 2, core 0)\n");
+  DBGF("  RTOS tasks:   RT_Core (pri 5, core 1, 16KB stack)\n");
+  DBGF("                App_Core (pri 2, core 0, 16KB stack)\n");
   DBGF("  LED statut:   GPIO %d (%s)\n", STATUS_LED_PIN,
        wifiManager.isAPMode() ? "clignotement lent = AP" : "fixe = connecte");
   DBGF("  Bouton BOOT:  GPIO %d (3s = hotspot)\n", BOOT_BUTTON_PIN);
+  DBGF("  Free heap:    %d bytes\n", ESP.getFreeHeap());
   DBGLN("============================================");
 
   ErrorLog::info("Engine ready");

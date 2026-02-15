@@ -434,12 +434,16 @@ let midiNotes = [];
 let statusData = {};
 let currentLoopIdx = -1;
 let capabilities = null;
+let apiToken = '';
 
 // ====================================================================
 // API helper
 // ====================================================================
 async function api(path, method='GET', body=null) {
   const opts = {method, headers: {'Content-Type':'application/json'}};
+  if (apiToken && method !== 'GET') {
+    opts.headers['Authorization'] = 'Bearer ' + apiToken;
+  }
   if (body) opts.body = JSON.stringify(body);
   try {
     const r = await fetch('/api/' + path, opts);
@@ -460,6 +464,10 @@ async function api(path, method='GET', body=null) {
 // Init
 // ====================================================================
 async function init() {
+  // Fetch API auth token (required for POST/PUT/DELETE)
+  const authData = await api('auth-token');
+  if (authData && authData.token) apiToken = authData.token;
+
   populateMidiSelects();
   await Promise.all([loadMidiNotes(), loadCapabilities(), loadActuators(), loadInstruments(), loadLoops()]);
   refreshStatus();

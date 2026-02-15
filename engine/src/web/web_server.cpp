@@ -1,4 +1,5 @@
 #include "web_server.h"
+#include "index_html_gz.h"
 
 WebServerManager::WebServerManager(InstrumentManager* instrMgr, ActuatorManager* actMgr,
                                     ActuatorFactory* actFactory,
@@ -33,9 +34,16 @@ void WebServerManager::update() {
 }
 
 void WebServerManager::_setupRoutes() {
-  // UI web depuis LittleFS
+  // UI web: serve from LittleFS if available, otherwise from embedded PROGMEM gzip
   _server.on("/", HTTP_GET, [](AsyncWebServerRequest* req) {
-    req->send(LittleFS, "/index.html", "text/html");
+    if (LittleFS.exists("/index.html")) {
+      req->send(LittleFS, "/index.html", "text/html");
+    } else {
+      AsyncWebServerResponse* response = req->beginResponse_P(
+        200, "text/html", INDEX_HTML_GZ, INDEX_HTML_GZ_LEN);
+      response->addHeader("Content-Encoding", "gzip");
+      req->send(response);
+    }
   });
   _server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
 

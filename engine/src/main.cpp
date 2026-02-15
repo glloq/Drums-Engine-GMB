@@ -331,9 +331,6 @@ void compilePipelines() {
   // Reinitialiser
   memset(lookup.note_to_pipeline, 0xFF, sizeof(lookup.note_to_pipeline));
   lookup.pipeline_count = 0;
-  lookup.cc_route_count = 0;
-  memset(lookup.cc_to_first, 0xFF, sizeof(lookup.cc_to_first));
-  memset(lookup.cc_to_count, 0, sizeof(lookup.cc_to_count));
 
   // Pour chaque instrument, creer un pipeline par defaut
   // (tant que l'UI de construction de pipeline n'est pas prete)
@@ -413,43 +410,8 @@ void compilePipelines() {
     lookup.pipeline_count++;
   }
 
-  // Compiler la table de routage CC (phase 2)
-  for (uint8_t cc = 0; cc < 128; cc++) {
-    uint8_t first = lookup.cc_route_count;
-    uint8_t count = 0;
-
-    for (uint8_t p = 0; p < lookup.pipeline_count; p++) {
-      const CompiledPipeline& pipe = lookup.pipelines[p];
-      for (uint8_t i = 0; i < pipe.cc_binding_count; i++) {
-        const CCBinding& binding = pipe.cc_bindings[i];
-        if (binding.cc_number != cc || binding.actuator_id == 0xFF) continue;
-        if (lookup.cc_route_count >= MAX_CC_ROUTES) break;
-
-        CCRoutingEntry& route = lookup.cc_routes[lookup.cc_route_count++];
-        route.actuator_id = binding.actuator_id;
-        route.command_type = binding.command_type;
-        route.range_min = binding.range_min;
-        route.range_max = binding.range_max;
-        route.curve = binding.curve;
-        route.inverted = binding.inverted;
-        count++;
-      }
-      if (lookup.cc_route_count >= MAX_CC_ROUTES) break;
-    }
-
-    if (count > 0) {
-      lookup.cc_to_first[cc] = first;
-      lookup.cc_to_count[cc] = count;
-    }
-
-    if (lookup.cc_route_count >= MAX_CC_ROUTES) {
-      DBGLN("[Pipeline] CC route table full, truncating");
-      break;
-    }
-  }
-
-  DBGF("[Pipeline] Compiled %d pipelines from %d instruments, %d CC routes\n",
-       lookup.pipeline_count, instrumentManager.getInstrumentCount(), lookup.cc_route_count);
+  DBGF("[Pipeline] Compiled %d pipelines from %d instruments\n",
+       lookup.pipeline_count, instrumentManager.getInstrumentCount());
 }
 
 // ============================================================================

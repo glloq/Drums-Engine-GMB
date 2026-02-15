@@ -44,7 +44,6 @@ private:
   Scheduler* _scheduler;
   EngineState* _state;
   PipelineLookup _lookup;
-  uint32_t _lastCcDispatchUs[128];
 
   // Executer un pipeline sur une valeur
   void _executePipeline(uint8_t pipelineIdx, uint8_t value, uint32_t timestamp);

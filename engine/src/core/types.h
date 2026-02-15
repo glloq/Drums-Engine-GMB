@@ -230,21 +230,6 @@ constexpr uint8_t CURVE_EXPO   = 1;
 constexpr uint8_t CURVE_LOG    = 2;
 
 // --- Pipeline compile ---
-
-
-struct CCRoutingEntry {
-  uint8_t actuator_id;
-  uint8_t command_type;
-  uint8_t range_min;
-  uint8_t range_max;
-  uint8_t curve;
-  bool inverted;
-
-  CCRoutingEntry()
-    : actuator_id(0xFF), command_type((uint8_t)CommandType::POSITION),
-      range_min(0), range_max(127), curve(0), inverted(false) {}
-};
-
 struct CompiledPipeline {
   uint8_t block_count;
   uint8_t output_actuator_id;   // Actionneur de sortie
@@ -269,15 +254,8 @@ struct PipelineLookup {
   CompiledPipeline pipelines[MAX_PIPELINES];
   uint8_t pipeline_count;
 
-  CCRoutingEntry cc_routes[MAX_CC_ROUTES];
-  uint8_t cc_route_count;
-  uint8_t cc_to_first[128];          // 0xFF = aucun
-  uint8_t cc_to_count[128];          // nombre d'entrees consecutives
-
-  PipelineLookup() : pipeline_count(0), cc_route_count(0) {
+  PipelineLookup() : pipeline_count(0) {
     memset(note_to_pipeline, 0xFF, sizeof(note_to_pipeline));
-    memset(cc_to_first, 0xFF, sizeof(cc_to_first));
-    memset(cc_to_count, 0, sizeof(cc_to_count));
   }
 };
 

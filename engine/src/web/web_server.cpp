@@ -90,6 +90,13 @@ void WebServerManager::_setupRoutes() {
       if (index == 0) _handleTestInstrument(req, data, len);
     });
 
+  _server.on("/api/instruments/test-action", HTTP_POST,
+    [](AsyncWebServerRequest* req) {},
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) _handleTestInstrumentAction(req, data, len);
+    });
+
   _server.on("/api/test/actuator", HTTP_POST,
     [](AsyncWebServerRequest* req) {},
     nullptr,
@@ -363,6 +370,48 @@ void WebServerManager::_handleTestInstrument(AsyncWebServerRequest* req, uint8_t
 }
 
 // --- Loops ---
+
+void WebServerManager::_handleTestInstrumentAction(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
+  JsonDocument doc;
+  if (deserializeJson(doc, data, len)) {
+    _sendError(req, 400, "Invalid JSON");
+    return;
+  }
+
+  uint8_t id = doc["id"] | 0xFF;
+  const char* eventType = doc["event"] | "on";
+  uint8_t index = doc["index"] | 0;
+  uint8_t velocity = doc["velocity"] | 80;
+
+  InstrumentConfig* inst = _instrMgr->getInstrument(id);
+  if (!inst) {
+    _sendError(req, 404, "Instrument not found");
+    return;
+  }
+
+  const ActionStep* steps = nullptr;
+  uint8_t count = 0;
+  if (strcmp(eventType, "off") == 0) {
+    steps = inst->noteOffActions;
+    count = inst->noteOffCount;
+  } else {
+    steps = inst->noteOnActions;
+    count = inst->noteOnCount;
+  }
+
+  if (index >= count) {
+    _sendError(req, 400, "Action index out of range");
+    return;
+  }
+
+  bool ok = _scheduler->scheduleActionSteps(&steps[index], 1, velocity, micros(), nullptr);
+  if (!ok) {
+    _sendError(req, 507, "Scheduler queue full");
+    return;
+  }
+
+  _sendError(req, 200, "Action test scheduled");
+}
 
 void WebServerManager::_handleGetLoops(AsyncWebServerRequest* req) {
   JsonDocument doc;

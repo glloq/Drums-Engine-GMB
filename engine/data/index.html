@@ -778,6 +778,8 @@ function renderInstruments() {
         </span>
         <span>
           <button class="btn btn-sm btn-success" onclick="testInstrument(${inst.id})">Test</button>
+          <button class="btn btn-sm btn-secondary" onclick="testInstrumentAction(${inst.id}, 'on', 0)">Test On#1</button>
+          <button class="btn btn-sm btn-secondary" onclick="testInstrumentAction(${inst.id}, 'off', 0)">Test Off#1</button>
           <button class="btn btn-sm btn-secondary" onclick="editInstrument(${inst.id})">Modifier</button>
           <button class="btn btn-sm btn-danger" onclick="deleteInstrument(${inst.id})">Suppr</button>
         </span>
@@ -1008,6 +1010,16 @@ async function testInstrument(id) {
   toast('Test envoye', 'success');
 }
 
+async function testInstrumentAction(id, eventType='on', index=0) {
+  const ok = await api('instruments/test-action', 'POST', {
+    id: id,
+    event: eventType,
+    index: index,
+    velocity: 90
+  });
+  if (ok) toast('Test action programme', 'success');
+}
+
 // ====================================================================
 // MAPPINGS (read-only pipeline visualization)
 // ====================================================================
@@ -1018,17 +1030,19 @@ const BLOCK_TYPE_NAMES = {
   3: {name:'OUTPUT', cls:'out', subtypes:{0:'Pulse',1:'Position',2:'PWM'}}
 };
 
-function refreshMappings() {
-  renderMappings();
+async function refreshMappings() {
+  await renderMappings();
   toast('Mappings actualises', 'success');
 }
 
-function renderMappings() {
+async function renderMappings() {
   const el = document.getElementById('mappingList');
   if (instruments.length === 0) {
     el.innerHTML = '<div class="empty-state"><p>Aucun instrument configure</p></div>';
     return;
   }
+
+  const ccRouteData = await api('cc-routes');
 
   el.innerHTML = instruments.filter(inst => inst.enabled).map(inst => {
     const noteInfo = midiNotes.find(n => n.note === inst.midiNote);
@@ -1073,6 +1087,14 @@ function renderMappings() {
       ${pipelineHtml}
     </div>`;
   }).join('');
+
+  if (ccRouteData && ccRouteData.routes) {
+    const routeCards = ccRouteData.routes.map(r => {
+      const entries = (r.entries || []).map(e => `Act#${e.actuatorId} cmd=${e.commandType} [${e.rangeMin}-${e.rangeMax}]`).join(' | ');
+      return `<div class="list-item"><strong>CC${r.cc}</strong> → ${entries || '<em>aucune entree</em>'}</div>`;
+    }).join('');
+    el.innerHTML += `<div class="card"><h3>Routage CC compile (${ccRouteData.count||0})</h3>${routeCards || '<div class="hint">Aucune route CC</div>'}</div>`;
+  }
 }
 
 // ====================================================================
@@ -1269,7 +1291,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     tab.classList.add('active');
     document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
     // Refresh mappings when switching to that tab
-    if (tab.dataset.tab === 'mappings') renderMappings();
+    if (tab.dataset.tab === 'mappings') refreshMappings();
   });
 });
 

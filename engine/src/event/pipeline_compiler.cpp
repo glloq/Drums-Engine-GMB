@@ -162,12 +162,17 @@ bool PipelineCompiler::compileAll(const JsonArray& instruments, PipelineLookup& 
 
     JsonArray pipelineBlocks = inst["pipeline"].as<JsonArray>();
     if (pipelineBlocks.isNull()) {
+      pipeline.output_actuator_id = 0xFF;
+
       JsonArray actuators = inst["actuators"].as<JsonArray>();
       if (!actuators.isNull() && actuators.size() > 0) {
         JsonObject firstAct = actuators[0].as<JsonObject>();
-        pipeline.output_actuator_id = firstAct["id"] | 0;
-      } else {
-        pipeline.output_actuator_id = 0xFF;
+        pipeline.output_actuator_id = firstAct["id"] | 0xFF;
+      }
+
+      JsonArray actuatorIds = inst["actuatorIds"].as<JsonArray>();
+      if (pipeline.output_actuator_id == 0xFF && !actuatorIds.isNull() && actuatorIds.size() > 0) {
+        pipeline.output_actuator_id = actuatorIds[0] | 0xFF;
       }
     } else {
       pipeline.output_actuator_id = inst["outputActuatorId"] | 0;

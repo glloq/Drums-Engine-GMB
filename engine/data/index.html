@@ -817,13 +817,27 @@ function defaultCcBinding() {
   };
 }
 
-function showCreateInstrumentFromTemplate() {
-  const key = prompt('Template: kick / hihat / cymbalMute', 'kick');
-  if (!key || !INSTRUMENT_TEMPLATES[key]) {
-    toast('Template inconnu', 'error');
+async function showCreateInstrumentFromTemplate() {
+  const templates = await api('templates');
+  if (!templates || templates.length === 0) {
+    toast('Aucun template disponible', 'error');
     return;
   }
-  showAddInstrument(INSTRUMENT_TEMPLATES[key]);
+
+  const names = templates.map(t => t.id).join(' / ');
+  const key = prompt('Template: ' + names, templates[0].id);
+  if (!key) return;
+
+  const localMap = { kick: 'kick', hihat: 'hihat', cymbal_mute: 'cymbalMute' };
+  if (INSTRUMENT_TEMPLATES[localMap[key]]) {
+    showAddInstrument(INSTRUMENT_TEMPLATES[localMap[key]]);
+    return;
+  }
+
+  const created = await api('instruments/from-template', 'POST', {template: key});
+  if (!created) return;
+  await loadInstruments();
+  toast('Instrument créé depuis template', 'success');
 }
 
 function showAddInstrument(template=null) {

@@ -15,6 +15,7 @@
 #include "../storage/storage.h"
 #include "../scheduler/scheduler.h"
 #include "../event/event_processor.h"
+#include "../event/pipeline_compiler.h"
 
 // ============================================================================
 // WebServerManager - REST API + WebSocket
@@ -78,6 +79,8 @@ private:
   void _handleGetMidiNotes(AsyncWebServerRequest* req);
   void _handleGetCapabilities(AsyncWebServerRequest* req);
   void _handleGetCcRoutes(AsyncWebServerRequest* req);
+  void _handleGetTemplates(AsyncWebServerRequest* req);
+  void _handleCreateInstrumentFromTemplate(AsyncWebServerRequest* req, uint8_t* data, size_t len);
   void _handleSaveConfig(AsyncWebServerRequest* req);
 
   // WebSocket
@@ -91,6 +94,7 @@ private:
   void _wsBroadcast(const char* type, const JsonObject& data);
 
   bool _validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg);
+  void _recompileLookupFromInstruments();
 };
 
 #endif // WEB_SERVER_H

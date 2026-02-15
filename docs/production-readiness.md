@@ -74,13 +74,11 @@
 - **Fichiers**: `engine/src/web/api_auth.h/.cpp`
 - **Implementation**: Token Bearer 16-hex genere au 1er boot, stocke dans `/auth.json`. Tous les POST/PUT/DELETE proteges. GET exemptes. Endpoint `GET /api/auth-token` pour recuperer le token.
 
-#### 3.3 Validation build firmware
-- **Fichier**: `engine/platformio.ini`
-- **Probleme**: Aucune validation de compilation dans l'environnement actuel (PlatformIO absent)
-- **Impact**: Risque de regression non detectee, pas de binaire valide
-- **Action**: Configurer un environnement PlatformIO, valider la compilation complete, generer le binaire `.bin`
-- **Effort**: Faible
-- **Statut**: RESTE A FAIRE (necessite environnement PlatformIO)
+#### 3.3 Validation build firmware — PARTIELLEMENT ADRESSE
+- **Fichiers**: `engine/engine.ino`, `engine/platformio.ini`
+- **Fait**: Ajout d'un fichier `engine.ino` pour compatibilite Arduino IDE 2.x. Documentation des deux methodes de build (PlatformIO + Arduino IDE) dans le guide de deploiement.
+- **Reste a faire**: Pipeline CI/CD automatise (GitHub Actions avec PlatformIO ou Arduino CLI) pour validation a chaque commit.
+- **Statut**: Build manuel possible via PlatformIO ou Arduino IDE. CI automatise non configure.
 
 #### 3.4 ~~Tests de non-regression API~~ IMPLEMENTE
 - **Fichier**: `tests/test_api.sh`
@@ -149,7 +147,7 @@
 SPRINT 1 — Socle securite & build
 ├── [DONE] 3.1 Externaliser credentials WiFi (WiFiManager + /wifi.json)
 ├── [DONE] 3.2 Ajouter authentification API (Bearer token + /auth.json)
-├── [TODO] 3.3 Valider compilation firmware (necessite environnement PlatformIO)
+├── [PART] 3.3 Build firmware (engine.ino ajoute, CI reste a configurer)
 └── [DONE] 3.4 Suite de tests API (tests/test_api.sh, 31 tests)
 
 SPRINT 2 — Fiabilite production

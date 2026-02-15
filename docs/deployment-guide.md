@@ -37,19 +37,64 @@ Ce guide couvre l'installation, la compilation, le flash et la mise en service d
 
 ## 2. Installation de l'environnement
 
-### PlatformIO
+### Option A — PlatformIO (recommandee)
 
-PlatformIO est requis pour compiler et flasher le firmware. Deux options :
+PlatformIO gere automatiquement les dependances et la compilation.
 
-**Option A — Extension VSCode (recommandee) :**
+**Extension VSCode :**
 1. Installer [Visual Studio Code](https://code.visualstudio.com/)
 2. Installer l'extension "PlatformIO IDE" depuis le marketplace
 3. Redemarrer VSCode
 
-**Option B — CLI :**
+**CLI :**
 ```bash
 pip install platformio
 ```
+
+### Option B — Arduino IDE 2.x
+
+L'Arduino IDE est une alternative plus accessible. Le fichier `engine/engine.ino` fournit le point d'entree.
+
+**1. Installer Arduino IDE 2.x** depuis [arduino.cc](https://www.arduino.cc/en/software)
+
+**2. Ajouter le support ESP32 :**
+- Fichier > Preferences > URLs de gestionnaire de cartes, ajouter :
+  ```
+  https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+  ```
+- Outils > Board Manager > Installer "esp32 by Espressif Systems" (>= 2.0.0)
+- Selectionner la carte : **ESP32 Dev Module**
+
+**3. Installer les bibliotheques** via Library Manager (Croquis > Inclure une bibliotheque > Gerer) :
+
+| Bibliotheque | Version | Auteur |
+|---|---|---|
+| ArduinoJson | >= 7.0.0 | bblanchon |
+| ESPAsyncWebServer | >= 1.2.3 | me-no-dev |
+| AsyncTCP | >= 1.1.1 | me-no-dev |
+| AppleMIDI | >= 3.2.0 | lathoub |
+| MIDI Library | >= 5.0.2 | FortySevenEffects |
+| Adafruit MCP23017 | >= 2.3.0 | Adafruit |
+| Adafruit PWM Servo Driver | >= 3.0.0 | Adafruit |
+
+> **Note :** ESPAsyncWebServer et AsyncTCP ne sont pas dans le Library Manager officiel. Il faut les installer manuellement en telechargeant les `.zip` depuis GitHub et via Croquis > Inclure une bibliotheque > Ajouter une bibliotheque .ZIP.
+
+**4. Parametres de la carte** (Outils) :
+
+| Parametre | Valeur |
+|---|---|
+| Board | ESP32 Dev Module |
+| Flash Size | 4MB |
+| Partition Scheme | Default 4MB with spiffs |
+| Upload Speed | 921600 |
+
+**5. Ouvrir le projet :**
+- Fichier > Ouvrir > selectionner `engine/engine.ino`
+- Arduino IDE compilera automatiquement tous les `.cpp` dans `src/`
+
+**6. Uploader le filesystem (LittleFS) :**
+- Installer le plugin [ESP32 LittleFS Data Upload](https://github.com/lorol/arduino-esp32littlefs-plugin)
+- Outils > ESP32 Sketch Data Upload
 
 ### Cloner le repository
 
@@ -63,6 +108,7 @@ cd Drums-Engine-MIDI
 ```
 Drums-Engine-MIDI/
 ├── engine/                  # Firmware ESP32
+│   ├── engine.ino           # Point d'entree Arduino IDE
 │   ├── platformio.ini       # Configuration PlatformIO
 │   ├── src/                 # Code source firmware
 │   │   ├── main.cpp
@@ -85,48 +131,41 @@ Drums-Engine-MIDI/
 
 ## 3. Compilation et flash du firmware
 
-Toutes les commandes suivantes sont a executer depuis le repertoire `engine/` :
+### Avec PlatformIO
+
+Toutes les commandes depuis le repertoire `engine/` :
 
 ```bash
 cd engine
-```
 
-### Compiler le firmware
-
-```bash
+# Compiler
 pio run
-```
 
-Cela telecharge automatiquement les dependances (ArduinoJson, ESPAsyncWebServer, AppleMIDI, etc.) et compile le firmware.
-
-### Flasher le firmware sur l'ESP32
-
-```bash
+# Flasher le firmware
 pio run -t upload
-```
 
-- Vitesse d'upload : **921600 baud**
-- Table de partitions : `default.csv`
-- Assurez-vous que l'ESP32 est connecte en USB et que le port serie est detecte
-
-### Uploader le filesystem (UI web)
-
-L'interface web est stockee sur la partition LittleFS de l'ESP32 :
-
-```bash
+# Uploader le filesystem (UI web)
 pio run -t uploadfs
-```
 
-Cette commande uploade le contenu du dossier `data/` (fichiers HTML/CSS/JS de l'UI web) sur la partition LittleFS.
-
-### Moniteur serie
-
-```bash
+# Moniteur serie
 pio device monitor
 ```
 
-- Vitesse : **115200 baud**
-- Affiche les logs de demarrage, l'adresse IP, le token API, et les diagnostics runtime
+PlatformIO telecharge automatiquement les dependances. Vitesse upload : **921600 baud**.
+
+### Avec Arduino IDE
+
+1. Ouvrir `engine/engine.ino` dans Arduino IDE 2.x
+2. **Compiler** : Croquis > Verifier/Compiler (Ctrl+R)
+3. **Flasher** : Croquis > Telecharger (Ctrl+U)
+4. **Filesystem** : Outils > ESP32 Sketch Data Upload (plugin LittleFS requis)
+5. **Moniteur serie** : Outils > Moniteur serie (**115200 baud**)
+
+> Le fichier `.ino` est vide — `setup()` et `loop()` sont fournis par `src/main.cpp`. Arduino IDE compile automatiquement tous les `.cpp` dans `src/`.
+
+### Sortie attendue au boot
+
+Le moniteur serie affiche les logs de demarrage, l'adresse IP, le token API, et les diagnostics runtime.
 
 ---
 
@@ -328,7 +367,10 @@ Le canal par defaut est le **canal 10** (convention General MIDI pour les percus
 Le moniteur serie est l'outil principal de diagnostic :
 
 ```bash
+# PlatformIO
 cd engine && pio device monitor
+
+# Arduino IDE : Outils > Moniteur serie
 ```
 
 Vitesse : **115200 baud**. Affiche les messages de demarrage, les erreurs, et l'activite MIDI en temps reel.
@@ -367,15 +409,15 @@ Les logs utilisent un ring buffer en memoire. Les entrees les plus anciennes son
 
 Pour effacer toute la configuration (WiFi, actionneurs, instruments, token) et repartir de zero :
 
+**PlatformIO :**
 ```bash
 cd engine && pio run -t erase
-```
-
-Cela efface l'integralite de la memoire flash. Il faudra ensuite re-flasher le firmware et le filesystem :
-
-```bash
 pio run -t upload && pio run -t uploadfs
 ```
+
+**Arduino IDE :**
+- Outils > Erase All Flash Before Sketch Upload > Enabled
+- Re-telecharger le firmware puis le filesystem
 
 ### LED de statut
 

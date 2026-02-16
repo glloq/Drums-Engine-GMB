@@ -187,6 +187,20 @@ input[type=checkbox] { width: auto; }
         <div id="i2cInfo" style="margin-top:12px;font-size:0.85em;color:var(--fg2);"></div>
       </div>
       <div class="card">
+        <h3>Volume Global</h3>
+        <div style="margin-top:12px;">
+          <label>Volume principal (0-127)</label>
+          <div style="display:flex;gap:12px;align-items:center;margin-top:8px;">
+            <input type="range" id="globalVolume" min="0" max="127" value="127"
+                   oninput="updateGlobalVolume(this.value)" style="flex:1;">
+            <span id="globalVolumeDisplay" style="min-width:40px;text-align:right;font-weight:bold;color:var(--accent);">127</span>
+          </div>
+          <div class="hint" style="margin-top:8px;">R\u00e9duit la v\u00e9locit\u00e9 max de tous les instruments et ferme les servos mute proportionnellement</div>
+        </div>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
         <h3>
           <span>Boucles (<span id="loopCount">0</span>)</span>
           <button class="btn btn-sm btn-primary" onclick="showAddLoop()">+ Nouvelle</button>
@@ -251,6 +265,7 @@ input[type=checkbox] { width: auto; }
           <option value="3">Servo Strike</option>
           <option value="4">Comb/Brush</option>
           <option value="5">Pitch Bend</option>
+          <option value="8">Servo Mute (Cymbal)</option>
         </select>
       </div>
     </div>
@@ -265,26 +280,47 @@ input[type=checkbox] { width: auto; }
         </select>
       </div>
       <div class="form-group">
-        <label>Adresse I2C</label>
-        <input type="text" id="actAddr" value="0x20" placeholder="0x20">
-      </div>
-      <div class="form-group">
-        <label>Pin/Channel</label>
-        <input type="number" id="actPin" value="0" min="0" max="15">
+        <label>Pin global (1-64)</label>
+        <input type="number" id="actPinGlobal" value="1" min="1" max="64" oninput="updateAddressFromPin()">
+        <div class="hint">1-16: module #1, 17-32: module #2, etc.</div>
       </div>
     </div>
-    <div class="form-row">
+    <div class="form-row" style="display:none;">
       <div class="form-group">
-        <label>Param Min</label>
-        <input type="number" id="actParamMin" value="8">
+        <label>Adresse I2C (auto)</label>
+        <input type="text" id="actAddr" value="0x40" readonly>
       </div>
       <div class="form-group">
-        <label>Param Max</label>
-        <input type="number" id="actParamMax" value="30">
+        <label>Pin local (auto)</label>
+        <input type="number" id="actPin" value="0" min="0" max="15" readonly>
+      </div>
+    </div>
+    <div class="form-row" id="paramRowSolenoid">
+      <div class="form-group">
+        <label>Temps min (ms)</label>
+        <input type="number" id="actTimeMin" value="8" min="1" max="100">
+        <div class="hint">Frappe faible (vel=1)</div>
       </div>
       <div class="form-group">
-        <label>Par Defaut</label>
-        <input type="number" id="actParamDef" value="15">
+        <label>Temps max (ms)</label>
+        <input type="number" id="actTimeMax" value="30" min="1" max="200">
+        <div class="hint">Frappe forte (vel=127)</div>
+      </div>
+    </div>
+    <div class="form-row" id="paramRowServo" style="display:none;">
+      <div class="form-group">
+        <label>Angle fermé (°)</label>
+        <input type="number" id="actAngleClosed" value="15" min="0" max="180">
+        <div class="hint">Position mute/fermée</div>
+      </div>
+      <div class="form-group">
+        <label>Angle ouvert (°)</label>
+        <input type="number" id="actAngleOpen" value="90" min="0" max="180">
+        <div class="hint">Position relâchée/ouverte</div>
+      </div>
+      <div class="form-group">
+        <label>Angle repos (°)</label>
+        <input type="number" id="actAngleDefault" value="90" min="0" max="180">
       </div>
     </div>
     <div class="form-row">
@@ -303,6 +339,7 @@ input[type=checkbox] { width: auto; }
         <select id="actQuickPreset">
           <option value="solenoid_kick">Solénoïde - Kick/Snare</option>
           <option value="servo_hihat">Servo - Hi-Hat</option>
+          <option value="servo_mute">Servo - Cymbal Mute</option>
           <option value="motor_shaker">Moteur DC - Shaker</option>
         </select>
       </div>
@@ -517,6 +554,53 @@ function populateMidiNoteSelect() {
 // ====================================================================
 // ACTUATORS
 // ====================================================================
+function updateAddressFromPin() {
+  const pin = parseInt(document.getElementById('actPinGlobal').value) || 1;
+  const bus = parseInt(document.getElementById('actBus').value);
+
+  // Calculate module number (0-based) and local pin (0-15)
+  const moduleIdx = Math.floor((pin - 1) / 16);
+  const localPin = (pin - 1) % 16;
+
+  // Set base address based on bus type
+  let baseAddr;
+  if (bus === 0) {
+    // MCP23017: 0x20, 0x21, 0x22...
+    baseAddr = 0x20 + moduleIdx;
+  } else if (bus === 1) {
+    // PCA9685: 0x40, 0x41, 0x42...
+    baseAddr = 0x40 + moduleIdx;
+  } else {
+    // Direct GPIO/LEDC: no I2C address
+    baseAddr = 0;
+  }
+
+  document.getElementById('actAddr').value = '0x' + baseAddr.toString(16).padStart(2, '0');
+  document.getElementById('actPin').value = localPin;
+}
+
+function updateParamDisplay() {
+  const type = parseInt(document.getElementById('actType').value);
+  const behavior = parseInt(document.getElementById('actBehavior').value);
+
+  const solenoidRow = document.getElementById('paramRowSolenoid');
+  const servoRow = document.getElementById('paramRowServo');
+
+  if (type === 1) {
+    // Solenoid: show time min/max
+    solenoidRow.style.display = 'flex';
+    servoRow.style.display = 'none';
+  } else if (type === 0 && (behavior === 8 || behavior === 2)) {
+    // Servo mute or position: show angles
+    solenoidRow.style.display = 'none';
+    servoRow.style.display = 'flex';
+  } else {
+    // Other: hide both (use defaults)
+    solenoidRow.style.display = 'none';
+    servoRow.style.display = 'none';
+  }
+}
+
 function updateActuatorHelp() {
   const type = parseInt(document.getElementById('actType').value);
   const bus = parseInt(document.getElementById('actBus').value);
@@ -541,28 +625,37 @@ function updateActuatorHelp() {
 function applyTypeDefaults(type) {
   const behavior = document.getElementById('actBehavior');
   const bus = document.getElementById('actBus');
-  const addr = document.getElementById('actAddr');
-  const pmin = document.getElementById('actParamMin');
-  const pmax = document.getElementById('actParamMax');
-  const pdef = document.getElementById('actParamDef');
+  const pinGlobal = document.getElementById('actPinGlobal');
   const cooldown = document.getElementById('actCooldown');
+  const timeMin = document.getElementById('actTimeMin');
+  const timeMax = document.getElementById('actTimeMax');
+  const angleClosed = document.getElementById('actAngleClosed');
+  const angleOpen = document.getElementById('actAngleOpen');
+  const angleDefault = document.getElementById('actAngleDefault');
 
   if (type === 0) {
+    // Servo
     behavior.value = '2';
     bus.value = '1';
-    addr.value = '0x40';
-    pmin.value = '15'; pmax.value = '165'; pdef.value = '90'; cooldown.value = '50';
+    pinGlobal.value = '1';
+    angleClosed.value = '15'; angleOpen.value = '90'; angleDefault.value = '90';
+    cooldown.value = '50';
   } else if (type === 1) {
+    // Solenoid
     behavior.value = '0';
     bus.value = '0';
-    addr.value = '0x20';
-    pmin.value = '8'; pmax.value = '30'; pdef.value = '15'; cooldown.value = '200';
+    pinGlobal.value = '1';
+    timeMin.value = '8'; timeMax.value = '30';
+    cooldown.value = '200';
   } else if (type === 2) {
+    // PWM Motor
     behavior.value = '1';
     bus.value = '3';
-    addr.value = '0x40';
-    pmin.value = '20'; pmax.value = '100'; pdef.value = '0'; cooldown.value = '100';
+    pinGlobal.value = '1';
+    cooldown.value = '100';
   }
+  updateAddressFromPin();
+  updateParamDisplay();
   updateActuatorHelp();
 }
 
@@ -573,6 +666,8 @@ function applyActuatorPreset() {
     applyTypeDefaults(1);
     document.getElementById('actBehavior').value = '0';
     document.getElementById('actName').value = document.getElementById('actName').value || 'Kick Solenoid';
+    document.getElementById('actTimeMin').value = '10';
+    document.getElementById('actTimeMax').value = '35';
   } else if (preset === 'servo_hihat') {
     document.getElementById('actType').value = '0';
     applyTypeDefaults(0);
@@ -583,7 +678,16 @@ function applyActuatorPreset() {
     applyTypeDefaults(2);
     document.getElementById('actBehavior').value = '1';
     document.getElementById('actName').value = document.getElementById('actName').value || 'Shaker Motor';
+  } else if (preset === 'servo_mute') {
+    document.getElementById('actType').value = '0';
+    applyTypeDefaults(0);
+    document.getElementById('actBehavior').value = '8';
+    document.getElementById('actName').value = document.getElementById('actName').value || 'Cymbal Mute';
+    document.getElementById('actAngleClosed').value = '20';
+    document.getElementById('actAngleOpen').value = '100';
+    document.getElementById('actAngleDefault').value = '100';
   }
+  updateParamDisplay();
   updateActuatorHelp();
 }
 
@@ -633,14 +737,16 @@ function showAddActuator() {
   document.getElementById('actType').value = '1';
   document.getElementById('actBehavior').value = '0';
   document.getElementById('actBus').value = '0';
-  document.getElementById('actAddr').value = '0x20';
-  document.getElementById('actPin').value = '0';
-  document.getElementById('actParamMin').value = '8';
-  document.getElementById('actParamMax').value = '30';
-  document.getElementById('actParamDef').value = '15';
+  document.getElementById('actPinGlobal').value = '1';
+  document.getElementById('actTimeMin').value = '8';
+  document.getElementById('actTimeMax').value = '30';
+  document.getElementById('actAngleClosed').value = '15';
+  document.getElementById('actAngleOpen').value = '90';
+  document.getElementById('actAngleDefault').value = '90';
   document.getElementById('actCooldown').value = '200';
   document.getElementById('actEnabled').checked = true;
   document.getElementById('actInverted').checked = false;
+  updateAddressFromPin();
   applyTypeDefaults(1);
   showModal('modalActuator');
 }
@@ -655,31 +761,72 @@ function editActuator(id) {
   document.getElementById('actType').value = a.type;
   document.getElementById('actBehavior').value = a.behavior;
   document.getElementById('actBus').value = a.bus;
-  document.getElementById('actAddr').value = '0x' + a.hwAddress.toString(16);
-  document.getElementById('actPin').value = a.hwPin;
-  document.getElementById('actParamMin').value = a.paramMin;
-  document.getElementById('actParamMax').value = a.paramMax;
-  document.getElementById('actParamDef').value = a.paramDefault;
+
+  // Reconstruct global pin from address + local pin
+  let moduleIdx = 0;
+  if (a.bus === 0) {
+    moduleIdx = a.hwAddress - 0x20;
+  } else if (a.bus === 1) {
+    moduleIdx = a.hwAddress - 0x40;
+  }
+  const globalPin = moduleIdx * 16 + a.hwPin + 1;
+  document.getElementById('actPinGlobal').value = globalPin;
+
+  // Map paramMin/Max to either time or angles
+  if (a.type === 1) {
+    // Solenoid: paramMin/Max are ms times
+    document.getElementById('actTimeMin').value = a.paramMin;
+    document.getElementById('actTimeMax').value = a.paramMax;
+  } else if (a.type === 0) {
+    // Servo: paramMin/Max are angles in degrees
+    document.getElementById('actAngleClosed').value = a.paramMin;
+    document.getElementById('actAngleOpen').value = a.paramMax;
+    document.getElementById('actAngleDefault').value = a.paramDefault;
+  }
+
   document.getElementById('actCooldown').value = a.cooldownUs;
   document.getElementById('actEnabled').checked = a.enabled;
   document.getElementById('actInverted').checked = a.inverted;
+
+  updateAddressFromPin();
+  updateParamDisplay();
   updateActuatorHelp();
   showModal('modalActuator');
 }
 
 async function saveActuator() {
   const editId = document.getElementById('editActId').value;
+  const type = parseInt(document.getElementById('actType').value);
+
+  let paramMin, paramMax, paramDefault;
+  if (type === 1) {
+    // Solenoid: use time values
+    paramMin = parseInt(document.getElementById('actTimeMin').value);
+    paramMax = parseInt(document.getElementById('actTimeMax').value);
+    paramDefault = Math.floor((paramMin + paramMax) / 2);
+  } else if (type === 0) {
+    // Servo: use angle values
+    paramMin = parseInt(document.getElementById('actAngleClosed').value);
+    paramMax = parseInt(document.getElementById('actAngleOpen').value);
+    paramDefault = parseInt(document.getElementById('actAngleDefault').value);
+  } else {
+    // Motor: use defaults
+    paramMin = 20;
+    paramMax = 100;
+    paramDefault = 0;
+  }
+
   const data = {
     id: parseInt(document.getElementById('actId').value) || 0,
     name: document.getElementById('actName').value || 'Actuator',
-    type: parseInt(document.getElementById('actType').value),
+    type: type,
     behavior: parseInt(document.getElementById('actBehavior').value),
     bus: parseInt(document.getElementById('actBus').value),
     hwAddress: parseInt(document.getElementById('actAddr').value),
     hwPin: parseInt(document.getElementById('actPin').value),
-    paramMin: parseInt(document.getElementById('actParamMin').value),
-    paramMax: parseInt(document.getElementById('actParamMax').value),
-    paramDefault: parseInt(document.getElementById('actParamDef').value),
+    paramMin: paramMin,
+    paramMax: paramMax,
+    paramDefault: paramDefault,
     cooldownUs: parseInt(document.getElementById('actCooldown').value),
     enabled: document.getElementById('actEnabled').checked,
     inverted: document.getElementById('actInverted').checked
@@ -690,11 +837,11 @@ async function saveActuator() {
     return;
   }
   if (data.paramMin > data.paramMax) {
-    toast('Param Min doit être <= Param Max', 'error');
+    toast('Valeur min doit être <= valeur max', 'error');
     return;
   }
   if (data.paramDefault < data.paramMin || data.paramDefault > data.paramMax) {
-    toast('Paramètre par défaut hors plage', 'error');
+    toast('Valeur par défaut hors plage', 'error');
     return;
   }
   if (data.type === 0 && data.bus !== 1) {
@@ -1400,6 +1547,12 @@ async function saveAll() {
   toast('Configuration sauvegardee', 'success');
 }
 
+async function updateGlobalVolume(val) {
+  document.getElementById('globalVolumeDisplay').textContent = val;
+  // Send CC#7 (volume) to update global volume
+  await api('test/cc', 'POST', {cc: 7, value: parseInt(val)});
+}
+
 // ====================================================================
 // UI Helpers
 // ====================================================================
@@ -1425,9 +1578,17 @@ function toast(msg, type='success') {
 }
 
 document.getElementById('actType').addEventListener('change', (e) => {
-  applyTypeDefaults(parseInt(e.target.value));
+  updateParamDisplay();
+  updateActuatorHelp();
 });
-document.getElementById('actBus').addEventListener('change', updateActuatorHelp);
+document.getElementById('actBehavior').addEventListener('change', (e) => {
+  updateParamDisplay();
+  updateActuatorHelp();
+});
+document.getElementById('actBus').addEventListener('change', (e) => {
+  updateAddressFromPin();
+  updateActuatorHelp();
+});
 
 window.addEventListener('load', init);
 </script>

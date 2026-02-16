@@ -599,3 +599,24 @@ void WebServerManager::_handleGetAuthToken(AsyncWebServerRequest* req) {
   doc["usage"] = "Authorization: Bearer <token>";
   _sendJson(req, 200, doc);
 }
+
+void WebServerManager::_handleTestCC(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
+  JsonDocument doc;
+  if (deserializeJson(doc, data, len)) { _sendError(req, 400, "Invalid JSON"); return; }
+  uint8_t cc = doc["cc"] | 7;
+  uint8_t val = doc["value"] | 127;
+
+  // Send CC event directly to EventProcessor
+  MidiEvent ev;
+  ev.type = MIDI_EVT_CC;
+  ev.channel = 10; // Default drums channel
+  ev.data1 = cc;
+  ev.data2 = val;
+  ev.timestamp = micros();
+
+  if (_eventProc) {
+    _eventProc->processMidiEvent(ev);
+  }
+
+  _sendError(req, 200, "CC sent");
+}

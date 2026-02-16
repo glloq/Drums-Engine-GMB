@@ -44,6 +44,8 @@ enum class ActuatorBehavior : uint8_t {
   PITCH_BEND,            // Tension de peau
   MOTOR_OPTICAL_TRACK,    // Moteur avec capteur optique
   HIHAT_CONTROLLER,       // Servo hi-hat pedal controller (CC#4, splash detection)
+  SERVO_MUTE,             // Servo mute (position fermee = mute, ouverte = libre)
+  SOLENOID_MUTE,          // Solenoide mute (off = mute/contact, on = libre)
   BEHAVIOR_COUNT
 };
 
@@ -341,6 +343,8 @@ inline const char* actuatorBehaviorName(ActuatorBehavior b) {
     case ActuatorBehavior::PITCH_BEND:      return "Pitch Bend";
     case ActuatorBehavior::MOTOR_OPTICAL_TRACK: return "Motor Optical";
     case ActuatorBehavior::HIHAT_CONTROLLER:    return "Hi-Hat Controller";
+    case ActuatorBehavior::SERVO_MUTE:          return "Servo Mute";
+    case ActuatorBehavior::SOLENOID_MUTE:       return "Solenoid Mute";
     default:                               return "Unknown";
   }
 }

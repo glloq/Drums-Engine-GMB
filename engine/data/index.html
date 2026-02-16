@@ -265,7 +265,8 @@ input[type=checkbox] { width: auto; }
           <option value="3">Servo Strike</option>
           <option value="4">Comb/Brush</option>
           <option value="5">Pitch Bend</option>
-          <option value="8">Servo Mute (Cymbal)</option>
+          <option value="8">Servo Mute</option>
+          <option value="9">Solenoid Mute</option>
         </select>
       </div>
     </div>
@@ -339,7 +340,8 @@ input[type=checkbox] { width: auto; }
         <select id="actQuickPreset">
           <option value="solenoid_kick">Solénoïde - Kick/Snare</option>
           <option value="servo_hihat">Servo - Hi-Hat</option>
-          <option value="servo_mute">Servo - Cymbal Mute</option>
+          <option value="servo_mute">Servo - Mute</option>
+          <option value="solenoid_mute">Solénoïde - Mute</option>
           <option value="motor_shaker">Moteur DC - Shaker</option>
         </select>
       </div>
@@ -586,16 +588,20 @@ function updateParamDisplay() {
   const solenoidRow = document.getElementById('paramRowSolenoid');
   const servoRow = document.getElementById('paramRowServo');
 
-  if (type === 1) {
-    // Solenoid: show time min/max
+  if (type === 1 && behavior !== 9) {
+    // Solenoid strike/hold: show time min/max
     solenoidRow.style.display = 'flex';
     servoRow.style.display = 'none';
-  } else if (type === 0 && (behavior === 8 || behavior === 2)) {
-    // Servo mute or position: show angles
+  } else if (type === 1 && behavior === 9) {
+    // Solenoid mute: no special params (off = mute, on = release)
+    solenoidRow.style.display = 'none';
+    servoRow.style.display = 'none';
+  } else if (type === 0) {
+    // Servo (any behavior): show angles
     solenoidRow.style.display = 'none';
     servoRow.style.display = 'flex';
   } else {
-    // Other: hide both (use defaults)
+    // Motor etc: hide both
     solenoidRow.style.display = 'none';
     servoRow.style.display = 'none';
   }
@@ -603,21 +609,26 @@ function updateParamDisplay() {
 
 function updateActuatorHelp() {
   const type = parseInt(document.getElementById('actType').value);
+  const behavior = parseInt(document.getElementById('actBehavior').value);
   const bus = parseInt(document.getElementById('actBus').value);
   const help = document.getElementById('actuatorHelp');
   const typeName = ['Servo', 'Solénoïde', 'Moteur PWM'][type] || 'Inconnu';
 
-  let msg = `Type sélectionné: ${typeName}. `;
-  if (type === 0) {
-    msg += 'Bus recommandé: PCA9685. Usage: position continue (hi-hat/choke).';
+  let msg = `Type: ${typeName}. `;
+  if (behavior === 8) {
+    msg += 'Servo Mute: angle fermé = étouffe le son, angle ouvert = libre. Utilisable sur tout instrument.';
+  } else if (behavior === 9) {
+    msg += 'Solénoïde Mute: OFF = mute (contact), ON = libre. Pas de paramètres de temps.';
+  } else if (type === 0) {
+    msg += 'Bus: PCA9685. Position continue (hi-hat, choke, etc).';
   } else if (type === 1) {
-    msg += 'Bus recommandé: MCP23017 ou GPIO direct. Usage: frappe impulsionnelle (kick/snare/tom).';
+    msg += 'Bus: MCP23017 ou GPIO. Frappe impulsionnelle (kick/snare/tom). Temps = durée activation selon vélocité.';
   } else if (type === 2) {
-    msg += 'Bus recommandé: LEDC PWM (ou PCA9685). Usage: shaker/brush rotatif.';
+    msg += 'Bus: LEDC PWM ou PCA9685. Shaker/brush rotatif.';
   }
 
   if (type === 0 && bus !== 1) {
-    msg += ' ⚠ Le servo nécessite PCA9685 dans la version actuelle.';
+    msg += ' ⚠ Le servo nécessite PCA9685.';
   }
   help.textContent = msg;
 }
@@ -682,10 +693,16 @@ function applyActuatorPreset() {
     document.getElementById('actType').value = '0';
     applyTypeDefaults(0);
     document.getElementById('actBehavior').value = '8';
-    document.getElementById('actName').value = document.getElementById('actName').value || 'Cymbal Mute';
+    document.getElementById('actName').value = document.getElementById('actName').value || 'Servo Mute';
     document.getElementById('actAngleClosed').value = '20';
     document.getElementById('actAngleOpen').value = '100';
     document.getElementById('actAngleDefault').value = '100';
+  } else if (preset === 'solenoid_mute') {
+    document.getElementById('actType').value = '1';
+    applyTypeDefaults(1);
+    document.getElementById('actBehavior').value = '9';
+    document.getElementById('actName').value = document.getElementById('actName').value || 'Solenoid Mute';
+    document.getElementById('actCooldown').value = '50';
   }
   updateParamDisplay();
   updateActuatorHelp();

@@ -478,13 +478,13 @@ input[type=checkbox] { width: auto; }
           <select id="instrStrikeAct"></select>
         </div>
         <div class="form-group" id="instrStrike2Group" style="display:none;">
-          <label>Actionneur frappe 2 (alternee)</label>
+          <label>Actionneur frappe 2</label>
           <select id="instrStrikeAct2"></select>
         </div>
       </div>
       <div class="form-group">
-        <label><input type="checkbox" id="instrAlternateStrike" onchange="toggleAlternateStrike()"> Frappe alternee (2 actionneurs)</label>
-        <div class="hint">Alterne entre 2 actionneurs a chaque NoteOn</div>
+        <label><input type="checkbox" id="instrAlternateStrike" onchange="toggleAlternateStrike()"> Double frappe (2 actionneurs simultanes)</label>
+        <div class="hint">Les 2 actionneurs frappent en meme temps sur chaque NoteOn</div>
       </div>
     </div>
 
@@ -1558,11 +1558,14 @@ async function saveInstrument() {
     const strikeId = parseInt(document.getElementById('instrMuteStrikeAct').value);
     const muteId = parseInt(document.getElementById('instrMuteAct').value);
     actIds = [strikeId, muteId];
-    // NoteOn: frappe - duree geree par l'actionneur (0/0)
-    noteOn = [{actuatorId: strikeId, commandType: 0, valueSource: 0, valueFixed: 0, ccIndex: 0, delayMs: 0, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0}];
-    // NoteOff: servo mute s'active au relachement (pas d'OFF pour le solenoid)
     const muteAct = actuators.find(a => a.id === muteId);
     const muteCmd = (muteAct && muteAct.type === 0) ? 1 : 0; // POSITION for servo, PULSE for solenoid
+    // NoteOn: relacher le mute d'abord, puis frapper
+    noteOn = [
+      {actuatorId: muteId, commandType: muteCmd, valueSource: 1, valueFixed: 127, ccIndex: 0, delayMs: 0, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0},
+      {actuatorId: strikeId, commandType: 0, valueSource: 0, valueFixed: 0, ccIndex: 0, delayMs: 0, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0}
+    ];
+    // NoteOff: servo mute s'active au relachement (engage le mute)
     noteOff = [
       {actuatorId: muteId, commandType: muteCmd, valueSource: 1, valueFixed: 0, ccIndex: 0, delayMs: 50, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0}
     ];
@@ -1626,7 +1629,7 @@ async function saveHiHatInstruments(baseName, retrigger, enabled, editId) {
         {actuatorId: strikeId, commandType: 0, valueSource: 0, valueFixed: 0, ccIndex: 0, delayMs: 0, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0}
       ],
       noteOffActions: hasMute ? [
-        {actuatorId: muteId, commandType: 1, valueSource: 1, valueFixed: 0, ccIndex: 0, delayMs: 50, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0}
+        {actuatorId: muteId, commandType: 1, valueSource: 1, valueFixed: 127, ccIndex: 0, delayMs: 50, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0}
       ] : [],
       ccBindings: [ccBind]
     };
@@ -1656,7 +1659,7 @@ async function saveHiHatInstruments(baseName, retrigger, enabled, editId) {
       name: baseName + ' - Pedal', category: 'cymbals', midiNote: notePedal, midiChannel: 0,
       retriggerMode: retrigger, enabled: enabled, actuatorIds: actIds,
       noteOnActions: [
-        {actuatorId: pedalId, commandType: 1, valueSource: 1, valueFixed: 0, ccIndex: 0, delayMs: 0, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0},
+        {actuatorId: pedalId, commandType: 1, valueSource: 1, valueFixed: 127, ccIndex: 0, delayMs: 0, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0},
         ...(hasMute ? [{actuatorId: muteId, commandType: 1, valueSource: 1, valueFixed: 0, ccIndex: 0, delayMs: 0, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0}] : [])
       ],
       noteOffActions: [],

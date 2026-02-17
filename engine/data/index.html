@@ -14,11 +14,14 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--fg); min-height: 100vh; }
 
-.header { background: var(--bg2); padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid var(--accent); }
-.header h1 { font-size: 1.3em; font-weight: 600; }
-.header .status { display: flex; gap: 12px; font-size: 0.85em; color: var(--fg2); }
-.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+.header { background: var(--bg2); padding: 8px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid var(--accent); }
+.header h1 { font-size: 1.2em; font-weight: 600; }
+.header-right { display: flex; align-items: center; gap: 12px; }
+.header .status { display: flex; gap: 10px; font-size: 0.8em; color: var(--fg2); }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 3px; }
 .dot.on { background: var(--success); } .dot.off { background: var(--accent); }
+.btn-gear { background: none; border: 1px solid #555; border-radius: 50%; width: 34px; height: 34px; font-size: 1.2em; color: var(--fg2); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+.btn-gear:hover { color: var(--fg); border-color: var(--accent); background: rgba(233,69,96,0.1); }
 
 .tabs { display: flex; background: var(--bg2); border-bottom: 1px solid #333; }
 .tab { padding: 10px 20px; cursor: pointer; color: var(--fg2); border-bottom: 2px solid transparent; transition: all 0.2s; font-size: 0.95em; }
@@ -122,10 +125,12 @@ input[type=checkbox] { width: auto; }
 
 <div class="header">
   <h1>Drums Engine</h1>
-  <div class="status">
-    <span><span class="dot" id="wifiDot"></span><span id="wifiStatus">--</span></span>
-    <span><span class="dot" id="midiDot"></span>MIDI: <span id="midiStatus">--</span></span>
-    <span>HW: <span id="hwStatus">--</span></span>
+  <div class="header-right">
+    <div class="status">
+      <span><span class="dot" id="wifiDot"></span><span id="wifiStatus">--</span></span>
+      <span><span class="dot" id="midiDot"></span><span id="midiStatus">--</span></span>
+    </div>
+    <button class="btn-gear" onclick="showModal('modalSettings')" title="Reglages">&#9881;</button>
   </div>
 </div>
 
@@ -173,32 +178,12 @@ input[type=checkbox] { width: auto; }
 
   <!-- ====== SYSTEM TAB ====== -->
   <div class="panel" id="tab-system">
-    <h2 style="margin-bottom:16px;">Systeme</h2>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h2>Monitoring</h2>
+      <button class="btn btn-secondary btn-sm" onclick="refreshStatus()">Actualiser</button>
+    </div>
     <div class="stat-grid" id="statGrid"></div>
     <div id="status-alarms" style="margin-bottom:12px;"></div>
-    <div class="grid-2">
-      <div class="card">
-        <h3>Actions</h3>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
-          <button class="btn btn-primary" onclick="saveAll()">Sauvegarder tout</button>
-          <button class="btn btn-secondary" onclick="scanI2C()">Scanner I2C</button>
-          <button class="btn btn-secondary" onclick="refreshStatus()">Actualiser</button>
-        </div>
-        <div id="i2cInfo" style="margin-top:12px;font-size:0.85em;color:var(--fg2);"></div>
-      </div>
-      <div class="card">
-        <h3>Volume Global</h3>
-        <div style="margin-top:12px;">
-          <label>Volume principal (0-127)</label>
-          <div style="display:flex;gap:12px;align-items:center;margin-top:8px;">
-            <input type="range" id="globalVolume" min="0" max="127" value="127"
-                   oninput="updateGlobalVolume(this.value)" style="flex:1;">
-            <span id="globalVolumeDisplay" style="min-width:40px;text-align:right;font-weight:bold;color:var(--accent);">127</span>
-          </div>
-          <div class="hint" style="margin-top:8px;">R\u00e9duit la v\u00e9locit\u00e9 max de tous les instruments et ferme les servos mute proportionnellement</div>
-        </div>
-      </div>
-    </div>
     <div class="grid-2">
       <div class="card">
         <h3>
@@ -665,6 +650,65 @@ input[type=checkbox] { width: auto; }
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal('modalLoop')">Annuler</button>
       <button class="btn btn-primary" onclick="createLoop()">Creer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ====== MODAL: System Settings ====== -->
+<div class="modal-overlay" id="modalSettings">
+  <div class="modal" style="max-width:550px;">
+    <h2 style="display:flex;justify-content:space-between;align-items:center;">
+      <span>Reglages</span>
+      <button class="btn btn-secondary btn-sm" onclick="closeModal('modalSettings')">Fermer</button>
+    </h2>
+
+    <!-- WiFi -->
+    <div class="card" style="margin-top:12px;">
+      <h3>WiFi</h3>
+      <div id="wifiInfo" style="font-size:0.85em;color:var(--fg2);margin-bottom:10px;"></div>
+      <div class="form-group">
+        <label>SSID</label>
+        <input type="text" id="settWifiSsid" placeholder="Nom du reseau WiFi" maxlength="32">
+      </div>
+      <div class="form-group">
+        <label>Mot de passe</label>
+        <input type="password" id="settWifiPass" placeholder="Mot de passe WiFi" maxlength="63">
+      </div>
+      <div class="form-group">
+        <label>Hostname (mDNS)</label>
+        <input type="text" id="settWifiHostname" placeholder="midipercussion" maxlength="32">
+        <div class="hint">Accessible via http://&lt;hostname&gt;.local</div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="saveWifiSettings()">Connecter</button>
+      <span class="hint" style="margin-left:8px;">L'ESP32 redemarrera apres enregistrement</span>
+    </div>
+
+    <!-- Volume -->
+    <div class="card" style="margin-top:12px;">
+      <h3>Volume Global</h3>
+      <div style="display:flex;gap:12px;align-items:center;margin-top:8px;">
+        <input type="range" id="globalVolume" min="0" max="127" value="127"
+               oninput="updateGlobalVolume(this.value)" style="flex:1;">
+        <span id="globalVolumeDisplay" style="min-width:32px;text-align:right;font-weight:bold;color:var(--accent);">127</span>
+      </div>
+      <div class="hint" style="margin-top:6px;">Reduit la velocite max et ferme les servos mute proportionnellement</div>
+    </div>
+
+    <!-- MIDI Info -->
+    <div class="card" style="margin-top:12px;">
+      <h3>MIDI</h3>
+      <div id="midiInfo" style="font-size:0.85em;color:var(--fg2);line-height:1.8;"></div>
+    </div>
+
+    <!-- System Actions -->
+    <div class="card" style="margin-top:12px;">
+      <h3>Systeme</h3>
+      <div id="systemInfo" style="font-size:0.85em;color:var(--fg2);line-height:1.8;margin-bottom:10px;"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-primary btn-sm" onclick="saveAll()">Sauvegarder config</button>
+        <button class="btn btn-secondary btn-sm" onclick="scanI2C()">Scanner I2C</button>
+      </div>
+      <div id="i2cInfo" style="margin-top:8px;font-size:0.85em;color:var(--fg2);"></div>
     </div>
   </div>
 </div>
@@ -2060,12 +2104,13 @@ async function refreshStatus() {
   if (!data) return;
   statusData = data;
 
+  // Header status dots
   document.getElementById('wifiDot').className = 'dot ' + (data.wifi_ip ? 'on' : 'off');
-  document.getElementById('wifiStatus').textContent = data.wifi_ip || 'Deconnecte';
+  document.getElementById('wifiStatus').textContent = data.wifi_ssid || data.wifi_ip || '--';
   document.getElementById('midiDot').className = 'dot ' + (data.midi_connected ? 'on' : 'off');
-  document.getElementById('midiStatus').textContent = data.midi_connected ? data.midi_sessions + ' session(s)' : 'Aucune';
-  document.getElementById('hwStatus').textContent = (data.actuator_configs||0) + ' act. ' + (data.instrument_count||0) + ' inst.';
+  document.getElementById('midiStatus').textContent = data.midi_connected ? data.midi_sessions + ' sess.' : '--';
 
+  // Monitoring stat grid
   document.getElementById('statGrid').innerHTML = `
     <div class="stat-card"><div class="stat-value">${data.actuator_configs||0}</div><div class="stat-label">Actionneurs</div></div>
     <div class="stat-card"><div class="stat-value">${data.actuator_active||0}/${data.actuator_count||0}</div><div class="stat-label">Actifs / Charges</div></div>
@@ -2081,6 +2126,7 @@ async function refreshStatus() {
     <div class="stat-card"><div class="stat-value">${data.loop_playing ? 'Lecture' : 'Arrete'}</div><div class="stat-label">Loop ${data.loop_playing ? data.loop_bpm + ' BPM' : ''}</div></div>
   `;
 
+  // Alarms
   let alarms = '';
   if (data.scheduler_overflow > 0)
     alarms += '<span class="alarm-badge alarm-error">Scheduler overflow: ' + data.scheduler_overflow + '</span>';
@@ -2093,12 +2139,60 @@ async function refreshStatus() {
   if (alarms === '')
     alarms = '<span class="alarm-badge alarm-info">All systems nominal</span>';
   document.getElementById('status-alarms').innerHTML = alarms;
+
+  // Update settings modal info if open
+  updateSettingsInfo(data);
+}
+
+function updateSettingsInfo(data) {
+  const midi = document.getElementById('midiInfo');
+  if (midi) {
+    midi.innerHTML = (data.midi_connected
+      ? '<strong>Connecte</strong> - ' + data.midi_sessions + ' session(s)'
+      : '<strong>Deconnecte</strong>') +
+      '<br>Notes RX: ' + (data.midi_notes_rx||0) +
+      ' / TX: ' + (data.midi_notes_tx||0) +
+      '<br>Port rtpMIDI: 5004' +
+      '<br>Session: MidiPercussion';
+  }
+  const sys = document.getElementById('systemInfo');
+  if (sys) {
+    sys.innerHTML =
+      'Uptime: ' + Math.floor((data.uptime_s||0)/3600) + 'h' + Math.floor(((data.uptime_s||0)%3600)/60) + 'm' +
+      '<br>Memoire libre: ' + ((data.free_heap||0)/1024).toFixed(1) + ' KB' +
+      '<br>Stockage: ' + (data.storage || '--') +
+      '<br>Actionneurs: ' + (data.actuator_configs||0) + ' / Instruments: ' + (data.instrument_count||0);
+  }
+}
+
+async function loadWifiSettings() {
+  const data = await api('wifi');
+  if (!data) return;
+  const info = document.getElementById('wifiInfo');
+  if (data.mode === 'ap') {
+    info.innerHTML = 'Mode: <strong>Point d\'acces</strong> (AP) - SSID: ' + data.ap_ssid + '<br>IP: ' + data.ip;
+  } else {
+    info.innerHTML = 'Mode: <strong>Station</strong> - ' + (data.connected ? 'Connecte' : 'Deconnecte') +
+      '<br>SSID: ' + (data.ssid||'--') + ' / IP: ' + (data.ip||'--') +
+      (data.rssi ? ' / Signal: ' + data.rssi + ' dBm' : '');
+  }
+  document.getElementById('settWifiSsid').value = data.ssid || '';
+  document.getElementById('settWifiHostname').value = data.hostname || 'midipercussion';
+}
+
+async function saveWifiSettings() {
+  const ssid = document.getElementById('settWifiSsid').value.trim();
+  const pass = document.getElementById('settWifiPass').value;
+  const hostname = document.getElementById('settWifiHostname').value.trim();
+  if (!ssid) { toast('SSID requis', 'error'); return; }
+  const result = await api('wifi', 'POST', {ssid, password: pass, hostname: hostname || 'midipercussion'});
+  if (result) toast('WiFi enregistre. Redemarrage...', 'success');
 }
 
 async function scanI2C() {
   const data = await api('scan-i2c');
   if (data) {
-    document.getElementById('i2cInfo').innerHTML = '<strong>Modules detectes:</strong> ' + data.devices;
+    document.getElementById('i2cInfo').innerHTML = '<strong>Modules I2C:</strong> ' + data.devices;
   }
 }
 
@@ -2109,14 +2203,16 @@ async function saveAll() {
 
 async function updateGlobalVolume(val) {
   document.getElementById('globalVolumeDisplay').textContent = val;
-  // Send CC#7 (volume) to update global volume
   await api('test/cc', 'POST', {cc: 7, value: parseInt(val)});
 }
 
 // ====================================================================
 // UI Helpers
 // ====================================================================
-function showModal(id) { document.getElementById(id).classList.add('show'); }
+function showModal(id) {
+  document.getElementById(id).classList.add('show');
+  if (id === 'modalSettings') { loadWifiSettings(); if (statusData) updateSettingsInfo(statusData); }
+}
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
 
 document.querySelectorAll('.tab').forEach(tab => {

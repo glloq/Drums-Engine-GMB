@@ -68,13 +68,18 @@ input[type=checkbox] { width: auto; }
 .stat-card .stat-label { font-size: 0.8em; color: var(--fg2); margin-top: 4px; }
 
 /* Pipeline visualization */
-.pipeline-view { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 0; }
-.pipe-block { background: var(--bg3); border-radius: 6px; padding: 6px 10px; font-size: 0.8em; border: 1px solid #555; }
+.pipeline-view { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding: 6px 0; }
+.pipe-block { background: var(--bg3); border-radius: 6px; padding: 5px 8px; font-size: 0.78em; border: 1px solid #555; line-height: 1.3; }
 .pipe-block.cond { border-color: #ff9800; color: #ff9800; }
 .pipe-block.trans { border-color: #2196f3; color: #2196f3; }
 .pipe-block.time { border-color: #9c27b0; color: #9c27b0; }
 .pipe-block.out { border-color: #4caf50; color: #4caf50; }
-.pipe-arrow { color: var(--fg2); font-size: 1.2em; }
+.pipe-block.act { border-color: var(--success); color: var(--success); }
+.pipe-block.midi { border-color: var(--accent); color: var(--accent); }
+.pipe-block.grp { border-color: #ff9800; color: #ff9800; border-style: dashed; }
+.pipe-arrow { color: var(--fg2); font-size: 1.1em; }
+.pipe-section { margin-bottom: 4px; }
+.pipe-label { font-size: 0.75em; color: var(--fg2); margin-bottom: 2px; font-weight: 600; }
 
 /* Checkbox list */
 .checkbox-list { max-height: 200px; overflow-y: auto; padding: 8px; background: var(--bg); border-radius: var(--radius); border: 1px solid #444; }
@@ -1883,12 +1888,42 @@ async function testInstrumentAction(id, eventType='on', index=0) {
 // ====================================================================
 // MAPPINGS (read-only pipeline visualization)
 // ====================================================================
-const BLOCK_TYPE_NAMES = {
-  0: {name:'CONDITION', cls:'cond', subtypes:{0:'Threshold',1:'RoundRobin',2:'VelocitySplit'}},
-  1: {name:'TRANSFORM', cls:'trans', subtypes:{0:'VelocityCurve',1:'Gain',2:'Clamp'}},
-  2: {name:'TIME', cls:'time', subtypes:{0:'Pulse',1:'Delay',2:'Ramp'}},
-  3: {name:'OUTPUT', cls:'out', subtypes:{0:'Pulse',1:'Position',2:'PWM'}}
-};
+const CMD_NAMES = ['PULSE','POSITION','PWM','OFF'];
+const VAL_SRC_NAMES = ['vel','fixe','CC','inv.vel'];
+const CURVE_NAMES = ['lin','expo','log'];
+
+function actName(id) {
+  const a = actuators.find(x => x.id === id);
+  return a ? a.name : '#'+id;
+}
+
+function stepToBlock(step) {
+  const cmd = CMD_NAMES[step.commandType] || '?';
+  const name = actName(step.actuatorId);
+  let val = VAL_SRC_NAMES[step.valueSource] || '?';
+  if (step.valueSource === 1) val = '=' + (step.valueFixed ?? step.value_fixed ?? 0);
+  if (step.valueSource === 2) val = 'CC' + (step.ccIndex ?? step.cc_index ?? 0);
+  let extra = '';
+  if (step.delayMs > 0 || step.delay_ms > 0) extra += ' d' + (step.delayMs || step.delay_ms) + 'ms';
+  if (step.commandType === 0) {
+    const mn = step.durationMinMs || step.duration_min_ms || 0;
+    const mx = step.durationMaxMs || step.duration_max_ms || 0;
+    if (mn > 0 || mx > 0) extra += ' ' + mn + '-' + mx + 'ms';
+  }
+  const curve = step.velocityCurve || step.velocity_curve || 0;
+  if (curve > 0) extra += ' ' + CURVE_NAMES[curve];
+  const grp = step.alternateGroup || step.alternate_group || 0;
+  const cls = step.commandType === 3 ? 'cond' : step.commandType === 1 ? 'out' : step.commandType === 2 ? 'trans' : 'time';
+  let html = `<div class="pipe-block ${cls}">${cmd}<br><small>${name} ${val}${extra}</small></div>`;
+  if (grp > 0) html = `<div class="pipe-block grp">G${grp}</div>` + html;
+  return html;
+}
+
+function renderStepRow(label, steps) {
+  if (!steps || steps.length === 0) return '';
+  const blocks = steps.map(s => stepToBlock(s)).join('<span class="pipe-arrow">+</span>');
+  return `<div class="pipe-section"><div class="pipe-label">${label}</div><div class="pipeline-view">${blocks}</div></div>`;
+}
 
 async function refreshMappings() {
   await renderMappings();
@@ -1907,53 +1942,50 @@ async function renderMappings() {
   el.innerHTML = instruments.filter(inst => inst.enabled).map(inst => {
     const noteInfo = midiNotes.find(n => n.note === inst.midiNote);
     const noteName = noteInfo ? noteInfo.name : 'Note ' + inst.midiNote;
-    const actNames = (inst.actuatorIds || [])
-      .filter(id => id !== 255)
-      .map(id => { const a = actuators.find(x => x.id === id); return a; })
-      .filter(Boolean);
+    const onActions = inst.noteOnActions || [];
+    const offActions = inst.noteOffActions || [];
+    const ccBinds = inst.ccBindings || [];
 
-    let pipelineHtml = '';
-    if (actNames.length > 0) {
-      const mainAct = actNames[0];
-      pipelineHtml = '<div class="pipeline-view">';
-      pipelineHtml += `<div class="pipe-block" style="border-color:var(--accent);color:var(--accent);">MIDI IN<br><small>${inst.midiNote} ${noteName}</small></div>`;
-      pipelineHtml += '<span class="pipe-arrow">&rarr;</span>';
+    // Detect alternation
+    const maxGrp = Math.max(0, ...onActions.map(s => s.alternateGroup || 0));
+    let badges = `<span class="badge">Note ${inst.midiNote}</span>`;
+    if (inst.pipelineId !== undefined && inst.pipelineId !== 255)
+      badges += `<span class="badge badge-green">P#${inst.pipelineId}</span>`;
+    if (maxGrp > 0)
+      badges += `<span class="badge" style="background:#ff9800;color:#000;">Alt ${maxGrp}gr</span>`;
+    badges += `<span class="badge">${['Ignore','Reset','Stack'][inst.retriggerMode ?? 0]}</span>`;
 
-      // Show default pipeline blocks based on actuator type
-      if (mainAct.type === 1) { // SOLENOID
-        pipelineHtml += `<div class="pipe-block time">TIME:Pulse<br><small>${mainAct.paramMin}-${mainAct.paramMax}ms</small></div>`;
-        pipelineHtml += '<span class="pipe-arrow">&rarr;</span>';
-      } else if (mainAct.type === 0) { // SERVO
-        pipelineHtml += `<div class="pipe-block out">OUT:Position<br><small>ID:${mainAct.id}</small></div>`;
-        pipelineHtml += '<span class="pipe-arrow">&rarr;</span>';
-      } else if (mainAct.type === 2) { // PWM_MOTOR
-        pipelineHtml += `<div class="pipe-block out">OUT:PWM<br><small>ID:${mainAct.id}</small></div>`;
-        pipelineHtml += '<span class="pipe-arrow">&rarr;</span>';
-      }
+    // Pipeline visualization
+    let pipeHtml = '';
+    pipeHtml += renderStepRow('NoteOn', onActions);
+    pipeHtml += renderStepRow('NoteOff', offActions);
 
-      pipelineHtml += `<div class="pipe-block" style="border-color:var(--success);color:var(--success);">${mainAct.name}<br><small>${mainAct.busName} pin ${mainAct.hwPin}</small></div>`;
-      pipelineHtml += '</div>';
-    } else {
-      pipelineHtml = '<div style="color:var(--fg2);font-size:0.85em;padding:4px 0;">Aucun actionneur assigne</div>';
+    if (ccBinds.length > 0) {
+      const ccHtml = ccBinds.map(b => {
+        const name = actName(b.actuatorId);
+        const cmd = CMD_NAMES[b.commandType] || '?';
+        const curve = CURVE_NAMES[b.curve || 0];
+        return `<div class="pipe-block trans">CC${b.ccNumber}<br><small>${cmd} ${name} [${b.rangeMin}-${b.rangeMax}] ${curve}${b.inverted?' inv':''}</small></div>`;
+      }).join('<span class="pipe-arrow">+</span>');
+      pipeHtml += `<div class="pipe-section"><div class="pipe-label">CC Bindings</div><div class="pipeline-view">${ccHtml}</div></div>`;
     }
 
-    return `
-    <div class="card">
-      <h3>
-        <span>${inst.name} <span class="badge">Note ${inst.midiNote}</span>
-        ${inst.pipelineId !== undefined && inst.pipelineId !== 255 ? '<span class="badge badge-green">Pipeline #'+inst.pipelineId+'</span>' : '<span class="badge badge-warn">Pas de pipeline</span>'}
-        </span>
-      </h3>
-      ${pipelineHtml}
-    </div>`;
+    if (!pipeHtml) pipeHtml = '<div class="hint">Aucune action configuree</div>';
+
+    return `<div class="card"><h3><span>${inst.name} ${badges}</span></h3>${pipeHtml}</div>`;
   }).join('');
 
-  if (ccRouteData && ccRouteData.routes) {
+  // Compiled CC routes from backend
+  if (ccRouteData && ccRouteData.routes && ccRouteData.routes.length > 0) {
     const routeCards = ccRouteData.routes.map(r => {
-      const entries = (r.entries || []).map(e => `Act#${e.actuatorId} cmd=${e.commandType} [${e.rangeMin}-${e.rangeMax}]`).join(' | ');
-      return `<div class="list-item"><strong>CC${r.cc}</strong> → ${entries || '<em>aucune entree</em>'}</div>`;
+      const entries = (r.entries || []).map(e => {
+        const name = actName(e.actuatorId);
+        const cmd = CMD_NAMES[e.commandType] || '?';
+        return `${cmd} ${name} [${e.rangeMin}-${e.rangeMax}]`;
+      }).join(' | ');
+      return `<div class="list-item"><strong>CC${r.cc}</strong> &rarr; ${entries}</div>`;
     }).join('');
-    el.innerHTML += `<div class="card"><h3>Routage CC compile (${ccRouteData.count||0})</h3>${routeCards || '<div class="hint">Aucune route CC</div>'}</div>`;
+    el.innerHTML += `<div class="card"><h3>Routage CC compile (${ccRouteData.count||0})</h3>${routeCards}</div>`;
   }
 }
 

@@ -336,6 +336,71 @@ input[type=checkbox] { width: auto; }
         </div>
       </div>
     </div>
+    <div id="paramRowSolenoidHold" style="display:none;">
+      <div class="form-row">
+        <div class="form-group">
+          <label>PWM activation (0-255)</label>
+          <input type="number" id="actHoldPwmActivation" value="255" min="0" max="255">
+          <div class="hint">Intensite PWM pour l'activation initiale</div>
+        </div>
+        <div class="form-group">
+          <label>Temps PWM max (ms)</label>
+          <input type="number" id="actHoldPwmMaxTime" value="100" min="1" max="5000">
+          <div class="hint">Duree a plein PWM avant passage en maintien</div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>PWM maintien (0-255)</label>
+          <input type="number" id="actHoldPwmHold" value="80" min="0" max="255">
+          <div class="hint">Intensite PWM de maintien (reduit la chauffe)</div>
+        </div>
+        <div class="form-group">
+          <label>Temps actif max (ms)</label>
+          <input type="number" id="actHoldMaxActiveTime" value="5000" min="0" max="60000">
+          <div class="hint">Duree maximale en position active (0 = illimite)</div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Mute actif sur</label>
+          <select id="actHoldMuteEvent">
+            <option value="on">NoteOn (active a la reception)</option>
+            <option value="off" selected>NoteOff (active au relachement)</option>
+          </select>
+          <div class="hint">Quand le solenoide s'active</div>
+        </div>
+        <div class="form-group" style="display:flex;align-items:flex-end;">
+          <label><input type="checkbox" id="actHoldMcpMute"> Permettre mute via MCP (NoteOff)</label>
+        </div>
+      </div>
+    </div>
+    <div id="paramRowMotor" style="display:none;">
+      <div class="form-row">
+        <div class="form-group">
+          <label>PWM min (%)</label>
+          <input type="number" id="actMotorPwmMin" value="20" min="0" max="100">
+          <div class="hint">Vitesse minimum</div>
+        </div>
+        <div class="form-group">
+          <label>PWM max (%)</label>
+          <input type="number" id="actMotorPwmMax" value="100" min="0" max="100">
+          <div class="hint">Vitesse maximum</div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Pin end stop 1 (GPIO)</label>
+          <input type="number" id="actEndStop1" value="0" min="0" max="39">
+          <div class="hint">0 = pas d'end stop</div>
+        </div>
+        <div class="form-group">
+          <label>Pin end stop 2 (GPIO, optionnel)</label>
+          <input type="number" id="actEndStop2" value="0" min="0" max="39">
+          <div class="hint">0 = pas d'end stop</div>
+        </div>
+      </div>
+    </div>
     <div class="form-row" id="paramRowServo" style="display:none;">
       <div class="form-group">
         <label id="lblAngleMin">Angle min (°)</label>
@@ -347,7 +412,7 @@ input[type=checkbox] { width: auto; }
         <input type="number" id="actAngleOpen" value="90" min="0" max="180">
         <div class="hint" id="hintAngleMax">Position ouverte / libre</div>
       </div>
-      <div class="form-group">
+      <div class="form-group" id="paramDefaultAngle">
         <label>Angle repos (°)</label>
         <input type="number" id="actAngleDefault" value="90" min="0" max="180">
       </div>
@@ -409,9 +474,19 @@ input[type=checkbox] { width: auto; }
 
     <!-- Simple mode: just a strike actuator -->
     <div id="instrSimpleConfig">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Actionneur de frappe</label>
+          <select id="instrStrikeAct"></select>
+        </div>
+        <div class="form-group" id="instrStrike2Group" style="display:none;">
+          <label>Actionneur frappe 2 (alternee)</label>
+          <select id="instrStrikeAct2"></select>
+        </div>
+      </div>
       <div class="form-group">
-        <label>Actionneur de frappe</label>
-        <select id="instrStrikeAct"></select>
+        <label><input type="checkbox" id="instrAlternateStrike" onchange="toggleAlternateStrike()"> Frappe alternee (2 actionneurs)</label>
+        <div class="hint">Alterne entre 2 actionneurs a chaque NoteOn</div>
       </div>
     </div>
 
@@ -429,7 +504,7 @@ input[type=checkbox] { width: auto; }
       </div>
     </div>
 
-    <!-- Hi-Hat mode: strike + pedal servo + optional mute -->
+    <!-- Hi-Hat mode: strike + pedal servo + mute servo -->
     <div id="instrHihatConfig" style="display:none;">
       <div class="form-row">
         <div class="form-group">
@@ -440,8 +515,26 @@ input[type=checkbox] { width: auto; }
           <label>Servo pedale (CC#4)</label>
           <select id="instrHHPedalAct"></select>
         </div>
+        <div class="form-group">
+          <label>Servo mute</label>
+          <select id="instrHHMuteAct"></select>
+        </div>
       </div>
-      <div class="hint" style="margin-bottom:8px;">Le hi-hat utilisera 3 notes: Closed (42), Pedal (44), Open (46). La pedale sera pilotee par CC#4.</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Note fermee (Closed)</label>
+          <select id="instrHHNoteClosed" class="small-select"></select>
+        </div>
+        <div class="form-group">
+          <label>Note pedale (Pedal)</label>
+          <select id="instrHHNotePedal" class="small-select"></select>
+        </div>
+        <div class="form-group">
+          <label>Note ouverte (Open)</label>
+          <select id="instrHHNoteOpen" class="small-select"></select>
+        </div>
+      </div>
+      <div class="hint" style="margin-bottom:8px;">3 instruments seront crees automatiquement (closed, pedal, open). La pedale est pilotee par CC#4. Le servo mute etouffe la cymbale.</div>
     </div>
 
     <!-- Motor mode -->
@@ -663,28 +756,74 @@ function onActBehaviorChange() {
   const behavior = parseInt(document.getElementById('actBehavior').value);
   const sol = document.getElementById('paramRowSolenoid');
   const solCool = document.getElementById('paramRowSolCooldown');
+  const solHold = document.getElementById('paramRowSolenoidHold');
   const srv = document.getElementById('paramRowServo');
+  const motor = document.getElementById('paramRowMotor');
+  const defAngle = document.getElementById('paramDefaultAngle');
   // Hide all first
   sol.style.display = 'none';
   solCool.style.display = 'none';
+  solHold.style.display = 'none';
   srv.style.display = 'none';
-  if (type === 1 && behavior !== 9) {
+  motor.style.display = 'none';
+
+  if (type === 1 && behavior === 0) {
+    // Solenoid Strike: min/max time + cooldown
     sol.style.display = 'flex';
     solCool.style.display = 'block';
+  } else if (type === 1 && behavior === 1) {
+    // Solenoid Hold: PWM-specific fields + cooldown
+    solHold.style.display = 'block';
+    solCool.style.display = 'block';
+  } else if (type === 1 && behavior === 9) {
+    // Solenoid Mute: no specific params
   } else if (type === 0) {
+    // Servo behaviors
     srv.style.display = 'flex';
-    // Adapt labels for mute vs position
+    // Show/hide default angle based on behavior
+    // Only Servo Position (2) needs a rest angle
+    defAngle.style.display = (behavior === 2) ? 'block' : 'none';
+    // Adapt labels per behavior
     if (behavior === 8) {
+      // Mute
       document.getElementById('lblAngleMin').textContent = 'Angle mute (\u00b0)';
       document.getElementById('hintAngleMin').textContent = 'Position fermee (etouffe le son)';
       document.getElementById('lblAngleMax').textContent = 'Angle libre (\u00b0)';
       document.getElementById('hintAngleMax').textContent = 'Position ouverte (son libre)';
+    } else if (behavior === 3) {
+      // Servo Strike
+      document.getElementById('lblAngleMin').textContent = 'Angle de frappe (\u00b0)';
+      document.getElementById('hintAngleMin').textContent = 'Position de frappe';
+      document.getElementById('lblAngleMax').textContent = 'Angle max (\u00b0)';
+      document.getElementById('hintAngleMax').textContent = 'Amplitude maximale';
+    } else if (behavior === 4) {
+      // Comb/Brush
+      document.getElementById('lblAngleMin').textContent = 'Angle min oscillation (\u00b0)';
+      document.getElementById('hintAngleMin').textContent = 'Limite basse oscillation';
+      document.getElementById('lblAngleMax').textContent = 'Angle max oscillation (\u00b0)';
+      document.getElementById('hintAngleMax').textContent = 'Limite haute oscillation';
+    } else if (behavior === 5) {
+      // Pitch Bend
+      document.getElementById('lblAngleMin').textContent = 'Angle repos (pas de bend) (\u00b0)';
+      document.getElementById('hintAngleMin').textContent = 'Position sans pitch bend';
+      document.getElementById('lblAngleMax').textContent = 'Angle max pitch bend (\u00b0)';
+      document.getElementById('hintAngleMax').textContent = 'Deviation maximale du pitch';
+    } else if (behavior === 7) {
+      // Hi-Hat Controller
+      document.getElementById('lblAngleMin').textContent = 'Angle ouvert (\u00b0)';
+      document.getElementById('hintAngleMin').textContent = 'Hi-hat ouvert (pedale relachee)';
+      document.getElementById('lblAngleMax').textContent = 'Angle ferme (\u00b0)';
+      document.getElementById('hintAngleMax').textContent = 'Hi-hat ferme (pedale enfoncee)';
     } else {
+      // Position (2) and others
       document.getElementById('lblAngleMin').textContent = 'Angle min (\u00b0)';
       document.getElementById('hintAngleMin').textContent = 'Position minimum';
       document.getElementById('lblAngleMax').textContent = 'Angle max (\u00b0)';
       document.getElementById('hintAngleMax').textContent = 'Position maximum';
     }
+  } else if (type === 2) {
+    // Motor
+    motor.style.display = 'block';
   }
   updateActuatorHelp();
 }
@@ -693,16 +832,16 @@ function updateActuatorHelp() {
   const behavior = parseInt(document.getElementById('actBehavior').value);
   const help = document.getElementById('actuatorHelp');
   const msgs = {
-    0: 'Strike: impulsion proportionnelle a la velocite. Temps min/max = duree activation.',
-    1: 'Hold: maintien PWM proportionnel. Pour actionneurs necesstant un maintien.',
-    2: 'Position: controle continu d\u0027angle. Pour pedale hi-hat, choke, etc.',
-    3: 'Strike servo: oscillation rapide entre min et max. Pour maracas, shaker servo.',
-    4: 'Comb/Brush: oscillation continue a vitesse variable.',
-    5: 'Pitch Bend: position bidirectionnelle autour du centre.',
-    6: 'Rotation: moteur a vitesse variable.',
-    7: 'Hi-Hat Controller: pilote par CC#4 avec detection splash.',
-    8: 'Mute servo: angle mute = etouffe, angle libre = son. Volume global ferme proportionnellement.',
-    9: 'Mute solenoide: OFF = contact/mute, ON = libre. Pas de parametres de temps.'
+    0: 'Strike solenoide: impulsion proportionnelle a la velocite MIDI. Uniquement NoteOn, pas de gestion NoteOff. Temps min/max = duree activation.',
+    1: 'Hold solenoide: PWM d\'activation puis maintien a PWM reduit. Configure le PWM d\'activation, temps max PWM, PWM de maintien et temps actif max.',
+    2: 'Position servo: controle continu d\'angle. Pour pedale hi-hat, choke, etc. L\'angle repos definit la position par defaut.',
+    3: 'Strike servo: frappe avec angle configurable. Pas besoin d\'angle de repos.',
+    4: 'Comb/Brush: necessite 2 servos lies dans l\'instrument (un pour descendre le systeme, un pour la brosse). Pas besoin d\'angle de repos.',
+    5: 'Pitch Bend: angle repos = pas de bend, angle max = deviation maximale. Pas besoin d\'angle de repos separe.',
+    6: 'Rotation: moteur a vitesse variable. Configurer les pins end stop pour les limites mecaniques.',
+    7: 'Hi-Hat Controller: pilote par CC#4 avec detection splash. Pas besoin d\'angle de repos.',
+    8: 'Mute servo: angle mute = etouffe, angle libre = son. Volume global ferme proportionnellement. Pas besoin d\'angle de repos.',
+    9: 'Mute solenoide: ON/OFF pour mute. Peut etre active via MCP sur NoteOff. Pas de parametres de temps.'
   };
   help.textContent = msgs[behavior] || '';
 }
@@ -777,9 +916,12 @@ function renderActuators() {
       </div>
       <div class="item-detail">
         ${a.busName} pin ${a.hwPin}
-        ${a.type===1 && a.behavior!==9 ? '| Temps: '+a.paramMin+'-'+a.paramMax+'ms' : ''}
-        ${a.type===0 ? '| Angle: '+a.paramMin+'\u00b0-'+a.paramMax+'\u00b0 (repos:'+a.paramDefault+'\u00b0)' : ''}
-        ${a.cooldownUs > 0 ? '| Cooldown: '+Math.round(a.cooldownUs*0.1)+'ms' : ''}
+        ${a.type===1 && a.behavior===0 ? '| Temps: '+a.paramMin+'-'+a.paramMax+'ms' : ''}
+        ${a.type===1 && a.behavior===1 ? '| PWM: act='+a.paramMin+' hold='+a.paramMax+' tMax='+a.paramDefault+'ms' : ''}
+        ${a.type===0 ? '| Angle: '+a.paramMin+'\u00b0-'+a.paramMax+'\u00b0' + (a.behavior===2 ? ' (repos:'+a.paramDefault+'\u00b0)' : '') : ''}
+        ${a.type===2 ? '| PWM: '+a.paramMin+'%-'+a.paramMax+'%' + (a.paramDefault>0 ? ' EndStop:'+a.paramDefault : '') : ''}
+        ${a.type===1 && a.cooldownUs > 0 && a.behavior===0 ? '| Cooldown: '+Math.round(a.cooldownUs*0.1)+'ms' : ''}
+        ${a.type===1 && a.behavior===1 ? '| Actif max: '+Math.round(a.cooldownUs*0.1)+'ms' : ''}
       </div>
     </div>
   `).join('');
@@ -801,6 +943,18 @@ function showAddActuator() {
   document.getElementById('actAngleClosed').value = '15';
   document.getElementById('actAngleOpen').value = '90';
   document.getElementById('actAngleDefault').value = '90';
+  // Solenoid Hold defaults
+  document.getElementById('actHoldPwmActivation').value = '255';
+  document.getElementById('actHoldPwmMaxTime').value = '100';
+  document.getElementById('actHoldPwmHold').value = '80';
+  document.getElementById('actHoldMaxActiveTime').value = '5000';
+  document.getElementById('actHoldMuteEvent').value = 'off';
+  document.getElementById('actHoldMcpMute').checked = false;
+  // Motor defaults
+  document.getElementById('actMotorPwmMin').value = '20';
+  document.getElementById('actMotorPwmMax').value = '100';
+  document.getElementById('actEndStop1').value = '0';
+  document.getElementById('actEndStop2').value = '0';
   document.getElementById('actEnabled').checked = true;
   onActTypeChange();
   showModal('modalActuator');
@@ -825,17 +979,29 @@ function editActuator(id) {
     document.getElementById('actPinGlobal').value = moduleIdx * 16 + a.hwPin + 1;
   }
 
-  if (a.type === 1) {
+  if (a.type === 1 && a.behavior === 0) {
+    // Solenoid Strike
     document.getElementById('actTimeMin').value = a.paramMin;
     document.getElementById('actTimeMax').value = a.paramMax;
-    // Cooldown: stored as us/100, display as ms (value * 0.1)
     const coolMs = Math.round(a.cooldownUs * 0.1);
     document.getElementById('actCooldownMs').value = coolMs;
     document.getElementById('actCooldownEnabled').checked = (a.cooldownUs > 0);
+  } else if (a.type === 1 && a.behavior === 1) {
+    // Solenoid Hold
+    document.getElementById('actHoldPwmActivation').value = a.paramMin;
+    document.getElementById('actHoldPwmHold').value = a.paramMax;
+    document.getElementById('actHoldPwmMaxTime').value = a.paramDefault;
+    document.getElementById('actHoldMaxActiveTime').value = Math.round(a.cooldownUs * 0.1);
   } else if (a.type === 0) {
     document.getElementById('actAngleClosed').value = a.paramMin;
     document.getElementById('actAngleOpen').value = a.paramMax;
     document.getElementById('actAngleDefault').value = a.paramDefault;
+  } else if (a.type === 2) {
+    // Motor
+    document.getElementById('actMotorPwmMin').value = a.paramMin;
+    document.getElementById('actMotorPwmMax').value = a.paramMax;
+    document.getElementById('actEndStop1').value = a.paramDefault;
+    document.getElementById('actEndStop2').value = Math.round(a.cooldownUs * 0.1);
   }
 
   document.getElementById('actEnabled').checked = a.enabled;
@@ -850,20 +1016,32 @@ async function saveActuator() {
   const behavior = parseInt(document.getElementById('actBehavior').value);
 
   let paramMin, paramMax, paramDefault, cooldownUs;
-  if (type === 1 && behavior !== 9) {
+  if (type === 1 && behavior === 0) {
+    // Solenoid Strike
     paramMin = parseInt(document.getElementById('actTimeMin').value);
     paramMax = parseInt(document.getElementById('actTimeMax').value);
     paramDefault = Math.floor((paramMin + paramMax) / 2);
-    // Cooldown: input in ms, stored as us/100 (ms * 10)
     cooldownUs = document.getElementById('actCooldownEnabled').checked ?
       parseInt(document.getElementById('actCooldownMs').value) * 10 : 0;
+  } else if (type === 1 && behavior === 1) {
+    // Solenoid Hold: PWM activation/hold in paramMin/paramMax, times in paramDefault/cooldown
+    paramMin = parseInt(document.getElementById('actHoldPwmActivation').value);
+    paramMax = parseInt(document.getElementById('actHoldPwmHold').value);
+    paramDefault = parseInt(document.getElementById('actHoldPwmMaxTime').value);
+    cooldownUs = parseInt(document.getElementById('actHoldMaxActiveTime').value) * 10;
   } else if (type === 1 && behavior === 9) {
     paramMin = 0; paramMax = 1; paramDefault = 0; cooldownUs = 0;
   } else if (type === 0) {
     paramMin = parseInt(document.getElementById('actAngleClosed').value);
     paramMax = parseInt(document.getElementById('actAngleOpen').value);
-    paramDefault = parseInt(document.getElementById('actAngleDefault').value);
+    paramDefault = (behavior === 2) ? parseInt(document.getElementById('actAngleDefault').value) : paramMin;
     cooldownUs = 50;
+  } else if (type === 2) {
+    // Motor
+    paramMin = parseInt(document.getElementById('actMotorPwmMin').value);
+    paramMax = parseInt(document.getElementById('actMotorPwmMax').value);
+    paramDefault = parseInt(document.getElementById('actEndStop1').value);
+    cooldownUs = parseInt(document.getElementById('actEndStop2').value) * 10;
   } else {
     paramMin = 20; paramMax = 100; paramDefault = 0; cooldownUs = 100;
   }
@@ -980,17 +1158,22 @@ let editCcBindings = [];
 function populateActuatorSelects() {
   const strikeActs = actuators.filter(a => a.type === 1 && a.behavior !== 9);
   const muteActs = actuators.filter(a => a.behavior === 8 || a.behavior === 9);
+  const servoMuteActs = actuators.filter(a => a.type === 0 && a.behavior === 8);
   const servoActs = actuators.filter(a => a.type === 0);
+  const hihatServos = actuators.filter(a => a.type === 0 && a.behavior === 7);
   const motorActs = actuators.filter(a => a.type === 2);
   const allActs = actuators;
 
   const makeOpts = (list, sel) => list.map(a => `<option value="${a.id}" ${a.id===sel?'selected':''}>${a.name}</option>`).join('') || '<option value="255">-- aucun --</option>';
+  const makeOptsOptional = (list, sel) => '<option value="255">-- aucun --</option>' + list.map(a => `<option value="${a.id}" ${a.id===sel?'selected':''}>${a.name}</option>`).join('');
 
   document.getElementById('instrStrikeAct').innerHTML = makeOpts(strikeActs.length ? strikeActs : allActs, -1);
+  document.getElementById('instrStrikeAct2').innerHTML = makeOpts(strikeActs.length ? strikeActs : allActs, -1);
   document.getElementById('instrMuteStrikeAct').innerHTML = makeOpts(strikeActs.length ? strikeActs : allActs, -1);
   document.getElementById('instrMuteAct').innerHTML = makeOpts(muteActs.length ? muteActs : allActs, -1);
   document.getElementById('instrHHStrikeAct').innerHTML = makeOpts(strikeActs.length ? strikeActs : allActs, -1);
-  document.getElementById('instrHHPedalAct').innerHTML = makeOpts(servoActs.length ? servoActs : allActs, -1);
+  document.getElementById('instrHHPedalAct').innerHTML = makeOpts(hihatServos.length ? hihatServos : servoActs.length ? servoActs : allActs, -1);
+  document.getElementById('instrHHMuteAct').innerHTML = makeOptsOptional(servoMuteActs.length ? servoMuteActs : muteActs, -1);
   document.getElementById('instrMotorAct').innerHTML = makeOpts(motorActs.length ? motorActs : allActs, -1);
 }
 
@@ -1001,7 +1184,40 @@ function onInstrTypeChange() {
   document.getElementById('instrHihatConfig').style.display = type === 'hihat' ? 'block' : 'none';
   document.getElementById('instrMotorConfig').style.display = type === 'motor' ? 'block' : 'none';
   document.getElementById('instrCustomConfig').style.display = type === 'custom' ? 'block' : 'none';
+  // Hide main MIDI note selector for hi-hat (uses 3 separate notes)
+  document.getElementById('instrMidiNote').closest('.form-group').style.display = type === 'hihat' ? 'none' : 'block';
   populateActuatorSelects();
+  if (type === 'hihat') populateHiHatNoteSelects();
+}
+
+function populateHiHatNoteSelects() {
+  const selClosed = document.getElementById('instrHHNoteClosed');
+  const selPedal = document.getElementById('instrHHNotePedal');
+  const selOpen = document.getElementById('instrHHNoteOpen');
+  const defaults = {closed: 42, pedal: 44, open: 46};
+  [selClosed, selPedal, selOpen].forEach(sel => {
+    if (sel.options.length > 0) return; // already populated
+    midiNotes.forEach(n => {
+      const o = document.createElement('option');
+      o.value = n.note; o.textContent = n.note + ' - ' + n.name;
+      sel.appendChild(o);
+    });
+    for (let i = 0; i < 128; i++) {
+      if (!midiNotes.find(n => n.note === i)) {
+        const o = document.createElement('option');
+        o.value = i; o.textContent = i + ' - Note ' + i;
+        sel.appendChild(o);
+      }
+    }
+  });
+  selClosed.value = String(defaults.closed);
+  selPedal.value = String(defaults.pedal);
+  selOpen.value = String(defaults.open);
+}
+
+function toggleAlternateStrike() {
+  const checked = document.getElementById('instrAlternateStrike').checked;
+  document.getElementById('instrStrike2Group').style.display = checked ? 'block' : 'none';
 }
 
 async function loadInstruments() {
@@ -1304,36 +1520,52 @@ async function saveInstrument() {
   const editId = document.getElementById('editInstrId').value;
   const instrType = document.getElementById('instrType').value;
   const midiNote = parseInt(document.getElementById('instrMidiNote').value);
+  const baseName = document.getElementById('instrName').value || 'Instrument';
+  const retrigger = parseInt(document.getElementById('instrRetriggerMode').value);
+  const enabled = document.getElementById('instrEnabled').checked;
+
+  // For hi-hat, create 3 instruments
+  if (instrType === 'hihat') {
+    await saveHiHatInstruments(baseName, retrigger, enabled, editId);
+    return;
+  }
 
   let actIds = [], noteOn = [], noteOff = [], ccBinds = [];
 
   if (instrType === 'simple') {
     const strikeId = parseInt(document.getElementById('instrStrikeAct').value);
-    actIds = [strikeId];
-    noteOn = [{actuatorId: strikeId, commandType: 0, valueSource: 0, valueFixed: 0, ccIndex: 0, delayMs: 0, durationMinMs: 8, durationMaxMs: 25, velocityCurve: 0}];
-    noteOff = [{actuatorId: strikeId, commandType: 3, valueSource: 1, valueFixed: 0, ccIndex: 0, delayMs: 0, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0}];
+    const alternate = document.getElementById('instrAlternateStrike').checked;
+    const strikeAct = actuators.find(a => a.id === strikeId);
+    const isSolenoid = strikeAct && strikeAct.type === 1;
+
+    if (alternate) {
+      const strike2Id = parseInt(document.getElementById('instrStrikeAct2').value);
+      actIds = [strikeId, strike2Id];
+      // 2 NoteOn actions for alternating
+      noteOn = [
+        {actuatorId: strikeId, commandType: 0, valueSource: 0, valueFixed: 0, ccIndex: 0, delayMs: 0, durationMinMs: 8, durationMaxMs: 25, velocityCurve: 0},
+        {actuatorId: strike2Id, commandType: 0, valueSource: 0, valueFixed: 0, ccIndex: 0, delayMs: 0, durationMinMs: 8, durationMaxMs: 25, velocityCurve: 0}
+      ];
+    } else {
+      actIds = [strikeId];
+      noteOn = [{actuatorId: strikeId, commandType: 0, valueSource: 0, valueFixed: 0, ccIndex: 0, delayMs: 0, durationMinMs: 8, durationMaxMs: 25, velocityCurve: 0}];
+    }
+    // Solenoid strike: pas de NoteOff (uniquement NoteOn basee sur velocite)
+    noteOff = [];
   } else if (instrType === 'muted') {
     const strikeId = parseInt(document.getElementById('instrMuteStrikeAct').value);
     const muteId = parseInt(document.getElementById('instrMuteAct').value);
+    const strikeAct = actuators.find(a => a.id === strikeId);
+    const isSolenoid = strikeAct && strikeAct.type === 1;
     actIds = [strikeId, muteId];
+    // NoteOn: frappe (solenoid = uniquement NoteOn, pas de NoteOff pour le solenoid)
     noteOn = [{actuatorId: strikeId, commandType: 0, valueSource: 0, valueFixed: 0, ccIndex: 0, delayMs: 0, durationMinMs: 8, durationMaxMs: 25, velocityCurve: 0}];
-    // NoteOff: mute (position to closed angle)
+    // NoteOff: servo mute s'active au relachement (pas d'OFF pour le solenoid)
     const muteAct = actuators.find(a => a.id === muteId);
     const muteCmd = (muteAct && muteAct.type === 0) ? 1 : 0; // POSITION for servo, PULSE for solenoid
     noteOff = [
-      {actuatorId: muteId, commandType: muteCmd, valueSource: 1, valueFixed: 0, ccIndex: 0, delayMs: 50, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0},
-      {actuatorId: strikeId, commandType: 3, valueSource: 1, valueFixed: 0, ccIndex: 0, delayMs: 0, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0}
+      {actuatorId: muteId, commandType: muteCmd, valueSource: 1, valueFixed: 0, ccIndex: 0, delayMs: 50, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0}
     ];
-  } else if (instrType === 'hihat') {
-    const strikeId = parseInt(document.getElementById('instrHHStrikeAct').value);
-    const pedalId = parseInt(document.getElementById('instrHHPedalAct').value);
-    actIds = [strikeId, pedalId];
-    noteOn = [
-      {actuatorId: strikeId, commandType: 0, valueSource: 0, valueFixed: 0, ccIndex: 0, delayMs: 0, durationMinMs: 8, durationMaxMs: 25, velocityCurve: 1},
-      {actuatorId: pedalId, commandType: 1, valueSource: 2, valueFixed: 0, ccIndex: 4, delayMs: 0, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0}
-    ];
-    noteOff = [{actuatorId: strikeId, commandType: 3, valueSource: 1, valueFixed: 0, ccIndex: 0, delayMs: 0, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0}];
-    ccBinds = [{ccNumber: 4, actuatorId: pedalId, commandType: 1, rangeMin: 0, rangeMax: 127, curve: 0, inverted: false}];
   } else if (instrType === 'motor') {
     const motorId = parseInt(document.getElementById('instrMotorAct').value);
     actIds = [motorId];
@@ -1349,12 +1581,12 @@ async function saveInstrument() {
   }
 
   const data = {
-    name: document.getElementById('instrName').value || 'Instrument',
+    name: baseName,
     category: 'drums',
     midiNote: midiNote,
     midiChannel: 0,
-    retriggerMode: parseInt(document.getElementById('instrRetriggerMode').value),
-    enabled: document.getElementById('instrEnabled').checked,
+    retriggerMode: retrigger,
+    enabled: enabled,
     actuatorIds: actIds,
     noteOnActions: noteOn,
     noteOffActions: noteOff,
@@ -1369,6 +1601,86 @@ async function saveInstrument() {
   closeModal('modalInstrument');
   await loadInstruments();
   toast('Instrument enregistre', 'success');
+}
+
+async function saveHiHatInstruments(baseName, retrigger, enabled, editId) {
+  const strikeId = parseInt(document.getElementById('instrHHStrikeAct').value);
+  const pedalId = parseInt(document.getElementById('instrHHPedalAct').value);
+  const muteId = parseInt(document.getElementById('instrHHMuteAct').value);
+  const hasMute = muteId !== 255;
+
+  const noteClosed = parseInt(document.getElementById('instrHHNoteClosed').value);
+  const notePedal = parseInt(document.getElementById('instrHHNotePedal').value);
+  const noteOpen = parseInt(document.getElementById('instrHHNoteOpen').value);
+
+  const actIds = hasMute ? [strikeId, pedalId, muteId] : [strikeId, pedalId];
+
+  const ccBind = {ccNumber: 4, actuatorId: pedalId, commandType: 1, rangeMin: 0, rangeMax: 127, curve: 0, inverted: false};
+
+  // If editing, update the single instrument
+  if (editId !== '') {
+    const data = {
+      name: baseName, category: 'cymbals', midiNote: noteClosed, midiChannel: 0,
+      retriggerMode: retrigger, enabled: enabled, actuatorIds: actIds,
+      noteOnActions: [
+        {actuatorId: strikeId, commandType: 0, valueSource: 0, valueFixed: 0, ccIndex: 0, delayMs: 0, durationMinMs: 8, durationMaxMs: 25, velocityCurve: 1}
+      ],
+      noteOffActions: hasMute ? [
+        {actuatorId: muteId, commandType: 1, valueSource: 1, valueFixed: 0, ccIndex: 0, delayMs: 50, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0}
+      ] : [],
+      ccBindings: [ccBind]
+    };
+    await api('instrument?id=' + editId, 'PUT', data);
+    closeModal('modalInstrument');
+    await loadInstruments();
+    toast('Instrument hi-hat mis a jour', 'success');
+    return;
+  }
+
+  // Create 3 instruments: Closed, Pedal, Open
+  const instruments3 = [
+    {
+      name: baseName + ' - Closed', category: 'cymbals', midiNote: noteClosed, midiChannel: 0,
+      retriggerMode: retrigger, enabled: enabled, actuatorIds: actIds,
+      noteOnActions: [
+        {actuatorId: strikeId, commandType: 0, valueSource: 0, valueFixed: 0, ccIndex: 0, delayMs: 0, durationMinMs: 8, durationMaxMs: 25, velocityCurve: 1},
+        ...(hasMute ? [{actuatorId: muteId, commandType: 1, valueSource: 1, valueFixed: 0, ccIndex: 0, delayMs: 0, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0}] : [])
+      ],
+      noteOffActions: hasMute ? [
+        {actuatorId: muteId, commandType: 1, valueSource: 1, valueFixed: 127, ccIndex: 0, delayMs: 50, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0}
+      ] : [],
+      ccBindings: [ccBind]
+    },
+    {
+      name: baseName + ' - Pedal', category: 'cymbals', midiNote: notePedal, midiChannel: 0,
+      retriggerMode: retrigger, enabled: enabled, actuatorIds: actIds,
+      noteOnActions: [
+        {actuatorId: pedalId, commandType: 1, valueSource: 1, valueFixed: 0, ccIndex: 0, delayMs: 0, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0},
+        ...(hasMute ? [{actuatorId: muteId, commandType: 1, valueSource: 1, valueFixed: 0, ccIndex: 0, delayMs: 0, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0}] : [])
+      ],
+      noteOffActions: [],
+      ccBindings: [ccBind]
+    },
+    {
+      name: baseName + ' - Open', category: 'cymbals', midiNote: noteOpen, midiChannel: 0,
+      retriggerMode: retrigger, enabled: enabled, actuatorIds: actIds,
+      noteOnActions: [
+        {actuatorId: strikeId, commandType: 0, valueSource: 0, valueFixed: 0, ccIndex: 0, delayMs: 0, durationMinMs: 8, durationMaxMs: 25, velocityCurve: 1}
+      ],
+      noteOffActions: [],
+      ccBindings: [ccBind]
+    }
+  ];
+
+  let created = 0;
+  for (const inst of instruments3) {
+    const result = await api('instruments', 'POST', inst);
+    if (result) created++;
+  }
+
+  closeModal('modalInstrument');
+  await loadInstruments();
+  toast(created + '/3 instruments hi-hat crees', created === 3 ? 'success' : 'error');
 }
 
 async function deleteInstrument(id) {

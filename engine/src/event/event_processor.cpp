@@ -26,8 +26,15 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
     }
 
     if (pipeline.note_on_count > 0) {
+      uint8_t activeGroup = 0;
+      if (pipeline.alternate_group_count > 0) {
+        // Round-robin: advance counter, get active group (1-based)
+        uint8_t rr = _state->advanceRoundRobin(pipelineIdx, pipeline.alternate_group_count);
+        activeGroup = rr + 1; // advanceRoundRobin returns 0-based, groups are 1-based
+      }
       _scheduler->scheduleActionSteps(pipeline.note_on_actions, pipeline.note_on_count,
-                                      ev.data2, ev.timestamp, _state->raw().variables);
+                                      ev.data2, ev.timestamp, _state->raw().variables,
+                                      activeGroup);
       _noteActive[ev.data1] = true;
       return;
     }

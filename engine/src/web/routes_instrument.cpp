@@ -159,11 +159,14 @@ bool WebServerManager::_validateInstrumentConfig(InstrumentConfig& cfg, const ch
   auto commandCompatibleWithActuator = [&](uint8_t commandType, const ActuatorConfig& actCfg) -> bool {
     switch ((CommandType)commandType) {
       case CommandType::PULSE:
-        return actCfg.type == ActuatorType::SOLENOID;
+        // PULSE: solenoid (strike/hold) + servo (strike, hi-hat splash)
+        return actCfg.type == ActuatorType::SOLENOID || actCfg.type == ActuatorType::SERVO;
       case CommandType::POSITION:
         return actCfg.type == ActuatorType::SERVO || actCfg.type == ActuatorType::MOTOR_OPTICAL;
       case CommandType::PWM:
-        return actCfg.type == ActuatorType::PWM_MOTOR || actCfg.type == ActuatorType::MOTOR_OPTICAL;
+        // PWM: motors + servos (comb/brush oscillation)
+        return actCfg.type == ActuatorType::PWM_MOTOR || actCfg.type == ActuatorType::MOTOR_OPTICAL
+            || actCfg.type == ActuatorType::SERVO;
       case CommandType::OFF:
         return true;
       default:

@@ -233,6 +233,7 @@ void InstrumentManager::instrumentToJson(const InstrumentConfig& inst, JsonObjec
     s["durationMinMs"] = step.duration_min_ms;
     s["durationMaxMs"] = step.duration_max_ms;
     s["velocityCurve"] = step.velocity_curve;
+    if (step.alternate_group > 0) s["alternateGroup"] = step.alternate_group;
   }
 
   JsonArray noteOff = obj["noteOffActions"].to<JsonArray>();
@@ -248,6 +249,7 @@ void InstrumentManager::instrumentToJson(const InstrumentConfig& inst, JsonObjec
     s["durationMinMs"] = step.duration_min_ms;
     s["durationMaxMs"] = step.duration_max_ms;
     s["velocityCurve"] = step.velocity_curve;
+    if (step.alternate_group > 0) s["alternateGroup"] = step.alternate_group;
   }
 
   JsonArray cc = obj["ccBindings"].to<JsonArray>();
@@ -317,6 +319,7 @@ bool InstrumentManager::instrumentFromJson(const JsonObject& obj, InstrumentConf
       step.duration_min_ms = stepObj["durationMinMs"] | 0;
       step.duration_max_ms = stepObj["durationMaxMs"] | 0;
       step.velocity_curve = stepObj["velocityCurve"] | CURVE_LINEAR;
+      step.alternate_group = stepObj["alternateGroup"] | 0;
     }
   }
 
@@ -335,6 +338,7 @@ bool InstrumentManager::instrumentFromJson(const JsonObject& obj, InstrumentConf
       step.duration_min_ms = stepObj["durationMinMs"] | 0;
       step.duration_max_ms = stepObj["durationMaxMs"] | 0;
       step.velocity_curve = stepObj["velocityCurve"] | CURVE_LINEAR;
+      step.alternate_group = stepObj["alternateGroup"] | 0;
     }
   }
 

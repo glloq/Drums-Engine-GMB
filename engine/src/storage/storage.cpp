@@ -36,6 +36,8 @@ static void actuatorConfigToJson(const ActuatorConfig& cfg, JsonObject& obj) {
   obj["cooldownUs"] = cfg.cooldownUs;
   obj["enabled"] = cfg.enabled;
   obj["inverted"] = cfg.inverted;
+  if (cfg.endStopPin1 != 0xFF) obj["endStopPin1"] = cfg.endStopPin1;
+  if (cfg.endStopPin2 != 0xFF) obj["endStopPin2"] = cfg.endStopPin2;
 }
 
 static void actuatorConfigFromJson(const JsonObject& obj, ActuatorConfig& cfg) {
@@ -52,6 +54,8 @@ static void actuatorConfigFromJson(const JsonObject& obj, ActuatorConfig& cfg) {
   cfg.cooldownUs = obj["cooldownUs"] | 200;
   cfg.enabled = obj["enabled"] | true;
   cfg.inverted = obj["inverted"] | false;
+  cfg.endStopPin1 = obj["endStopPin1"] | 0xFF;
+  cfg.endStopPin2 = obj["endStopPin2"] | 0xFF;
 }
 
 bool Storage::saveActuators(const ActuatorFactory& factory) {

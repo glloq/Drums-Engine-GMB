@@ -14,7 +14,7 @@
 
 class SolenoidActuator : public Actuator {
 public:
-  SolenoidActuator() : _driver(nullptr) {}
+  SolenoidActuator() : _driver(nullptr), _holdTransitioned(false) {}
   SolenoidActuator(HalDriver* driver);
 
   void init() override;
@@ -24,6 +24,7 @@ public:
 
 private:
   HalDriver* _driver;
+  bool _holdTransitioned;  // True once HOLD PWM has dropped from activation to hold level
 };
 
 #endif // SOLENOID_ACTUATOR_H

@@ -47,7 +47,8 @@ bool Scheduler::schedulePulseAt(uint8_t actuatorId, uint16_t value,
 
 bool Scheduler::scheduleActionSteps(const ActionStep* steps, uint8_t stepCount,
                                     uint8_t velocity, uint32_t timestamp,
-                                    const uint16_t* globalVars) {
+                                    const uint16_t* globalVars,
+                                    uint8_t activeGroup) {
   if (!steps || stepCount == 0) return true;
 
   auto applyCurve = [](uint8_t inputValue, uint8_t curve) -> uint8_t {
@@ -68,6 +69,9 @@ bool Scheduler::scheduleActionSteps(const ActionStep* steps, uint8_t stepCount,
   for (uint8_t i = 0; i < stepCount; i++) {
     const ActionStep& step = steps[i];
     if (step.actuator_id == 0xFF) continue;
+
+    // Alternation filter: skip steps not in the active group
+    if (activeGroup > 0 && step.alternate_group > 0 && step.alternate_group != activeGroup) continue;
 
     uint8_t curvedVelocity = applyCurve(velocity, step.velocity_curve);
 

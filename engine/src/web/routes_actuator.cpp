@@ -24,6 +24,8 @@ void WebServerManager::_handleGetActuators(AsyncWebServerRequest* req) {
     obj["cooldownUs"] = cfg.cooldownUs;
     obj["enabled"] = cfg.enabled;
     obj["inverted"] = cfg.inverted;
+    obj["endStopPin1"] = cfg.endStopPin1;
+    obj["endStopPin2"] = cfg.endStopPin2;
 
     // Etat temps reel
     Actuator* act = _actMgr->getActuator(cfg.id);
@@ -50,6 +52,8 @@ void WebServerManager::_handleCreateActuator(AsyncWebServerRequest* req, uint8_t
   cfg.cooldownUs = doc["cooldownUs"] | 200;
   cfg.enabled = doc["enabled"] | true;
   cfg.inverted = doc["inverted"] | false;
+  cfg.endStopPin1 = doc["endStopPin1"] | 0xFF;
+  cfg.endStopPin2 = doc["endStopPin2"] | 0xFF;
 
   const char* errMsg = nullptr;
   if (!_validateActuatorConfig(cfg, errMsg)) {
@@ -90,6 +94,8 @@ void WebServerManager::_handleUpdateActuator(AsyncWebServerRequest* req, uint8_t
   if (doc.containsKey("cooldownUs"))  cfg->cooldownUs = doc["cooldownUs"] | 200;
   if (doc.containsKey("enabled"))     cfg->enabled = doc["enabled"] | true;
   if (doc.containsKey("inverted"))    cfg->inverted = doc["inverted"] | false;
+  if (doc.containsKey("endStopPin1")) cfg->endStopPin1 = doc["endStopPin1"] | 0xFF;
+  if (doc.containsKey("endStopPin2")) cfg->endStopPin2 = doc["endStopPin2"] | 0xFF;
 
   const char* errMsg = nullptr;
   if (!_validateActuatorConfig(*cfg, errMsg)) {
@@ -125,14 +131,17 @@ void WebServerManager::_handleTestActuator(AsyncWebServerRequest* req, uint8_t* 
 }
 
 bool WebServerManager::_validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg) {
-  if (cfg.paramMin > cfg.paramMax) {
-    errMsg = "paramMin must be <= paramMax";
-    return false;
-  }
-
-  if (cfg.paramDefault < cfg.paramMin || cfg.paramDefault > cfg.paramMax) {
-    errMsg = "paramDefault must be inside [paramMin, paramMax]";
-    return false;
+  // SOLENOID_HOLD: paramMin=pwmActivation, paramMax=pwmHold (paramMin CAN be > paramMax)
+  // Other behaviors: paramMin must be <= paramMax
+  if (cfg.behavior != ActuatorBehavior::SOLENOID_HOLD) {
+    if (cfg.paramMin > cfg.paramMax) {
+      errMsg = "paramMin must be <= paramMax";
+      return false;
+    }
+    if (cfg.paramDefault < cfg.paramMin || cfg.paramDefault > cfg.paramMax) {
+      errMsg = "paramDefault must be inside [paramMin, paramMax]";
+      return false;
+    }
   }
 
   if (cfg.type == ActuatorType::SERVO) {

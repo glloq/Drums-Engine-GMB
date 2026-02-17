@@ -113,11 +113,13 @@ struct ActionStep {
   uint16_t duration_min_ms;
   uint16_t duration_max_ms;
   uint8_t velocity_curve;
+  uint8_t alternate_group;   // 0 = always fire, 1+ = group number (round-robin)
 
   ActionStep()
     : actuator_id(0xFF), command_type((uint8_t)CommandType::PULSE),
       value_source((uint8_t)ValueSource::VELOCITY), value_fixed(0), cc_index(0),
-      delay_ms(0), duration_min_ms(0), duration_max_ms(0), velocity_curve(0) {}
+      delay_ms(0), duration_min_ms(0), duration_max_ms(0), velocity_curve(0),
+      alternate_group(0) {}
 };
 
 struct CCBinding {
@@ -155,12 +157,24 @@ struct ActuatorConfig {
   bool enabled;
   bool inverted;
 
+  uint8_t endStopPin1;     // End stop pin 1 GPIO (0xFF = disabled)
+  uint8_t endStopPin2;     // End stop pin 2 GPIO (0xFF = disabled)
+
+  // --- Behavior-specific param semantics ---
+  // SOLENOID_STRIKE: paramMin=durMin(ms), paramMax=durMax(ms), cooldownUs=cooldown/100
+  // SOLENOID_HOLD:   paramMin=pwmActivation(0-255), paramMax=pwmHold(0-255),
+  //                  paramDefault=transitionMs, cooldownUs=maxActiveTime*10
+  // SERVO_*:         paramMin=angleMin, paramMax=angleMax, paramDefault=angleDefault
+  // MOTOR:           paramMin=pwmMin%, paramMax=pwmMax%, paramDefault=driveSpeed,
+  //                  endStopPin1/2 for limit switches
+
   ActuatorConfig()
     : id(0), type(ActuatorType::SOLENOID), behavior(ActuatorBehavior::SOLENOID_STRIKE),
       bus(HardwareBus::MCP23017), hwAddress(0x20), hwPin(0),
       paramMin(8), paramMax(30), paramDefault(15),
       cooldownUs(200), lastActivation(0),
-      enabled(true), inverted(false) {
+      enabled(true), inverted(false),
+      endStopPin1(0xFF), endStopPin2(0xFF) {
     name[0] = '\0';
   }
 };
@@ -262,11 +276,13 @@ struct CompiledPipeline {
   CCBinding cc_bindings[MAX_CC_BINDINGS];
   uint8_t cc_binding_count;
   uint8_t retrigger_mode;
+  uint8_t alternate_group_count; // 0 = no alternation, N = N groups round-robin
 
   CompiledPipeline()
     : block_count(0), output_actuator_id(0xFF),
       note_on_count(0), note_off_count(0), cc_binding_count(0),
-      retrigger_mode((uint8_t)RetriggerMode::IGNORE) {
+      retrigger_mode((uint8_t)RetriggerMode::IGNORE),
+      alternate_group_count(0) {
     memset(blocks, 0, sizeof(blocks));
   }
 };

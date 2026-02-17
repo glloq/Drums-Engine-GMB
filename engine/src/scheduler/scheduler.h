@@ -39,9 +39,11 @@ public:
 
 
   // Planifier une sequence d'actions (multi-output)
+  // activeGroup: 0 = fire all, N = fire only steps with alternate_group==0 or ==N
   bool scheduleActionSteps(const ActionStep* steps, uint8_t stepCount,
                            uint8_t velocity, uint32_t timestamp,
-                           const uint16_t* globalVars);
+                           const uint16_t* globalVars,
+                           uint8_t activeGroup = 0);
 
   // Appeler dans loop() - traite les commandes pretes
   void update();

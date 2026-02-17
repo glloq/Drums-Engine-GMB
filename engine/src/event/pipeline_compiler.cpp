@@ -1,6 +1,8 @@
 #include "pipeline_compiler.h"
 
 static void parseActionAndCcBindings(const JsonObject& inst, CompiledPipeline& pipeline) {
+  uint8_t maxGroup = 0;
+
   JsonArray noteOnActions = inst["noteOnActions"].as<JsonArray>();
   if (!noteOnActions.isNull()) {
     for (JsonObject action : noteOnActions) {
@@ -15,6 +17,8 @@ static void parseActionAndCcBindings(const JsonObject& inst, CompiledPipeline& p
       step.duration_min_ms = action["durationMinMs"] | 0;
       step.duration_max_ms = action["durationMaxMs"] | 0;
       step.velocity_curve = action["velocityCurve"] | CURVE_LINEAR;
+      step.alternate_group = action["alternateGroup"] | 0;
+      if (step.alternate_group > maxGroup) maxGroup = step.alternate_group;
     }
   }
 
@@ -32,8 +36,12 @@ static void parseActionAndCcBindings(const JsonObject& inst, CompiledPipeline& p
       step.duration_min_ms = action["durationMinMs"] | 0;
       step.duration_max_ms = action["durationMaxMs"] | 0;
       step.velocity_curve = action["velocityCurve"] | CURVE_LINEAR;
+      step.alternate_group = action["alternateGroup"] | 0;
+      if (step.alternate_group > maxGroup) maxGroup = step.alternate_group;
     }
   }
+
+  pipeline.alternate_group_count = maxGroup;
 
   JsonArray ccBindings = inst["ccBindings"].as<JsonArray>();
   if (!ccBindings.isNull()) {

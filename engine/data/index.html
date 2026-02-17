@@ -337,6 +337,7 @@ input[type=checkbox] { width: auto; }
       </div>
     </div>
     <div id="paramRowSolenoidHold" style="display:none;">
+      <div class="hint" style="margin-bottom:8px;font-style:italic;">Sequence: PWM activation (pleine puissance) → transition → PWM maintien (reduit chauffe) → timeout securite</div>
       <div class="form-row">
         <div class="form-group">
           <label>PWM activation (0-255)</label>
@@ -392,10 +393,22 @@ input[type=checkbox] { width: auto; }
         <div class="form-group">
           <label>Pin capteur optique (GPIO)</label>
           <input type="number" id="actMotorSensorPin" value="0" min="0" max="39">
-          <div class="hint">0 = pas de capteur. Pour tracking de position (end stop optique).</div>
+          <div class="hint">0 = pas de capteur. Pour tracking de position.</div>
         </div>
         <div class="form-group" style="display:flex;align-items:flex-end;">
           <label><input type="checkbox" id="actMotorInverted"> Inverser sens (inverse le mapping velocite/PWM)</label>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Fin de course 1 (GPIO)</label>
+          <input type="number" id="actMotorEndStop1" value="255" min="0" max="255">
+          <div class="hint">255 = desactive. Pin micro-switch (LOW = declench)</div>
+        </div>
+        <div class="form-group">
+          <label>Fin de course 2 (GPIO)</label>
+          <input type="number" id="actMotorEndStop2" value="255" min="0" max="255">
+          <div class="hint">255 = desactive. Pin micro-switch (LOW = declench)</div>
         </div>
       </div>
     </div>
@@ -440,7 +453,11 @@ input[type=checkbox] { width: auto; }
         <label>Type d\u0027instrument</label>
         <select id="instrType" onchange="onInstrTypeChange()">
           <option value="simple">Simple (1 actionneur frappe)</option>
+          <option value="alternate">Frappe alternee (2 actionneurs)</option>
           <option value="muted">Avec mute (frappe + mute)</option>
+          <option value="servo_toggle">Servo alterné (angle A / angle B)</option>
+          <option value="shake">Shaker (servo + solenoide alternés)</option>
+          <option value="comb_dual">Brosse double servo (descente + brosse)</option>
           <option value="hihat">Hi-Hat (frappe + pedale + mute)</option>
           <option value="motor">Moteur rotatif</option>
           <option value="custom">Personnalise (editeur complet)</option>
@@ -472,20 +489,64 @@ input[type=checkbox] { width: auto; }
 
     <!-- Simple mode: just a strike actuator -->
     <div id="instrSimpleConfig">
+      <div class="form-group">
+        <label>Actionneur de frappe</label>
+        <select id="instrStrikeAct"></select>
+      </div>
+    </div>
+
+    <!-- Alternate mode: 2 actuators, round-robin -->
+    <div id="instrAlternateConfig" style="display:none;">
       <div class="form-row">
         <div class="form-group">
-          <label>Actionneur de frappe</label>
-          <select id="instrStrikeAct"></select>
+          <label>Actionneur frappe A</label>
+          <select id="instrAltAct1"></select>
         </div>
-        <div class="form-group" id="instrStrike2Group" style="display:none;">
-          <label>Actionneur frappe 2</label>
-          <select id="instrStrikeAct2"></select>
+        <div class="form-group">
+          <label>Actionneur frappe B</label>
+          <select id="instrAltAct2"></select>
         </div>
       </div>
+      <div class="hint">Alterne entre A et B a chaque NoteOn (round-robin)</div>
+    </div>
+
+    <!-- Servo toggle mode: servo alternates between 2 angles -->
+    <div id="instrServoToggleConfig" style="display:none;">
       <div class="form-group">
-        <label><input type="checkbox" id="instrAlternateStrike" onchange="toggleAlternateStrike()"> Double frappe (2 actionneurs simultanes)</label>
-        <div class="hint">Les 2 actionneurs frappent en meme temps sur chaque NoteOn</div>
+        <label>Servo</label>
+        <select id="instrToggleServo"></select>
       </div>
+      <div class="hint">Le servo alterne entre son angle min et max a chaque NoteOn (bascule)</div>
+    </div>
+
+    <!-- Shake mode: servo oscillation + solenoid strike alternating -->
+    <div id="instrShakeConfig" style="display:none;">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Servo oscillation</label>
+          <select id="instrShakeServo"></select>
+        </div>
+        <div class="form-group">
+          <label>Solenoide frappe</label>
+          <select id="instrShakeSolenoid"></select>
+        </div>
+      </div>
+      <div class="hint">Le servo alterne les angles + le solenoide frappe a chaque NoteOn. Simule un shaker/maracas.</div>
+    </div>
+
+    <!-- Comb/Brush dual servo: lower + brush -->
+    <div id="instrCombDualConfig" style="display:none;">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Servo descente (abaisse le systeme)</label>
+          <select id="instrCombLowerServo"></select>
+        </div>
+        <div class="form-group">
+          <label>Servo brosse (oscillation)</label>
+          <select id="instrCombBrushServo"></select>
+        </div>
+      </div>
+      <div class="hint">NoteOn: descend le systeme + demarre la brosse (vitesse = velocite). NoteOff: releve + stoppe.</div>
     </div>
 
     <!-- Muted mode: strike + mute -->
@@ -541,6 +602,7 @@ input[type=checkbox] { width: auto; }
         <label>Actionneur moteur</label>
         <select id="instrMotorAct"></select>
       </div>
+      <div class="hint">NoteOn: moteur tourne (vitesse = velocite). NoteOff: moteur stoppe. Les fins de course sont configurees dans l'actionneur.</div>
     </div>
 
     <!-- Custom mode: full editor -->
@@ -953,6 +1015,8 @@ function showAddActuator() {
   document.getElementById('actMotorPwmMax').value = '100';
   document.getElementById('actMotorSensorPin').value = '0';
   document.getElementById('actMotorInverted').checked = false;
+  document.getElementById('actMotorEndStop1').value = '255';
+  document.getElementById('actMotorEndStop2').value = '255';
   document.getElementById('actEnabled').checked = true;
   onActTypeChange();
   showModal('modalActuator');
@@ -1000,6 +1064,8 @@ function editActuator(id) {
     document.getElementById('actMotorPwmMax').value = a.paramMax;
     document.getElementById('actMotorSensorPin').value = a.hwAddress || 0;
     document.getElementById('actMotorInverted').checked = a.inverted || false;
+    document.getElementById('actMotorEndStop1').value = (a.endStopPin1 !== undefined) ? a.endStopPin1 : 255;
+    document.getElementById('actMotorEndStop2').value = (a.endStopPin2 !== undefined) ? a.endStopPin2 : 255;
   }
 
   document.getElementById('actEnabled').checked = a.enabled;
@@ -1062,7 +1128,9 @@ async function saveActuator() {
     paramDefault: paramDefault,
     cooldownUs: cooldownUs,
     enabled: document.getElementById('actEnabled').checked,
-    inverted: (type === 2) ? document.getElementById('actMotorInverted').checked : false
+    inverted: (type === 2) ? document.getElementById('actMotorInverted').checked : false,
+    endStopPin1: (type === 2) ? parseInt(document.getElementById('actMotorEndStop1').value) : 255,
+    endStopPin2: (type === 2) ? parseInt(document.getElementById('actMotorEndStop2').value) : 255
   };
 
   if (data.type === 0 && data.bus !== 1) {
@@ -1158,10 +1226,12 @@ let editNoteOffActions = [];
 let editCcBindings = [];
 
 function populateActuatorSelects() {
-  const strikeActs = actuators.filter(a => a.type === 1 && a.behavior !== 9);
+  const solenoidActs = actuators.filter(a => a.type === 1);
+  const strikeActs = solenoidActs.filter(a => a.behavior !== 9);
   const muteActs = actuators.filter(a => a.behavior === 8 || a.behavior === 9);
   const servoMuteActs = actuators.filter(a => a.type === 0 && a.behavior === 8);
   const servoActs = actuators.filter(a => a.type === 0);
+  const servoStrikeActs = actuators.filter(a => a.type === 0 && (a.behavior === 3 || a.behavior === 4));
   const hihatServos = actuators.filter(a => a.type === 0 && a.behavior === 7);
   const motorActs = actuators.filter(a => a.type === 2);
   const allActs = actuators;
@@ -1169,20 +1239,38 @@ function populateActuatorSelects() {
   const makeOpts = (list, sel) => list.map(a => `<option value="${a.id}" ${a.id===sel?'selected':''}>${a.name}</option>`).join('') || '<option value="255">-- aucun --</option>';
   const makeOptsOptional = (list, sel) => '<option value="255">-- aucun --</option>' + list.map(a => `<option value="${a.id}" ${a.id===sel?'selected':''}>${a.name}</option>`).join('');
 
+  // Simple
   document.getElementById('instrStrikeAct').innerHTML = makeOpts(strikeActs.length ? strikeActs : allActs, -1);
-  document.getElementById('instrStrikeAct2').innerHTML = makeOpts(strikeActs.length ? strikeActs : allActs, -1);
+  // Alternate
+  document.getElementById('instrAltAct1').innerHTML = makeOpts(strikeActs.length ? strikeActs : allActs, -1);
+  document.getElementById('instrAltAct2').innerHTML = makeOpts(strikeActs.length ? strikeActs : allActs, -1);
+  // Muted
   document.getElementById('instrMuteStrikeAct').innerHTML = makeOpts(strikeActs.length ? strikeActs : allActs, -1);
   document.getElementById('instrMuteAct').innerHTML = makeOpts(muteActs.length ? muteActs : allActs, -1);
+  // Servo toggle
+  document.getElementById('instrToggleServo').innerHTML = makeOpts(servoActs.length ? servoActs : allActs, -1);
+  // Shake
+  document.getElementById('instrShakeServo').innerHTML = makeOpts(servoStrikeActs.length ? servoStrikeActs : servoActs.length ? servoActs : allActs, -1);
+  document.getElementById('instrShakeSolenoid').innerHTML = makeOpts(strikeActs.length ? strikeActs : allActs, -1);
+  // Comb dual
+  document.getElementById('instrCombLowerServo').innerHTML = makeOpts(servoActs.length ? servoActs : allActs, -1);
+  document.getElementById('instrCombBrushServo').innerHTML = makeOpts(servoStrikeActs.length ? servoStrikeActs : servoActs.length ? servoActs : allActs, -1);
+  // Hi-hat
   document.getElementById('instrHHStrikeAct').innerHTML = makeOpts(strikeActs.length ? strikeActs : allActs, -1);
   document.getElementById('instrHHPedalAct').innerHTML = makeOpts(hihatServos.length ? hihatServos : servoActs.length ? servoActs : allActs, -1);
   document.getElementById('instrHHMuteAct').innerHTML = makeOptsOptional(servoMuteActs.length ? servoMuteActs : muteActs, -1);
+  // Motor
   document.getElementById('instrMotorAct').innerHTML = makeOpts(motorActs.length ? motorActs : allActs, -1);
 }
 
 function onInstrTypeChange() {
   const type = document.getElementById('instrType').value;
   document.getElementById('instrSimpleConfig').style.display = type === 'simple' ? 'block' : 'none';
+  document.getElementById('instrAlternateConfig').style.display = type === 'alternate' ? 'block' : 'none';
   document.getElementById('instrMutedConfig').style.display = type === 'muted' ? 'block' : 'none';
+  document.getElementById('instrServoToggleConfig').style.display = type === 'servo_toggle' ? 'block' : 'none';
+  document.getElementById('instrShakeConfig').style.display = type === 'shake' ? 'block' : 'none';
+  document.getElementById('instrCombDualConfig').style.display = type === 'comb_dual' ? 'block' : 'none';
   document.getElementById('instrHihatConfig').style.display = type === 'hihat' ? 'block' : 'none';
   document.getElementById('instrMotorConfig').style.display = type === 'motor' ? 'block' : 'none';
   document.getElementById('instrCustomConfig').style.display = type === 'custom' ? 'block' : 'none';
@@ -1215,11 +1303,6 @@ function populateHiHatNoteSelects() {
   selClosed.value = String(defaults.closed);
   selPedal.value = String(defaults.pedal);
   selOpen.value = String(defaults.open);
-}
-
-function toggleAlternateStrike() {
-  const checked = document.getElementById('instrAlternateStrike').checked;
-  document.getElementById('instrStrike2Group').style.display = checked ? 'block' : 'none';
 }
 
 async function loadInstruments() {
@@ -1537,43 +1620,87 @@ async function saveInstrument() {
 
   let actIds = [], noteOn = [], noteOff = [], ccBinds = [];
 
+  // Helper: make a PULSE action for solenoid (duration managed by actuator)
+  const mkPulse = (actId, group) => ({actuatorId: actId, commandType: 0, valueSource: 0, valueFixed: 0, ccIndex: 0, delayMs: 0, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0, alternateGroup: group || 0});
+  // Helper: make a POSITION action for servo
+  const mkPos = (actId, valSrc, valFixed, group) => ({actuatorId: actId, commandType: 1, valueSource: valSrc, valueFixed: valFixed || 0, ccIndex: 0, delayMs: 0, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0, alternateGroup: group || 0});
+  // Helper: make a PWM action (comb/brush oscillation)
+  const mkPwm = (actId, valSrc) => ({actuatorId: actId, commandType: 2, valueSource: valSrc, valueFixed: 0, ccIndex: 0, delayMs: 0, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0});
+  // Helper: make an OFF action
+  const mkOff = (actId) => ({actuatorId: actId, commandType: 3, valueSource: 1, valueFixed: 0, ccIndex: 0, delayMs: 0, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0});
+
   if (instrType === 'simple') {
     const strikeId = parseInt(document.getElementById('instrStrikeAct').value);
-    const alternate = document.getElementById('instrAlternateStrike').checked;
-    const strikeAct = actuators.find(a => a.id === strikeId);
-    // Duree geree par l'actionneur (paramMin/paramMax) => on envoie 0/0 dans l'instrument
-    const mkPulse = (actId) => ({actuatorId: actId, commandType: 0, valueSource: 0, valueFixed: 0, ccIndex: 0, delayMs: 0, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0});
-
-    if (alternate) {
-      const strike2Id = parseInt(document.getElementById('instrStrikeAct2').value);
-      actIds = [strikeId, strike2Id];
-      noteOn = [mkPulse(strikeId), mkPulse(strike2Id)];
-    } else {
-      actIds = [strikeId];
-      noteOn = [mkPulse(strikeId)];
-    }
-    // Solenoid strike: pas de NoteOff (uniquement NoteOn basee sur velocite)
+    actIds = [strikeId];
+    noteOn = [mkPulse(strikeId)];
     noteOff = [];
+
+  } else if (instrType === 'alternate') {
+    // Alternating strike: 2 solenoids, round-robin groups 1 and 2
+    const act1 = parseInt(document.getElementById('instrAltAct1').value);
+    const act2 = parseInt(document.getElementById('instrAltAct2').value);
+    actIds = [act1, act2];
+    noteOn = [mkPulse(act1, 1), mkPulse(act2, 2)];
+    noteOff = [];
+
+  } else if (instrType === 'servo_toggle') {
+    // Servo toggles between min and max angle (alternate groups)
+    const servoId = parseInt(document.getElementById('instrToggleServo').value);
+    actIds = [servoId];
+    // Group 1: go to angle min (value=0), Group 2: go to angle max (value=127)
+    noteOn = [mkPos(servoId, 1, 0, 1), mkPos(servoId, 1, 127, 2)];
+    noteOff = [];
+
+  } else if (instrType === 'shake') {
+    // Shaker: servo alternates + solenoid fires each time
+    const servoId = parseInt(document.getElementById('instrShakeServo').value);
+    const solId = parseInt(document.getElementById('instrShakeSolenoid').value);
+    actIds = [servoId, solId];
+    // Group 1: servo to min + solenoid strike
+    // Group 2: servo to max + solenoid strike
+    noteOn = [
+      mkPos(servoId, 1, 0, 1),
+      mkPos(servoId, 1, 127, 2),
+      mkPulse(solId, 0)  // group 0 = always fires
+    ];
+    noteOff = [];
+
+  } else if (instrType === 'comb_dual') {
+    // Double servo: lower + brush
+    const lowerId = parseInt(document.getElementById('instrCombLowerServo').value);
+    const brushId = parseInt(document.getElementById('instrCombBrushServo').value);
+    actIds = [lowerId, brushId];
+    // NoteOn: lower servo to contact (paramMax=down), start brush oscillation (PWM=velocity)
+    noteOn = [
+      mkPos(lowerId, 1, 127),     // Lower to contact position
+      mkPwm(brushId, 0)           // Brush speed = velocity
+    ];
+    // NoteOff: raise lower servo, stop brush
+    noteOff = [
+      mkPos(lowerId, 1, 0),       // Raise to rest position
+      mkOff(brushId)              // Stop brush
+    ];
+
   } else if (instrType === 'muted') {
     const strikeId = parseInt(document.getElementById('instrMuteStrikeAct').value);
     const muteId = parseInt(document.getElementById('instrMuteAct').value);
     actIds = [strikeId, muteId];
     const muteAct = actuators.find(a => a.id === muteId);
-    const muteCmd = (muteAct && muteAct.type === 0) ? 1 : 0; // POSITION for servo, PULSE for solenoid
-    // NoteOn: relacher le mute d'abord, puis frapper
+    const muteCmd = (muteAct && muteAct.type === 0) ? 1 : 0;
     noteOn = [
       {actuatorId: muteId, commandType: muteCmd, valueSource: 1, valueFixed: 127, ccIndex: 0, delayMs: 0, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0},
-      {actuatorId: strikeId, commandType: 0, valueSource: 0, valueFixed: 0, ccIndex: 0, delayMs: 0, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0}
+      mkPulse(strikeId)
     ];
-    // NoteOff: servo mute s'active au relachement (engage le mute)
     noteOff = [
       {actuatorId: muteId, commandType: muteCmd, valueSource: 1, valueFixed: 0, ccIndex: 0, delayMs: 50, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0}
     ];
+
   } else if (instrType === 'motor') {
     const motorId = parseInt(document.getElementById('instrMotorAct').value);
     actIds = [motorId];
-    noteOn = [{actuatorId: motorId, commandType: 2, valueSource: 0, valueFixed: 0, ccIndex: 0, delayMs: 0, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0}];
-    noteOff = [{actuatorId: motorId, commandType: 3, valueSource: 1, valueFixed: 0, ccIndex: 0, delayMs: 0, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0}];
+    noteOn = [mkPwm(motorId, 0)];
+    noteOff = [mkOff(motorId)];
+
   } else {
     // Custom mode
     const checkedBoxes = document.querySelectorAll('#instrActuatorChecklist input[type=checkbox]:checked');

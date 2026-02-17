@@ -10,6 +10,7 @@
 // Securite :
 //   - Limite duty-cycle continu (MOTOR_MAX_CONTINUOUS_US)
 //   - Arret force apres timeout
+//   - End stop detection (micro-switches on endStopPin1/endStopPin2)
 // Optical tracking :
 //   - Uses hardware interrupt (ISR) on rising edge for edge counting
 //   - ESP32 portMUX spinlock for atomic ISR/main-thread access
@@ -18,7 +19,8 @@
 class MotorActuator : public Actuator {
 public:
   MotorActuator() : _driver(nullptr), _currentSpeed(0), _sensorPin(0),
-                    _targetEdges(0), _positionTracking(false) {}
+                    _targetEdges(0), _positionTracking(false),
+                    _homing(false), _endStopReached(false) {}
   MotorActuator(HalDriver* driver);
 
   void init() override;
@@ -32,6 +34,8 @@ private:
   uint8_t _sensorPin;               // GPIO pin for optical sensor (from _config.hwAddress)
   uint32_t _targetEdges;
   bool _positionTracking;
+  bool _homing;                      // True during homing sequence (move to end stop)
+  bool _endStopReached;              // Last end stop state
 
   // --- ISR infrastructure ---
   static volatile uint32_t _isrEdgeCount;   // Edge counter incremented in ISR
@@ -43,6 +47,7 @@ private:
   void _attachOpticalISR();                  // Arm the interrupt
   void _detachOpticalISR();                  // Disarm the interrupt
   void _updateOpticalTracking(uint32_t nowUs);
+  bool _checkEndStops();                     // Returns true if any end stop triggered
 };
 
 #endif // MOTOR_ACTUATOR_H

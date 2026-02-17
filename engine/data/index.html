@@ -390,28 +390,12 @@ input[type=checkbox] { width: auto; }
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label>Pin end stop 1 (GPIO)</label>
-          <input type="number" id="actEndStop1" value="0" min="0" max="39">
-          <div class="hint">0 = pas d'end stop. Inverse la rotation quand atteint.</div>
-        </div>
-        <div class="form-group">
-          <label>Pin end stop 2 (GPIO, optionnel)</label>
-          <input type="number" id="actEndStop2" value="0" min="0" max="39">
-          <div class="hint">0 = pas d'end stop. Limite opposee.</div>
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Comportement end stop</label>
-          <select id="actMotorEndStopBehavior">
-            <option value="0">Inverser sens rotation</option>
-            <option value="1">Arreter le moteur</option>
-            <option value="2">Rebondir (inverser + reduire vitesse)</option>
-          </select>
-          <div class="hint">Action quand un end stop est atteint</div>
+          <label>Pin capteur optique (GPIO)</label>
+          <input type="number" id="actMotorSensorPin" value="0" min="0" max="39">
+          <div class="hint">0 = pas de capteur. Pour tracking de position (end stop optique).</div>
         </div>
         <div class="form-group" style="display:flex;align-items:flex-end;">
-          <label><input type="checkbox" id="actMotorInverted"> Inverser sens par defaut</label>
+          <label><input type="checkbox" id="actMotorInverted"> Inverser sens (inverse le mapping velocite/PWM)</label>
         </div>
       </div>
     </div>
@@ -933,7 +917,7 @@ function renderActuators() {
         ${a.type===1 && a.behavior===0 ? '| Temps: '+a.paramMin+'-'+a.paramMax+'ms' : ''}
         ${a.type===1 && a.behavior===1 ? '| PWM: act='+a.paramMin+' hold='+a.paramMax+' tMax='+a.paramDefault+'ms' : ''}
         ${a.type===0 ? '| Angle: '+a.paramMin+'\u00b0-'+a.paramMax+'\u00b0' + (a.behavior===2 ? ' (repos:'+a.paramDefault+'\u00b0)' : '') : ''}
-        ${a.type===2 ? '| PWM: '+a.paramMin+'%-'+a.paramMax+'%' + (a.paramDefault>0 ? ' ES1:GPIO'+a.paramDefault : '') + (a.cooldownUs>0 ? ' ES2:GPIO'+Math.round(a.cooldownUs*0.1) : '') + (a.inverted ? ' [INV]' : '') : ''}
+        ${a.type===2 ? '| PWM: '+a.paramMin+'%-'+a.paramMax+'%' + (a.hwAddress>0 ? ' Capteur:GPIO'+a.hwAddress : '') + (a.inverted ? ' [INV]' : '') : ''}
         ${a.type===1 && a.cooldownUs > 0 && a.behavior===0 ? '| Cooldown: '+Math.round(a.cooldownUs*0.1)+'ms' : ''}
         ${a.type===1 && a.behavior===1 ? '| Actif max: '+Math.round(a.cooldownUs*0.1)+'ms' : ''}
       </div>
@@ -967,9 +951,7 @@ function showAddActuator() {
   // Motor defaults
   document.getElementById('actMotorPwmMin').value = '20';
   document.getElementById('actMotorPwmMax').value = '100';
-  document.getElementById('actEndStop1').value = '0';
-  document.getElementById('actEndStop2').value = '0';
-  document.getElementById('actMotorEndStopBehavior').value = '0';
+  document.getElementById('actMotorSensorPin').value = '0';
   document.getElementById('actMotorInverted').checked = false;
   document.getElementById('actEnabled').checked = true;
   onActTypeChange();
@@ -1013,11 +995,10 @@ function editActuator(id) {
     document.getElementById('actAngleOpen').value = a.paramMax;
     document.getElementById('actAngleDefault').value = a.paramDefault;
   } else if (a.type === 2) {
-    // Motor
+    // Motor: hwAddress = sensor pin
     document.getElementById('actMotorPwmMin').value = a.paramMin;
     document.getElementById('actMotorPwmMax').value = a.paramMax;
-    document.getElementById('actEndStop1').value = a.paramDefault;
-    document.getElementById('actEndStop2').value = Math.round(a.cooldownUs * 0.1);
+    document.getElementById('actMotorSensorPin').value = a.hwAddress || 0;
     document.getElementById('actMotorInverted').checked = a.inverted || false;
   }
 
@@ -1054,14 +1035,19 @@ async function saveActuator() {
     paramDefault = (behavior === 2) ? parseInt(document.getElementById('actAngleDefault').value) : paramMin;
     cooldownUs = 50;
   } else if (type === 2) {
-    // Motor
+    // Motor: paramDefault = drive speed for optical, cooldownUs not used for motor
     paramMin = parseInt(document.getElementById('actMotorPwmMin').value);
     paramMax = parseInt(document.getElementById('actMotorPwmMax').value);
-    paramDefault = parseInt(document.getElementById('actEndStop1').value);
-    cooldownUs = parseInt(document.getElementById('actEndStop2').value) * 10;
+    paramDefault = 128; // default drive speed for optical tracking
+    cooldownUs = 0;
   } else {
     paramMin = 20; paramMax = 100; paramDefault = 0; cooldownUs = 100;
   }
+
+  // Motor: hwAddress stores sensor pin GPIO, not I2C address
+  const hwAddr = (type === 2) ?
+    parseInt(document.getElementById('actMotorSensorPin').value) || 0 :
+    parseInt(document.getElementById('actAddr').value);
 
   const data = {
     id: parseInt(document.getElementById('actId').value) || 0,
@@ -1069,7 +1055,7 @@ async function saveActuator() {
     type: type,
     behavior: behavior,
     bus: parseInt(document.getElementById('actBus').value),
-    hwAddress: parseInt(document.getElementById('actAddr').value),
+    hwAddress: hwAddr,
     hwPin: parseInt(document.getElementById('actPin').value),
     paramMin: paramMin,
     paramMax: paramMax,

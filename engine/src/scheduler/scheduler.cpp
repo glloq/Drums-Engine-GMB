@@ -97,6 +97,17 @@ bool Scheduler::scheduleActionSteps(const ActionStep* steps, uint8_t stepCount,
     if (cmdType == CommandType::PULSE) {
       uint16_t minMs = step.duration_min_ms;
       uint16_t maxMs = step.duration_max_ms;
+
+      // Fallback: si duree = 0/0, utiliser paramMin/paramMax de l'actionneur
+      if (minMs == 0 && maxMs == 0) {
+        Actuator* act = _actuatorMgr->getActuator(step.actuator_id);
+        if (act) {
+          const ActuatorConfig& cfg = act->getConfig();
+          minMs = cfg.paramMin;
+          maxMs = cfg.paramMax;
+        }
+      }
+
       if (maxMs < minMs) {
         uint16_t t = minMs;
         minMs = maxMs;

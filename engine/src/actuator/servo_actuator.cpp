@@ -34,6 +34,9 @@ void ServoActuator::execute(const ActuatorCommand& cmd) {
         _lastCcValue = cmd.value;
         angle = map(cmd.value, 0, 127, _config.paramMin, _config.paramMax);
         _splashActive = false;  // Cancel any active splash on new CC
+      } else if (_config.behavior == ActuatorBehavior::SERVO_MUTE) {
+        // Mute: 0 = position mute (paramMin), 127 = position libre (paramMax)
+        angle = (cmd.value < 64) ? _config.paramMin : _config.paramMax;
       } else {
         angle = map(cmd.value, 0, 127, _config.paramMin, _config.paramMax);
       }

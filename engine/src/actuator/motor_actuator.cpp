@@ -32,7 +32,8 @@ void MotorActuator::execute(const ActuatorCommand& cmd) {
 
   switch ((CommandType)cmd.command_type) {
     case CommandType::PWM: {
-      uint16_t speed = map(cmd.value, 0, 127, _config.paramMin, _config.paramMax);
+      uint16_t cmdVal = _config.inverted ? (127 - cmd.value) : cmd.value;
+      uint16_t speed = map(cmdVal, 0, 127, _config.paramMin, _config.paramMax);
       _driver->pwmWrite(_config.hwPin, speed);
       _currentSpeed = speed;
       _positionTracking = false;

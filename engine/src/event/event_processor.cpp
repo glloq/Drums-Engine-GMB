@@ -1,6 +1,9 @@
 #include "event_processor.h"
 #include <math.h>
 
+// Spinlock for _noteActive[] shared between Core 0 (LoopEngine) and Core 1 (MIDI RT)
+static portMUX_TYPE _noteActiveMux = portMUX_INITIALIZER_UNLOCKED;
+
 EventProcessor::EventProcessor(Scheduler* scheduler, EngineState* state)
   : _scheduler(scheduler), _state(state) {
   memset(_lastCcDispatchUs, 0, sizeof(_lastCcDispatchUs));
@@ -15,14 +18,20 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
 
     const CompiledPipeline& pipeline = _lookup.pipelines[pipelineIdx];
 
-    if (_noteActive[ev.data1] > 0) {
+    portENTER_CRITICAL(&_noteActiveMux);
+    uint8_t noteCount = _noteActive[ev.data1];
+    portEXIT_CRITICAL(&_noteActiveMux);
+
+    if (noteCount > 0) {
       if (pipeline.retrigger_mode == (uint8_t)RetriggerMode::IGNORE) {
         return;
       }
       if (pipeline.retrigger_mode == (uint8_t)RetriggerMode::RESET && pipeline.note_off_count > 0) {
         _scheduler->scheduleActionSteps(pipeline.note_off_actions, pipeline.note_off_count,
                                         ev.data2, ev.timestamp, _state->raw().variables);
+        portENTER_CRITICAL(&_noteActiveMux);
         _noteActive[ev.data1] = 0;  // Reset counter before re-triggering
+        portEXIT_CRITICAL(&_noteActiveMux);
       }
       // STACK: counter will increment below, allowing proper NoteOff tracking
     }
@@ -37,12 +46,16 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
       _scheduler->scheduleActionSteps(pipeline.note_on_actions, pipeline.note_on_count,
                                       ev.data2, ev.timestamp, _state->raw().variables,
                                       activeGroup);
+      portENTER_CRITICAL(&_noteActiveMux);
       if (_noteActive[ev.data1] < 255) _noteActive[ev.data1]++;
+      portEXIT_CRITICAL(&_noteActiveMux);
       return;
     }
 
     _executePipeline(pipelineIdx, ev.data2, ev.timestamp);
+    portENTER_CRITICAL(&_noteActiveMux);
     if (_noteActive[ev.data1] < 255) _noteActive[ev.data1]++;
+    portEXIT_CRITICAL(&_noteActiveMux);
   }
   else if (ev.type == MIDI_EVT_NOTE_OFF || (ev.type == MIDI_EVT_NOTE_ON && ev.data2 == 0)) {
     uint8_t pipelineIdx = _lookup.note_to_pipeline[ev.data1];
@@ -51,16 +64,24 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
     const CompiledPipeline& pipeline = _lookup.pipelines[pipelineIdx];
 
     // Decrement stack counter; only fire noteOff actions when last instance releases
-    if (_noteActive[ev.data1] > 1 &&
+    portENTER_CRITICAL(&_noteActiveMux);
+    uint8_t noteOffCount = _noteActive[ev.data1];
+    portEXIT_CRITICAL(&_noteActiveMux);
+
+    if (noteOffCount > 1 &&
         pipeline.retrigger_mode == (uint8_t)RetriggerMode::STACK) {
+      portENTER_CRITICAL(&_noteActiveMux);
       _noteActive[ev.data1]--;
+      portEXIT_CRITICAL(&_noteActiveMux);
       return;  // Other instances still active, don't fire noteOff yet
     }
 
     if (pipeline.note_off_count > 0) {
       _scheduler->scheduleActionSteps(pipeline.note_off_actions, pipeline.note_off_count,
                                       ev.data2, ev.timestamp, _state->raw().variables);
+      portENTER_CRITICAL(&_noteActiveMux);
       _noteActive[ev.data1] = 0;
+      portEXIT_CRITICAL(&_noteActiveMux);
       return;
     }
 
@@ -73,7 +94,9 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
       cmd.execute_at = ev.timestamp;
       _scheduler->scheduleCommand(cmd);
     }
+    portENTER_CRITICAL(&_noteActiveMux);
     _noteActive[ev.data1] = 0;
+    portEXIT_CRITICAL(&_noteActiveMux);
   }
   else if (ev.type == MIDI_EVT_CC) {
     _processCcEvent(ev);

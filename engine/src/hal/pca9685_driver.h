@@ -37,6 +37,9 @@ private:
   Adafruit_PWMServoDriver _pca;
   uint8_t _address;
   bool _ready;
+  uint8_t _errorCount;
+
+  bool _checkI2CError();
 };
 
 #endif // PCA9685_DRIVER_H

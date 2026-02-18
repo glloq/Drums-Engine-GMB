@@ -75,6 +75,8 @@ private:
   uint16_t _nextEventIndex;
   unsigned long _lastTickTime;
   unsigned long _tickIntervalUs;
+  unsigned long _tickRemainderPerTick;  // Fractional remainder per tick (x1000)
+  unsigned long _tickRemainderAccum;    // Accumulated remainder (x1000)
 
   void _calcTickInterval(uint16_t bpm, uint16_t ppq);
   uint16_t _totalTicks(const Loop& loop) const;

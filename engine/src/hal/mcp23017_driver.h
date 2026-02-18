@@ -29,6 +29,9 @@ private:
   Adafruit_MCP23X17 _mcp;
   uint8_t _address;
   bool _ready;
+  uint8_t _errorCount;
+
+  bool _checkI2CError();
 };
 
 #endif // MCP23017_DRIVER_H

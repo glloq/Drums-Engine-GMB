@@ -201,7 +201,7 @@ bool WiFiManager::_connectSTA() {
 
   int attempts = 0;
   while (WiFi.status() != WL_CONNECTED && attempts < WIFI_MAX_ATTEMPTS) {
-    delay(500);
+    vTaskDelay(pdMS_TO_TICKS(500));
     DBG(".");
     attempts++;
   }

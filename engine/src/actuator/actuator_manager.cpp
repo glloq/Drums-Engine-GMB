@@ -60,6 +60,7 @@ void ActuatorManager::dispatch(const ActuatorCommand& cmd) {
   }
 
   act->execute(cmd);
+  updateActiveCount();
 }
 
 void ActuatorManager::stopAll() {
@@ -166,17 +167,18 @@ uint8_t ActuatorManager::checkWatchdog() {
       }
     }
   }
+  if (stopped > 0) updateActiveCount();
   return stopped;
 }
 
-uint8_t ActuatorManager::getActiveCount() const {
+void ActuatorManager::updateActiveCount() {
   uint8_t active = 0;
   for (uint8_t i = 0; i < _count; i++) {
     if (_actuators[i] && _actuators[i]->isActive()) {
       active++;
     }
   }
-  return active;
+  _activeCount = active;
 }
 
 int8_t ActuatorManager::_findIndex(uint8_t id) const {

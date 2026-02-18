@@ -31,6 +31,7 @@
 #include <ESPmDNS.h>
 #include <Wire.h>
 #include <esp_timer.h>
+#include <atomic>
 
 // Core
 #include "core/config.h"
@@ -111,6 +112,9 @@ LedcDriver ledcDriver;
 uint8_t mcpCount = 0;
 uint8_t pcaCount = 0;
 
+// Global I2C mutex (defined in hal_interface.h as extern)
+SemaphoreHandle_t g_i2cMutex = nullptr;
+
 // ============================================================================
 // Engine Core (statique, zero allocation dynamique)
 // ============================================================================
@@ -149,10 +153,10 @@ WebServerManager webServer(&instrumentManager, &actuatorManager,
 // ============================================================================
 
 static esp_timer_handle_t schedulerTimer = nullptr;
-static volatile bool schedulerTimerFired = false;
+static std::atomic<bool> schedulerTimerFired{false};
 
 static void IRAM_ATTR schedulerTimerCallback(void* arg) {
-  schedulerTimerFired = true;
+  schedulerTimerFired.store(true, std::memory_order_release);
 }
 
 void setupSchedulerTimer() {
@@ -183,8 +187,8 @@ void rtCoreTask(void* param) {
     midiEngine.update();
 
     // Scheduler: dispatcher commandes pretes
-    if (schedulerTimerFired) {
-      schedulerTimerFired = false;
+    if (schedulerTimerFired.load(std::memory_order_acquire)) {
+      schedulerTimerFired.store(false, std::memory_order_relaxed);
       scheduler.update();
     }
 
@@ -242,6 +246,7 @@ void appCoreTask(void* param) {
 // Initialiser les drivers HAL et detecter les modules I2C
 // ============================================================================
 void initHardware() {
+  g_i2cMutex = xSemaphoreCreateMutex();
   I2CScanner::begin();
 
   DBGLN("[HW] Scanning I2C bus...");

@@ -1,7 +1,9 @@
-# Etat des lieux actuel (mise a jour post-sprints production)
+# Etat des lieux actuel
+
+**Derniere mise a jour**: 2026-02-18
 
 ## Resume
-Le moteur supporte un modele instrument oriente actions multi-etapes (NoteOn/NoteOff) avec routage CC compile, editeur UI dedie, securite API complete, et logging persistant.
+Le moteur supporte un modele instrument oriente actions multi-etapes (NoteOn/NoteOff) avec routage CC compile, editeur UI dedie, securite API complete, logging persistant, et protections concurrence dual-core.
 
 ## Capacites implementees
 
@@ -9,17 +11,27 @@ Le moteur supporte un modele instrument oriente actions multi-etapes (NoteOn/Not
 - Scheduler temps reel (timer hardware 1 kHz, queue statique 128 commandes, watchdog)
 - Separation FreeRTOS dual-core: Core 1 (RT: MIDI + Scheduler) / Core 0 (Web + Loops)
 - Zero allocation dynamique dans le chemin temps reel
+- Flag ISR atomique (`std::atomic<bool>`)
+- Cache `_activeCount` O(1) dans ActuatorManager
+
+### Concurrence et fiabilite (sprint fiabilite)
+- Spinlock `portENTER_CRITICAL` sur `_noteActive[128]` (partage dual-core)
+- Mutex I2C global avec timeout 5ms
+- Recovery I2C automatique (re-init driver apres 10 erreurs consecutives)
+- Ecriture atomique LittleFS (`.tmp` + `rename`)
+- WiFi STA non-bloquant (`vTaskDelay` au lieu de `delay`)
 
 ### Modele instrument
 - `ActionStep` NoteOn/NoteOff (jusqu'a 4 etapes / evenement)
 - `ValueSource`: velocity, fixed, CC var, inverted velocity
 - Courbes velocity (lineaire, expo, log) et delays par etape
-- Modes retrigger: IGNORE, RESET, STACK
+- Modes retrigger: IGNORE, RESET, STACK (compteur uint8_t)
 
 ### Routage CC
 - Table compilee (`cc_routes`, `cc_to_first`, `cc_to_count`)
 - Dispatch runtime anti-flood (5ms)
-- Endpoint debug `/api/cc-routes` (avec compteur `dropped`)
+- Pitch bend via CC#126 virtuel (evite collision CC#127)
+- Endpoint debug `/api/cc-routes` (avec compteur `dropped` + `max`)
 - Diagnostics runtime CC exposes dans `/api/status`
 
 ### API & Templates
@@ -29,23 +41,26 @@ Le moteur supporte un modele instrument oriente actions multi-etapes (NoteOn/Not
 - Test unitaire d'action, test instrument, test actuateur
 - Sauvegarde/chargement LittleFS + migration V4
 
-### Securite & Fiabilite (NOUVEAU)
+### Securite & Fiabilite
 - **WiFiManager**: credentials depuis `/wifi.json`, mode AP fallback avec portail REST
 - **ApiAuth**: Bearer token 16-hex, auto-genere, protege POST/PUT/DELETE
 - **RateLimiter**: 30 req/s par IP, 8 clients, reponse 429
 - **ErrorLog**: ring buffer 16 entrees + `/error.log` rotatif 8KB, API `/api/logs`
 
-### Comportements servo avances
-- `PITCH_BEND` (mapping centre)
-- `COMB_BRUSH`/`SERVO_STRIKE` oscillants via watchdog
-- `HIHAT_CONTROLLER` (NOUVEAU): controle CC#4 continu + splash 80ms
+### Comportements actionneurs
+- `SOLENOID_STRIKE`, `SOLENOID_HOLD`, `SOLENOID_MUTE`
+- `SERVO_POSITION`, `SERVO_STRIKE`, `COMB_BRUSH`, `PITCH_BEND`
+- `HIHAT_CONTROLLER`: controle CC#4 continu + splash 80ms
+- `SERVO_MUTE`: toggle position mute/libre sur PULSE
+- `MOTOR_OPTICAL_TRACK`: ISR hardware multi-instance (4 slots max)
 
-### Motor optical (FINALISE)
-- Type actuateur `MOTOR_OPTICAL` avec behavior `MOTOR_OPTICAL_TRACK`
-- ISR hardware via `attachInterrupt()` IRAM_ATTR + `portMUX` spinlock
-- Comptage edges atomique, arret automatique a la cible
+### Loop Engine
+- Sequenceur avec tick fractionnaire (anti-drift)
+- Quantize avec guard division/0 et clamp aux limites
+- Persistence automatique LittleFS sur create/update/delete
+- Correction index courant apres suppression
 
-### Architecture web serveur (REFACTORISE)
+### Architecture web serveur
 - `web_server.cpp` scinde en 5 modules: core, routes_actuator, routes_instrument, routes_loop, routes_system
 - Config JSON versionne (format v2 avec wrapper objet)
 
@@ -53,6 +68,9 @@ Le moteur supporte un modele instrument oriente actions multi-etapes (NoteOn/Not
 - SPA complete avec editeurs actuateurs, instruments, boucles
 - Alarmes runtime: overflow scheduler, CC dropped, jitter, memoire
 - WebSocket pour updates temps reel
+- Reset etat modal a la fermeture
+- Detection type instrument a l'edition
+- Verification reponse API avant fermeture des modals
 
 ### Tests
 - Script `tests/test_api.sh`: 31 tests curl (CRUD, auth, validation, cleanup)

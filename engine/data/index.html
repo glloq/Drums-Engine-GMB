@@ -1030,7 +1030,7 @@ function renderActuators() {
         <span>
           <button class="btn btn-sm btn-success" onclick="testActuator(${a.id})">Test</button>
           <button class="btn btn-sm btn-secondary" onclick="editActuator(${a.id})">Modifier</button>
-          <button class="btn btn-sm btn-danger" onclick="deleteActuator(${a.id})">Suppr</button>
+          <button class="btn btn-sm btn-danger" onclick="confirmDelete(this, () => deleteActuator(${a.id}))">Suppr</button>
         </span>
       </div>
       <div class="item-detail">
@@ -1222,7 +1222,6 @@ async function saveActuator() {
 }
 
 async function deleteActuator(id) {
-  if (!confirm('Supprimer cet actionneur ?')) return;
   await api('actuator?id=' + id, 'DELETE');
   await loadActuators();
   toast('Actionneur supprime', 'success');
@@ -1438,7 +1437,7 @@ function renderInstruments() {
           <button class="btn btn-sm btn-secondary" onclick="testInstrumentAction(${inst.id}, 'on', 0)">Test On#1</button>
           <button class="btn btn-sm btn-secondary" onclick="testInstrumentAction(${inst.id}, 'off', 0)">Test Off#1</button>
           <button class="btn btn-sm btn-secondary" onclick="editInstrument(${inst.id})">Modifier</button>
-          <button class="btn btn-sm btn-danger" onclick="deleteInstrument(${inst.id})">Suppr</button>
+          <button class="btn btn-sm btn-danger" onclick="confirmDelete(this, () => deleteInstrument(${inst.id}))">Suppr</button>
         </span>
       </div>
       <div class="item-detail">
@@ -1913,7 +1912,6 @@ async function saveHiHatInstruments(baseName, retrigger, enabled, editId) {
 }
 
 async function deleteInstrument(id) {
-  if (!confirm('Supprimer cet instrument ?')) return;
   await api('instrument?id=' + id, 'DELETE');
   await loadInstruments();
   toast('Instrument supprime', 'success');
@@ -2059,7 +2057,7 @@ function renderLoops() {
         <span><strong>${loop.name}</strong> <span class="badge">${loop.bpm} BPM</span></span>
         <span>
           <button class="btn btn-sm btn-success" onclick="openLoopEditor(${i})">Editer</button>
-          <button class="btn btn-sm btn-danger" onclick="deleteLoopItem(${i})">Suppr</button>
+          <button class="btn btn-sm btn-danger" onclick="confirmDelete(this, () => deleteLoopItem(${i}))">Suppr</button>
         </span>
       </div>
     </div>
@@ -2084,7 +2082,6 @@ async function createLoop() {
 }
 
 async function deleteLoopItem(idx) {
-  if (!confirm('Supprimer cette boucle ?')) return;
   await api('loop?id=' + idx, 'DELETE');
   await loadLoops();
 }
@@ -2306,6 +2303,28 @@ document.querySelectorAll('.tab').forEach(tab => {
     if (tab.dataset.tab === 'mappings') refreshMappings();
   });
 });
+
+function confirmDelete(btn, callback) {
+  if (btn.dataset.confirming) { callback(); return; }
+  const orig = btn.textContent;
+  btn.textContent = 'Confirmer ?';
+  btn.dataset.confirming = '1';
+  btn.style.background = '#c62828';
+  btn.style.minWidth = btn.offsetWidth + 'px';
+  const timer = setTimeout(() => {
+    btn.textContent = orig;
+    delete btn.dataset.confirming;
+    btn.style.background = '';
+    btn.style.minWidth = '';
+  }, 3000);
+  btn.addEventListener('mouseleave', () => {
+    clearTimeout(timer);
+    btn.textContent = orig;
+    delete btn.dataset.confirming;
+    btn.style.background = '';
+    btn.style.minWidth = '';
+  }, {once: true});
+}
 
 function toast(msg, type='success') {
   const t = document.getElementById('toast');

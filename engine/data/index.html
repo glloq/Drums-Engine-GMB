@@ -155,7 +155,11 @@ input[type=checkbox] { width: auto; }
 
 <div class="header">
   <h1>Drums Engine</h1>
-  <button class="btn-loop" id="btnLoop" onclick="showModal('modalLoopEditor')" title="Boucles">&#8734;</button>
+  <div style="display:flex;align-items:center;gap:4px;">
+    <span id="loopBpmLeft" style="font-size:0.7em;color:var(--fg2);min-width:12px;text-align:right;">b</span>
+    <button class="btn-loop" id="btnLoop" onclick="showModal('modalLoopEditor')" title="Boucles">&#8734;</button>
+    <span id="loopBpmRight" style="font-size:0.7em;color:var(--fg2);min-width:12px;">p</span>
+  </div>
   <div class="header-right">
     <div class="status">
       <span><span class="dot" id="wifiDot"></span><span id="wifiStatus">--</span></span>
@@ -612,51 +616,42 @@ input[type=checkbox] { width: auto; }
   </div>
 </div>
 
-<!-- ====== MODAL: Add Loop ====== -->
-<div class="modal-overlay" id="modalLoop">
-  <div class="modal">
-    <h2>Nouvelle Boucle</h2>
-    <div class="form-group">
-      <label>Nom</label>
-      <input type="text" id="loopName" placeholder="Rock Beat">
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>BPM</label>
-        <input type="number" id="loopBpm" value="120" min="40" max="300">
-      </div>
-      <div class="form-group">
-        <label>Mesures</label>
-        <input type="number" id="loopBars" value="1" min="1" max="8">
-      </div>
-      <div class="form-group">
-        <label>Signature</label>
-        <select id="loopTimeSig">
-          <option value="4/4">4/4</option>
-          <option value="3/4">3/4</option>
-          <option value="6/8">6/8</option>
-          <option value="5/4">5/4</option>
-        </select>
-      </div>
-    </div>
-    <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="closeModal('modalLoop')">Annuler</button>
-      <button class="btn btn-primary" onclick="createLoop()">Creer</button>
-    </div>
-  </div>
-</div>
-
 <!-- ====== MODAL: Loop Editor ====== -->
 <div class="modal-overlay" id="modalLoopEditor">
   <div class="modal" style="max-width:700px;">
     <h2 style="display:flex;justify-content:space-between;align-items:center;">
       <span>Boucles (<span id="loopCount">0</span>)</span>
-      <div style="display:flex;gap:8px;">
-        <button class="btn btn-sm btn-primary" onclick="showModal('modalLoop')">+ Nouvelle</button>
-        <button class="btn btn-secondary btn-sm" onclick="closeModal('modalLoopEditor')">Fermer</button>
-      </div>
+      <button class="btn btn-secondary btn-sm" onclick="closeModal('modalLoopEditor')">Fermer</button>
     </h2>
     <div id="loopList" style="margin-top:8px;"></div>
+    <!-- Inline new loop form -->
+    <div class="card" style="margin-top:10px;">
+      <h3>Nouvelle boucle</h3>
+      <div class="form-row" style="margin-top:8px;">
+        <div class="form-group">
+          <label>Nom</label>
+          <input type="text" id="loopName" placeholder="Rock Beat">
+        </div>
+        <div class="form-group">
+          <label>BPM</label>
+          <input type="number" id="loopBpm" value="120" min="40" max="300">
+        </div>
+        <div class="form-group">
+          <label>Mesures</label>
+          <input type="number" id="loopBars" value="1" min="1" max="8">
+        </div>
+        <div class="form-group">
+          <label>Signature</label>
+          <select id="loopTimeSig">
+            <option value="4/4">4/4</option>
+            <option value="3/4">3/4</option>
+            <option value="6/8">6/8</option>
+            <option value="5/4">5/4</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="createLoop()" style="margin-top:6px;">+ Creer</button>
+    </div>
     <div id="loopEditor" style="display:none;margin-top:12px;">
       <div class="card">
         <h3>
@@ -2169,8 +2164,6 @@ function renderLoops() {
   `).join('');
 }
 
-function showAddLoop() { showModal('modalLoop'); }
-
 async function createLoop() {
   const ts = document.getElementById('loopTimeSig').value.split('/');
   const data = {
@@ -2181,8 +2174,8 @@ async function createLoop() {
     beatValue: parseInt(ts[1])
   };
   await api('loops', 'POST', data);
-  closeModal('modalLoop');
   await loadLoops();
+  document.getElementById('loopName').value = '';
   toast('Boucle creee', 'success');
 }
 
@@ -2310,9 +2303,24 @@ async function refreshStatus() {
       m(data.loop_playing ? '&#9654;' : '&#9632;', 'Loop');
   }
 
-  // Loop button indicator
+  // Loop button indicator + bpm in header
   const btnLoop = document.getElementById('btnLoop');
   if (btnLoop) btnLoop.classList.toggle('playing', !!data.loop_playing);
+  const bL = document.getElementById('loopBpmLeft');
+  const bR = document.getElementById('loopBpmRight');
+  if (bL && bR) {
+    if (data.loop_playing && data.loop_bpm) {
+      bL.textContent = data.loop_bpm;
+      bL.style.color = 'var(--success)';
+      bR.textContent = 'bpm';
+      bR.style.color = 'var(--success)';
+    } else {
+      bL.textContent = 'b';
+      bL.style.color = 'var(--fg2)';
+      bR.textContent = 'p';
+      bR.style.color = 'var(--fg2)';
+    }
+  }
 
   // Alarms
   let alarms = '';

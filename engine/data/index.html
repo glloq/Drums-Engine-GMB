@@ -1375,7 +1375,7 @@ function populateActuatorSelects() {
 function onMidiNoteChange() {
   const nameEl = document.getElementById('instrName');
   const noteVal = parseInt(document.getElementById('instrMidiNote').value);
-  const noteInfo = midiNotes.find(n => n.note === noteVal);
+  const noteInfo = midiNotes.find(n => parseInt(n.note) === noteVal);
   // Auto-fill name if empty or if it matches a previous MIDI note name
   if (noteInfo && (!nameEl.value || midiNotes.some(n => n.name === nameEl.value))) {
     nameEl.value = noteInfo.name;
@@ -1437,8 +1437,9 @@ function renderInstruments() {
     return;
   }
   el.innerHTML = instruments.map(inst => {
-    const noteInfo = midiNotes.find(n => n.note === inst.midiNote);
-    const noteName = noteInfo ? noteInfo.name : 'Note ' + inst.midiNote;
+    const mNote = parseInt(inst.midiNote);
+    const noteInfo = midiNotes.find(n => parseInt(n.note) === mNote);
+    const noteName = noteInfo ? noteInfo.name : '';
     const actNames = (inst.actuatorIds || [])
       .filter(id => id !== 255)
       .map(id => { const a = actuators.find(x => x.id === id); return a ? a.name : 'ID:'+id; });
@@ -1450,7 +1451,7 @@ function renderInstruments() {
       <div class="item-title">
         <strong>${inst.name}</strong>
         <span class="badge">${inst.category}</span>
-        <span class="badge">${inst.midiNote} - ${noteName}</span>
+        <span class="badge">${mNote}${noteName ? ' · ' + noteName : ''}</span>
         <span class="badge badge-green">On:${onCount}</span>
         <span class="badge badge-warn">Off:${offCount}</span>
         <span class="badge">CC:${ccCount}</span>
@@ -1984,19 +1985,27 @@ function describeStep(step) {
   const verbs = BEHAVIOR_VERBS[beh] || ['Actionner','Action'];
   const delay = step.delayMs || 0;
   const curve = step.velocityCurve || 0;
+  const dMin = step.durationMinMs || 0;
+  const dMax = step.durationMaxMs || 0;
 
   let desc = '';
   let cls = '';
+  let durInfo = '';
+  if (dMin > 0 || dMax > 0) {
+    durInfo = dMin === dMax ? ` ${dMin}ms` : ` ${dMin}-${dMax}ms`;
+  }
 
   switch (step.commandType) {
-    case 0: // PULSE
+    case 0: { // PULSE
       cls = 'time';
-      if (step.valueSource === 0) desc = `${verbs[0]} <b>${name}</b> <small>(velocite${curve > 0 ? ' ' + CURVE_NAMES[curve] : ''})</small>`;
-      else if (step.valueSource === 1) desc = `${verbs[0]} <b>${name}</b> <small>(fixe=${step.valueFixed ?? 0})</small>`;
-      else if (step.valueSource === 3) desc = `${verbs[0]} <b>${name}</b> <small>(inv. vel)</small>`;
-      else desc = `${verbs[0]} <b>${name}</b>`;
+      let src = '';
+      if (step.valueSource === 0) src = `velocite${curve > 0 ? ' ' + CURVE_NAMES[curve] : ''}`;
+      else if (step.valueSource === 1) src = `fixe=${step.valueFixed ?? 0}`;
+      else if (step.valueSource === 3) src = 'inv. vel';
+      desc = `${verbs[0]} <b>${name}</b>` + (src || durInfo ? ` <small>(${src}${durInfo})</small>` : '');
       break;
-    case 1: // POSITION
+    }
+    case 1: { // POSITION
       cls = 'out';
       const val = step.valueFixed ?? 0;
       if (beh === 8 || beh === 9) {
@@ -2011,10 +2020,11 @@ function describeStep(step) {
         else desc = `Position <b>${name}</b> <small>(inv. vel)</small>`;
       }
       break;
+    }
     case 2: // PWM
       cls = 'trans';
-      if (step.valueSource === 0) desc = `Rotation <b>${name}</b> <small>(velocite)</small>`;
-      else desc = `PWM <b>${name}</b> <small>(fixe=${step.valueFixed ?? 0})</small>`;
+      if (step.valueSource === 0) desc = `Rotation <b>${name}</b> <small>(velocite${durInfo})</small>`;
+      else desc = `PWM <b>${name}</b> <small>(fixe=${step.valueFixed ?? 0}${durInfo})</small>`;
       break;
     case 3: // OFF
       cls = 'cond';
@@ -2031,11 +2041,12 @@ function renderPipelineCard(inst) {
   const onActions = inst.noteOnActions || [];
   const offActions = inst.noteOffActions || [];
   const ccBinds = inst.ccBindings || [];
-  const noteInfo = midiNotes.find(n => n.note === inst.midiNote);
-  const noteName = noteInfo ? noteInfo.name : 'Note ' + inst.midiNote;
+  const mNote = parseInt(inst.midiNote);
+  const noteInfo = midiNotes.find(n => parseInt(n.note) === mNote);
+  const noteName = noteInfo ? noteInfo.name : '';
   const maxGrp = Math.max(0, ...onActions.map(s => s.alternateGroup || 0));
 
-  let badges = `<span class="badge">${inst.midiNote} ${noteName}</span>`;
+  let badges = `<span class="badge">${mNote}${noteName ? ' · ' + noteName : ''}</span>`;
   if (inst.pipelineId !== undefined && inst.pipelineId !== 255)
     badges += `<span class="badge badge-green">P#${inst.pipelineId}</span>`;
   if (maxGrp > 0)

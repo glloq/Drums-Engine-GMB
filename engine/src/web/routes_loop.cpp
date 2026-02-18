@@ -46,6 +46,15 @@ void WebServerManager::_handleCreateLoop(AsyncWebServerRequest* req, uint8_t* da
     }
   }
 
+  // Persist to LittleFS
+  Loop* createdLoop = _loopEngine->getLoop(idx);
+  if (createdLoop) {
+    JsonDocument loopDoc;
+    JsonObject loopObj = loopDoc.to<JsonObject>();
+    _loopEngine->loopToJson(*createdLoop, loopObj);
+    _storage->saveLoop(idx, loopObj);
+  }
+
   JsonDocument resp;
   resp["index"] = idx;
   resp["message"] = "Loop created";
@@ -61,12 +70,20 @@ void WebServerManager::_handleUpdateLoop(AsyncWebServerRequest* req, uint8_t* da
   if (!loop) { _sendError(req, 404, "Loop not found"); return; }
 
   _loopEngine->loopFromJson(doc.as<JsonObject>(), *loop);
+
+  // Persist to LittleFS
+  JsonDocument loopDoc;
+  JsonObject loopObj = loopDoc.to<JsonObject>();
+  _loopEngine->loopToJson(*loop, loopObj);
+  _storage->saveLoop(id, loopObj);
+
   _sendError(req, 200, "Updated");
 }
 
 void WebServerManager::_handleDeleteLoop(AsyncWebServerRequest* req) {
   uint8_t id = _extractId(req, "id");
   if (!_loopEngine->deleteLoop(id)) { _sendError(req, 404, "Loop not found"); return; }
+  _storage->deleteLoop(id);
   _sendError(req, 200, "Deleted");
 }
 

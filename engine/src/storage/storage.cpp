@@ -315,15 +315,27 @@ String Storage::formatInfo() {
 }
 
 bool Storage::_writeJson(const char* path, const JsonDocument& doc) {
-  File file = LittleFS.open(path, "w");
+  // Atomic write: write to .tmp then rename to avoid corruption on crash
+  String tmpPath = String(path) + ".tmp";
+  File file = LittleFS.open(tmpPath.c_str(), "w");
   if (!file) {
-    DBGF("[Storage] Failed to open %s for writing\n", path);
+    DBGF("[Storage] Failed to open %s for writing\n", tmpPath.c_str());
     return false;
   }
   size_t written = serializeJson(doc, file);
   file.close();
+
+  if (written == 0) {
+    LittleFS.remove(tmpPath.c_str());
+    DBGF("[Storage] Write failed (0 bytes) for %s\n", path);
+    return false;
+  }
+
+  // Remove old file, rename tmp to final
+  LittleFS.remove(path);
+  LittleFS.rename(tmpPath.c_str(), path);
   DBGF("[Storage] Wrote %d bytes to %s\n", written, path);
-  return written > 0;
+  return true;
 }
 
 bool Storage::_readJson(const char* path, JsonDocument& doc) {

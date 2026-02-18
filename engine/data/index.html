@@ -1236,11 +1236,14 @@ async function saveActuator() {
     toast('Servo: le bus PCA9685 est requis', 'error');
     return;
   }
+  let result;
   if (editId !== '') {
-    await api('actuator?id=' + editId, 'PUT', data);
+    result = await api('actuator?id=' + editId, 'PUT', data);
   } else {
-    await api('actuators', 'POST', data);
+    result = await api('actuators', 'POST', data);
   }
+  // Fix #19: Verify API response before closing modal
+  if (result === null || result === undefined) return;
   closeModal('modalActuator');
   await loadActuators();
   toast('Actionneur enregistre', 'success');
@@ -1609,6 +1612,26 @@ function showAddInstrument(template=null) {
   showModal('modalInstrument');
 }
 
+function _detectInstrumentType(inst) {
+  const acts = (inst.actuatorIds || []).filter(x => x !== 255);
+  const onActions = inst.noteOnActions || [];
+  const offActions = inst.noteOffActions || [];
+  const ccBinds = inst.ccBindings || [];
+  // Simple: 1 actuator, 1 noteOn PULSE, no noteOff
+  if (acts.length === 1 && onActions.length === 1 && offActions.length === 0 &&
+      onActions[0].commandType === 0 && (onActions[0].alternateGroup || 0) === 0) return 'simple';
+  // Alternate: 2 actuators, 2 noteOn with alternateGroup 1 and 2
+  if (acts.length === 2 && onActions.length === 2 && offActions.length === 0 &&
+      onActions[0].commandType === 0 && onActions[1].commandType === 0 &&
+      onActions[0].alternateGroup === 1 && onActions[1].alternateGroup === 2) return 'alternate';
+  // Motor: 1 actuator, 1 noteOn PWM
+  if (acts.length === 1 && onActions.length === 1 && onActions[0].commandType === 2) return 'motor';
+  // HiHat: has CC binding for CC#4
+  if (ccBinds.length > 0 && ccBinds.some(b => b.ccNumber === 4)) return 'hihat';
+  // Default to custom for anything else
+  return 'custom';
+}
+
 function editInstrument(id) {
   const inst = instruments.find(i => i.id === id);
   if (!inst) return;
@@ -1619,8 +1642,9 @@ function editInstrument(id) {
   document.getElementById('instrRetriggerMode').value = String(inst.retriggerMode ?? 0);
   document.getElementById('instrEnabled').checked = inst.enabled !== false;
 
-  // Always open in custom mode for editing (shows full action editor)
-  document.getElementById('instrType').value = 'custom';
+  // Fix #14: Detect original instrument type instead of forcing custom
+  const detectedType = _detectInstrumentType(inst);
+  document.getElementById('instrType').value = detectedType;
   onInstrTypeChange();
 
   const assignedIds = (inst.actuatorIds || []).filter(x => x !== 255);
@@ -1844,11 +1868,14 @@ async function saveInstrument() {
     ccBindings: ccBinds
   };
 
+  let result;
   if (editId !== '') {
-    await api('instrument?id=' + editId, 'PUT', data);
+    result = await api('instrument?id=' + editId, 'PUT', data);
   } else {
-    await api('instruments', 'POST', data);
+    result = await api('instruments', 'POST', data);
   }
+  // Fix #19: Verify API response before closing modal
+  if (result === null || result === undefined) return;
   closeModal('modalInstrument');
   await loadInstruments();
   toast('Instrument enregistre', 'success');
@@ -2423,7 +2450,15 @@ function showModal(id) {
   if (id === 'modalSettings') { loadWifiSettings(); refreshStatus(); document.getElementById('settHideUsedActuators').checked = hideUsedActuators; }
   if (id === 'modalLoopEditor') { renderLoops(); }
 }
-function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+function closeModal(id) {
+  document.getElementById(id).classList.remove('show');
+  // Fix #6: Reset modal state on close to avoid stale data
+  if (id === 'modalInstrument') {
+    editNoteOnActions = [];
+    editNoteOffActions = [];
+    editCcBindings = [];
+  }
+}
 
 document.querySelectorAll('.tab').forEach(tab => {
   tab.addEventListener('click', () => {

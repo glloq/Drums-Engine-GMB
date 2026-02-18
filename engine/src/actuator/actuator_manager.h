@@ -54,13 +54,17 @@ public:
   // Verifier les timeouts de tous les actionneurs (appeler periodiquement)
   uint8_t checkWatchdog();
 
-  // Nombre d'actionneurs actuellement actifs
-  uint8_t getActiveCount() const;
+  // Nombre d'actionneurs actuellement actifs (cached, O(1))
+  uint8_t getActiveCount() const { return _activeCount; }
+
+  // Mettre a jour le cache (appele par dispatch/watchdog)
+  void updateActiveCount();
 
 private:
   Actuator* _actuators[MAX_ACTUATORS];
   uint8_t _idMap[MAX_ACTUATORS];     // Map index -> actuator ID
   uint8_t _count;
+  uint8_t _activeCount = 0;
   Scheduler* _scheduler = nullptr;
 
   int8_t _findIndex(uint8_t id) const;

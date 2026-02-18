@@ -2,6 +2,18 @@
 #define HAL_INTERFACE_H
 
 #include <Arduino.h>
+#include <freertos/semphr.h>
+
+// ============================================================================
+// Global I2C mutex — protects all Wire transactions across cores
+// ============================================================================
+extern SemaphoreHandle_t g_i2cMutex;
+inline bool i2cLock(TickType_t timeout = pdMS_TO_TICKS(5)) {
+  return g_i2cMutex && xSemaphoreTake(g_i2cMutex, timeout) == pdTRUE;
+}
+inline void i2cUnlock() {
+  if (g_i2cMutex) xSemaphoreGive(g_i2cMutex);
+}
 
 // ============================================================================
 // Hardware Abstraction Layer - Interface abstraite

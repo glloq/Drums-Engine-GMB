@@ -5,7 +5,7 @@ LoopEngine::LoopEngine(InstrumentManager* instrumentMgr)
   : _instrumentMgr(instrumentMgr), _eventProc(nullptr), _loopCount(0),
     _playing(false), _paused(false), _currentLoop(0),
     _currentTick(0), _nextEventIndex(0), _lastTickTime(0),
-    _tickIntervalUs(0) {}
+    _tickIntervalUs(0), _tickRemainderPerTick(0), _tickRemainderAccum(0) {}
 
 // --- Lecture ---
 
@@ -52,7 +52,11 @@ void LoopEngine::update() {
 
   while (elapsed >= _tickIntervalUs) {
     elapsed -= _tickIntervalUs;
-    _lastTickTime += _tickIntervalUs;
+    // Fix #15: Fractional accumulator to prevent timing drift
+    _tickRemainderAccum += _tickRemainderPerTick;
+    unsigned long extra = _tickRemainderAccum / 1000;
+    _tickRemainderAccum -= extra * 1000;
+    _lastTickTime += _tickIntervalUs + extra;
     _currentTick++;
 
     uint16_t total = _totalTicks(loop);
@@ -127,6 +131,11 @@ bool LoopEngine::deleteLoop(uint8_t index) {
     _loops[i].id = i;
   }
   _loopCount--;
+
+  // Fix #20: Adjust _currentLoop index after delete
+  if (_currentLoop >= _loopCount && _loopCount > 0) {
+    _currentLoop = _loopCount - 1;
+  }
   return true;
 }
 
@@ -169,17 +178,25 @@ bool LoopEngine::clearEvents(uint8_t loopIndex) {
 
 void LoopEngine::quantize(uint8_t loopIndex, uint8_t gridDivision) {
   if (loopIndex >= _loopCount) return;
+  // Fix #18: Guard against division by zero
+  if (gridDivision == 0) return;
   Loop& loop = _loops[loopIndex];
 
   uint16_t gridTicks = (loop.ppq * 4) / gridDivision;
+  if (gridTicks == 0) return;
+
+  uint16_t totalTicks = _totalTicks(loop);
   for (uint16_t i = 0; i < loop.eventCount; i++) {
     uint16_t tick = loop.events[i].tickPosition;
     uint16_t remainder = tick % gridTicks;
     if (remainder > gridTicks / 2) {
-      loop.events[i].tickPosition = tick + (gridTicks - remainder);
+      tick = tick + (gridTicks - remainder);
     } else {
-      loop.events[i].tickPosition = tick - remainder;
+      tick = tick - remainder;
     }
+    // Fix #17: Clamp to loop boundaries
+    if (tick >= totalTicks) tick = (totalTicks > 0) ? totalTicks - 1 : 0;
+    loop.events[i].tickPosition = tick;
   }
   _sortEvents(loop);
 }
@@ -255,7 +272,12 @@ uint16_t LoopEngine::getBpm() const {
 // --- Private ---
 
 void LoopEngine::_calcTickInterval(uint16_t bpm, uint16_t ppq) {
-  _tickIntervalUs = 60000000UL / ((unsigned long)bpm * ppq);
+  unsigned long divisor = (unsigned long)bpm * ppq;
+  _tickIntervalUs = 60000000UL / divisor;
+  // Fix #15: Store fractional remainder (x1000) to compensate drift
+  unsigned long remainderUs = 60000000UL % divisor;
+  _tickRemainderPerTick = (remainderUs * 1000UL) / divisor;
+  _tickRemainderAccum = 0;
 }
 
 uint16_t LoopEngine::_totalTicks(const Loop& loop) const {

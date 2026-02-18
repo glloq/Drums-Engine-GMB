@@ -20,6 +20,8 @@ void SolenoidActuator::execute(const ActuatorCommand& cmd) {
     case CommandType::PULSE:
       // Verifier cooldown avant activation (HOLD n'utilise pas de cooldown)
       if (_config.behavior != ActuatorBehavior::SOLENOID_HOLD && !checkCooldown(now)) {
+        DBGF("[Actuator] Solenoid '%s' PULSE rejected (cooldown, %lu us remaining)\n",
+             _config.name, (unsigned long)((uint32_t)_config.cooldownUs * 100 - (now - _config.lastActivation)));
         return; // Encore en cooldown, ignorer la commande
       }
 

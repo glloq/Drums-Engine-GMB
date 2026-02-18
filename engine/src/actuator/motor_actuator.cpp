@@ -1,9 +1,14 @@
 #include "motor_actuator.h"
 
 // --- Static member initialization ---
-volatile uint32_t MotorActuator::_isrEdgeCount = 0;
-MotorActuator* MotorActuator::_isrInstance = nullptr;
-portMUX_TYPE MotorActuator::_isrMux = portMUX_INITIALIZER_UNLOCKED;
+MotorActuator::IsrSlot MotorActuator::_isrSlots[MAX_OPTICAL_MOTORS] = {
+  {0, nullptr, portMUX_INITIALIZER_UNLOCKED},
+  {0, nullptr, portMUX_INITIALIZER_UNLOCKED},
+  {0, nullptr, portMUX_INITIALIZER_UNLOCKED},
+  {0, nullptr, portMUX_INITIALIZER_UNLOCKED}
+};
+uint8_t MotorActuator::_isrSlotPins[MAX_OPTICAL_MOTORS] = {0xFF, 0xFF, 0xFF, 0xFF};
+constexpr void (*MotorActuator::_isrTable[MAX_OPTICAL_MOTORS])();
 
 MotorActuator::MotorActuator(HalDriver* driver)
   : _driver(driver), _currentSpeed(0), _sensorPin(0),
@@ -47,6 +52,10 @@ void MotorActuator::execute(const ActuatorCommand& cmd) {
 
   switch ((CommandType)cmd.command_type) {
     case CommandType::PWM: {
+      // PWM overrides any active optical tracking — detach ISR first
+      if (_positionTracking) {
+        _detachOpticalISR();
+      }
       uint16_t cmdVal = _config.inverted ? (127 - cmd.value) : cmd.value;
       uint16_t speed = map(cmdVal, 0, 127, _config.paramMin, _config.paramMax);
       _driver->pwmWrite(_config.hwPin, speed);
@@ -96,44 +105,68 @@ void MotorActuator::execute(const ActuatorCommand& cmd) {
 }
 
 // ---------------------------------------------------------------------------
-// ISR - called on RISING edge of the optical sensor
-// Must be in IRAM, minimal work only (increment counter)
+// ISR trampolines - one per slot, each increments its own counter
 // ---------------------------------------------------------------------------
-void IRAM_ATTR MotorActuator::_opticalISR() {
-  portENTER_CRITICAL_ISR(&_isrMux);
-  _isrEdgeCount++;
-  portEXIT_CRITICAL_ISR(&_isrMux);
-}
+#define MAKE_ISR(N) \
+  void IRAM_ATTR MotorActuator::_opticalISR##N() { \
+    portENTER_CRITICAL_ISR(&_isrSlots[N].mux); \
+    _isrSlots[N].edgeCount++; \
+    portEXIT_CRITICAL_ISR(&_isrSlots[N].mux); \
+  }
+MAKE_ISR(0) MAKE_ISR(1) MAKE_ISR(2) MAKE_ISR(3)
+#undef MAKE_ISR
 
 // ---------------------------------------------------------------------------
-// Attach / Detach helpers
+// Attach / Detach helpers (per-instance slot allocation)
 // ---------------------------------------------------------------------------
 void MotorActuator::_attachOpticalISR() {
-  // Reset edge count atomically
-  portENTER_CRITICAL(&_isrMux);
-  _isrEdgeCount = 0;
-  portEXIT_CRITICAL(&_isrMux);
+  // Already attached?
+  if (_isrSlotIdx >= 0) {
+    portENTER_CRITICAL(&_isrSlots[_isrSlotIdx].mux);
+    _isrSlots[_isrSlotIdx].edgeCount = 0;
+    portEXIT_CRITICAL(&_isrSlots[_isrSlotIdx].mux);
+    return;
+  }
+  // Find a free slot (or reuse one already bound to our pin)
+  int8_t freeSlot = -1;
+  for (uint8_t i = 0; i < MAX_OPTICAL_MOTORS; i++) {
+    if (_isrSlotPins[i] == _sensorPin) { freeSlot = i; break; }
+    if (freeSlot < 0 && _isrSlotPins[i] == 0xFF) freeSlot = i;
+  }
+  if (freeSlot < 0) {
+    DBGF("[Safety] Motor '%s' - no free ISR slot for optical sensor!\n", _config.name);
+    return;
+  }
+  _isrSlotIdx = freeSlot;
+  _isrSlotPins[freeSlot] = _sensorPin;
+  _isrSlots[freeSlot].instance = this;
 
-  _isrInstance = this;
-  attachInterrupt(digitalPinToInterrupt(_sensorPin), _opticalISR, RISING);
+  portENTER_CRITICAL(&_isrSlots[freeSlot].mux);
+  _isrSlots[freeSlot].edgeCount = 0;
+  portEXIT_CRITICAL(&_isrSlots[freeSlot].mux);
+
+  attachInterrupt(digitalPinToInterrupt(_sensorPin), _isrTable[freeSlot], RISING);
 }
 
 void MotorActuator::_detachOpticalISR() {
+  if (_isrSlotIdx < 0) return;
   detachInterrupt(digitalPinToInterrupt(_sensorPin));
-  _isrInstance = nullptr;
+  _isrSlots[_isrSlotIdx].instance = nullptr;
+  _isrSlotPins[_isrSlotIdx] = 0xFF;
+  _isrSlotIdx = -1;
 }
 
 // ---------------------------------------------------------------------------
 // Optical tracking - reads ISR edge count, checks target, enforces timeout
 // ---------------------------------------------------------------------------
 void MotorActuator::_updateOpticalTracking(uint32_t nowUs) {
-  if (!_positionTracking || _targetEdges == 0 || !_active) return;
+  if (!_positionTracking || _targetEdges == 0 || !_active || _isrSlotIdx < 0) return;
 
-  // Atomically read the edge count from the ISR
+  // Atomically read the edge count from our ISR slot
   uint32_t edges;
-  portENTER_CRITICAL(&_isrMux);
-  edges = _isrEdgeCount;
-  portEXIT_CRITICAL(&_isrMux);
+  portENTER_CRITICAL(&_isrSlots[_isrSlotIdx].mux);
+  edges = _isrSlots[_isrSlotIdx].edgeCount;
+  portEXIT_CRITICAL(&_isrSlots[_isrSlotIdx].mux);
 
   if (edges >= _targetEdges) {
     DBGF("[Actuator] Motor optical '%s' reached target (%lu edges)\n",

@@ -140,6 +140,7 @@ void WebServerManager::_handleGetCcRoutes(AsyncWebServerRequest* req) {
   const PipelineLookup& lookup = _eventProc->getLookup();
   JsonDocument doc;
   doc["count"] = lookup.cc_route_count;
+  doc["max"] = MAX_CC_ROUTES;
   doc["dropped"] = lookup.cc_route_dropped;
 
   JsonArray routes = doc["routes"].to<JsonArray>();

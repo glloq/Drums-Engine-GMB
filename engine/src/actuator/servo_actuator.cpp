@@ -48,11 +48,23 @@ void ServoActuator::execute(const ActuatorCommand& cmd) {
 
     case CommandType::PULSE: {
       if (_config.behavior == ActuatorBehavior::HIHAT_CONTROLLER) {
-        // Splash: quickly open then return to current position
-        _splashReturnAngle = _currentAngle;
+        // Splash: quickly open then return to CC-derived position
+        // Use _lastCcValue to compute return angle (not _currentAngle which may
+        // already be at paramMin if we're re-splashing during an active splash)
+        _splashReturnAngle = map(_lastCcValue, 0, 127, _config.paramMin, _config.paramMax);
         _splashActive = true;
         _splashStartUs = now;
         _moveToAngle(_config.paramMin);  // Open position
+        markActivation(now);
+        break;
+      }
+      if (_config.behavior == ActuatorBehavior::SERVO_MUTE) {
+        // Toggle mute: if currently at mute position go to free, and vice versa
+        uint8_t muteAngle = _config.paramMin;
+        uint8_t freeAngle = _config.paramMax;
+        uint8_t target = (_currentAngle <= (muteAngle + freeAngle) / 2)
+                         ? freeAngle : muteAngle;
+        _moveToAngle(target);
         markActivation(now);
         break;
       }
@@ -120,8 +132,19 @@ bool ServoActuator::checkTimeout(uint32_t nowUs) {
   }
 
   if (_active) {
+    // Position-holding behaviors (hi-hat pedal, mute, pitch bend, servo position)
+    // must stay at their set angle indefinitely — no timeout.
+    // Only oscillating / strike behaviors get a safety timeout.
+    if (_config.behavior == ActuatorBehavior::HIHAT_CONTROLLER ||
+        _config.behavior == ActuatorBehavior::SERVO_MUTE ||
+        _config.behavior == ActuatorBehavior::PITCH_BEND ||
+        _config.behavior == ActuatorBehavior::SERVO_POSITION) {
+      return false;
+    }
     uint32_t elapsed = nowUs - _activationStartUs;
     if (elapsed >= SOLENOID_MAX_ON_US) {
+      DBGF("[Safety] Servo '%s' timeout after %lu us - forced stop\n",
+           _config.name, (unsigned long)elapsed);
       stop();
       return true;
     }

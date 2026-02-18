@@ -55,9 +55,11 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
 input[type=range] { padding: 0; }
 input[type=checkbox] { width: auto; }
 
-.list-item { background: var(--bg); border-radius: var(--radius); padding: 12px; margin-bottom: 8px; border-left: 3px solid var(--accent2); }
-.list-item .item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-.list-item .item-detail { font-size: 0.8em; color: var(--fg2); line-height: 1.6; }
+.list-item { background: var(--bg); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 6px; border-left: 3px solid var(--accent2); }
+.list-item .item-title { font-size: 0.95em; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.list-item .item-title strong { margin-right: 2px; }
+.list-item .item-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+.list-item .item-detail { font-size: 0.78em; color: var(--fg2); line-height: 1.5; }
 
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 768px) { .grid-2 { grid-template-columns: 1fr; } }
@@ -1047,33 +1049,31 @@ function renderActuators() {
     el.innerHTML = '<div class="empty-state"><p>Aucun actionneur configure</p><p>Cliquez "+ Ajouter" pour commencer</p></div>';
     return;
   }
-  el.innerHTML = actuators.map(a => `
+  el.innerHTML = actuators.map(a => {
+    let details = a.busName + ' pin ' + a.hwPin;
+    if (a.type===1 && a.behavior===0) details += ' · Temps: '+a.paramMin+'-'+a.paramMax+'ms';
+    if (a.type===1 && a.behavior===1) details += ' · PWM: act='+a.paramMin+' hold='+a.paramMax+' tMax='+a.paramDefault+'ms';
+    if (a.type===0) details += ' · Angle: '+a.paramMin+'\u00b0-'+a.paramMax+'\u00b0' + (a.behavior===2 ? ' (repos:'+a.paramDefault+'\u00b0)' : '');
+    if (a.type===2) details += ' · PWM: '+a.paramMin+'%-'+a.paramMax+'%' + (a.hwAddress>0 ? ' Capteur:GPIO'+a.hwAddress : '') + (a.inverted ? ' [INV]' : '');
+    if (a.type===1 && a.cooldownUs > 0 && a.behavior===0) details += ' · Cooldown: '+Math.round(a.cooldownUs*0.1)+'ms';
+    if (a.type===1 && a.behavior===1) details += ' · Actif max: '+Math.round(a.cooldownUs*0.1)+'ms';
+    return `
     <div class="list-item" style="border-left-color:${a.active?'var(--success)':'var(--accent2)'}">
-      <div class="item-header">
-        <span>
-          <strong>${a.name}</strong>
-          <span class="badge">${a.typeName}</span>
-          <span class="badge">${a.behaviorName}</span>
-          ${a.active ? '<span class="badge badge-green">ACTIF</span>' : ''}
-          ${!a.enabled ? '<span class="badge badge-warn">OFF</span>' : ''}
-        </span>
-        <span>
-          <button class="btn btn-sm btn-success" onclick="testActuator(${a.id})">Test</button>
-          <button class="btn btn-sm btn-secondary" onclick="editActuator(${a.id})">Modifier</button>
-          <button class="btn btn-sm btn-danger" onclick="confirmDelete(this, () => deleteActuator(${a.id}))">Suppr</button>
-        </span>
+      <div class="item-title">
+        <strong>${a.name}</strong>
+        <span class="badge">${a.typeName}</span>
+        <span class="badge">${a.behaviorName}</span>
+        ${a.active ? '<span class="badge badge-green">ACTIF</span>' : ''}
+        ${!a.enabled ? '<span class="badge badge-warn">OFF</span>' : ''}
       </div>
-      <div class="item-detail">
-        ${a.busName} pin ${a.hwPin}
-        ${a.type===1 && a.behavior===0 ? '| Temps: '+a.paramMin+'-'+a.paramMax+'ms' : ''}
-        ${a.type===1 && a.behavior===1 ? '| PWM: act='+a.paramMin+' hold='+a.paramMax+' tMax='+a.paramDefault+'ms' : ''}
-        ${a.type===0 ? '| Angle: '+a.paramMin+'\u00b0-'+a.paramMax+'\u00b0' + (a.behavior===2 ? ' (repos:'+a.paramDefault+'\u00b0)' : '') : ''}
-        ${a.type===2 ? '| PWM: '+a.paramMin+'%-'+a.paramMax+'%' + (a.hwAddress>0 ? ' Capteur:GPIO'+a.hwAddress : '') + (a.inverted ? ' [INV]' : '') : ''}
-        ${a.type===1 && a.cooldownUs > 0 && a.behavior===0 ? '| Cooldown: '+Math.round(a.cooldownUs*0.1)+'ms' : ''}
-        ${a.type===1 && a.behavior===1 ? '| Actif max: '+Math.round(a.cooldownUs*0.1)+'ms' : ''}
+      <div class="item-actions">
+        <button class="btn btn-sm btn-success" onclick="testActuator(${a.id})">Test</button>
+        <button class="btn btn-sm btn-secondary" onclick="editActuator(${a.id})">Modifier</button>
+        <button class="btn btn-sm btn-danger" onclick="confirmDelete(this, () => deleteActuator(${a.id}))">Suppr</button>
       </div>
-    </div>
-  `).join('');
+      <div class="item-detail">${details}</div>
+    </div>`;
+  }).join('');
 }
 
 function nextFreePin() {
@@ -1452,27 +1452,25 @@ function renderInstruments() {
     const ccCount = (inst.ccBindings || []).length;
     return `
     <div class="list-item">
-      <div class="item-header">
-        <span>
-          <strong>${inst.name}</strong>
-          <span class="badge">${inst.category}</span>
-          <span class="badge">${inst.midiNote} - ${noteName}</span>
-          <span class="badge badge-green">On:${onCount}</span>
-          <span class="badge badge-warn">Off:${offCount}</span>
-          <span class="badge">CC:${ccCount}</span>
-          ${!inst.enabled ? '<span class="badge badge-warn">OFF</span>' : ''}
-        </span>
-        <span>
-          <button class="btn btn-sm btn-success" onclick="testInstrument(${inst.id})">Test</button>
-          <button class="btn btn-sm btn-secondary" onclick="testInstrumentAction(${inst.id}, 'on', 0)">Test On#1</button>
-          <button class="btn btn-sm btn-secondary" onclick="testInstrumentAction(${inst.id}, 'off', 0)">Test Off#1</button>
-          <button class="btn btn-sm btn-secondary" onclick="editInstrument(${inst.id})">Modifier</button>
-          <button class="btn btn-sm btn-danger" onclick="confirmDelete(this, () => deleteInstrument(${inst.id}))">Suppr</button>
-        </span>
+      <div class="item-title">
+        <strong>${inst.name}</strong>
+        <span class="badge">${inst.category}</span>
+        <span class="badge">${inst.midiNote} - ${noteName}</span>
+        <span class="badge badge-green">On:${onCount}</span>
+        <span class="badge badge-warn">Off:${offCount}</span>
+        <span class="badge">CC:${ccCount}</span>
+        ${!inst.enabled ? '<span class="badge badge-warn">OFF</span>' : ''}
+      </div>
+      <div class="item-actions">
+        <button class="btn btn-sm btn-success" onclick="testInstrument(${inst.id})">Test</button>
+        <button class="btn btn-sm btn-secondary" onclick="testInstrumentAction(${inst.id}, 'on', 0)">On#1</button>
+        <button class="btn btn-sm btn-secondary" onclick="testInstrumentAction(${inst.id}, 'off', 0)">Off#1</button>
+        <button class="btn btn-sm btn-secondary" onclick="editInstrument(${inst.id})">Modifier</button>
+        <button class="btn btn-sm btn-danger" onclick="confirmDelete(this, () => deleteInstrument(${inst.id}))">Suppr</button>
       </div>
       <div class="item-detail">
         Actionneurs: ${actNames.length > 0 ? actNames.join(', ') : '<em>aucun</em>'}
-        | Retrigger: ${['Ignore','Reset','Stack'][inst.retriggerMode ?? 0]}
+        · Retrigger: ${['Ignore','Reset','Stack'][inst.retriggerMode ?? 0]}
       </div>
     </div>`;
   }).join('');
@@ -2157,12 +2155,15 @@ function renderLoops() {
   }
   el.innerHTML = loops.map((loop, i) => `
     <div class="list-item" style="border-left-color:var(--accent);">
-      <div class="item-header">
-        <span><strong>${loop.name}</strong> <span class="badge">${loop.bpm} BPM</span></span>
-        <span>
-          <button class="btn btn-sm btn-success" onclick="openLoopEditor(${i})">Editer</button>
-          <button class="btn btn-sm btn-danger" onclick="confirmDelete(this, () => deleteLoopItem(${i}))">Suppr</button>
-        </span>
+      <div class="item-title">
+        <strong>${loop.name}</strong>
+        <span class="badge">${loop.bpm} BPM</span>
+        <span class="badge">${loop.beatsPerBar||4}/${loop.beatValue||4}</span>
+        <span class="badge">${loop.bars||1} mes.</span>
+      </div>
+      <div class="item-actions">
+        <button class="btn btn-sm btn-success" onclick="openLoopEditor(${i})">Editer</button>
+        <button class="btn btn-sm btn-danger" onclick="confirmDelete(this, () => deleteLoopItem(${i}))">Suppr</button>
       </div>
     </div>
   `).join('');

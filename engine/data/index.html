@@ -28,7 +28,7 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .tab:hover { color: var(--fg); background: rgba(255,255,255,0.05); }
 .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 
-.content { padding: 20px; max-width: 1200px; margin: 0 auto; }
+.content { padding: 16px; }
 .panel { display: none; } .panel.active { display: block; }
 
 .card { background: var(--bg2); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; box-shadow: var(--shadow); }
@@ -62,10 +62,6 @@ input[type=checkbox] { width: auto; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 768px) { .grid-2 { grid-template-columns: 1fr; } }
 
-.stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 16px; }
-.stat-card { background: var(--bg); border-radius: var(--radius); padding: 12px; text-align: center; }
-.stat-card .stat-value { font-size: 1.5em; font-weight: bold; color: var(--accent); }
-.stat-card .stat-label { font-size: 0.8em; color: var(--fg2); margin-top: 4px; }
 
 /* Pipeline visualization */
 .pipe-card .card { margin-bottom: 0; }
@@ -130,12 +126,34 @@ input[type=checkbox] { width: auto; }
 .alarm-error { background: #f44336; color: white; }
 .alarm-warn { background: #ff9800; color: white; }
 .alarm-info { background: #2196f3; color: white; }
+
+.btn-loop { background: none; border: 1px solid #555; border-radius: 50%; width: 34px; height: 34px; font-size: 1.4em; color: var(--fg2); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; line-height: 1; }
+.btn-loop:hover { color: var(--fg); border-color: var(--accent); background: rgba(233,69,96,0.1); }
+.btn-loop.playing { color: var(--success); border-color: var(--success); animation: pulse-loop 1.5s infinite; }
+@keyframes pulse-loop { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+
+.monitor-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; }
+.monitor-item { background: var(--bg); border-radius: 4px; padding: 6px 8px; text-align: center; }
+.monitor-item .mv { font-size: 1.05em; font-weight: bold; color: var(--accent); }
+.monitor-item .ml { font-size: 0.7em; color: var(--fg2); }
+
+@media (max-width: 600px) {
+  .content { padding: 8px; }
+  .header { padding: 6px 10px; }
+  .header h1 { font-size: 1em; }
+  .tab { padding: 8px 10px; font-size: 0.82em; }
+  .card { padding: 10px; }
+  .modal { padding: 16px; margin: 10px; width: calc(100% - 20px); }
+  .form-row { gap: 8px; }
+  .transport { flex-wrap: wrap; gap: 8px; }
+}
 </style>
 </head>
 <body>
 
 <div class="header">
   <h1>Drums Engine</h1>
+  <button class="btn-loop" id="btnLoop" onclick="showModal('modalLoopEditor')" title="Boucles">&#8734;</button>
   <div class="header-right">
     <div class="status">
       <span><span class="dot" id="wifiDot"></span><span id="wifiStatus">--</span></span>
@@ -149,7 +167,6 @@ input[type=checkbox] { width: auto; }
   <div class="tab active" data-tab="actuators">Actionneurs</div>
   <div class="tab" data-tab="instruments">Instruments</div>
   <div class="tab" data-tab="mappings">Mappings</div>
-  <div class="tab" data-tab="system">Systeme</div>
 </div>
 
 <div class="content">
@@ -187,45 +204,7 @@ input[type=checkbox] { width: auto; }
     <div id="mappingList"></div>
   </div>
 
-  <!-- ====== SYSTEM TAB ====== -->
-  <div class="panel" id="tab-system">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-      <h2>Monitoring</h2>
-      <button class="btn btn-secondary btn-sm" onclick="refreshStatus()">Actualiser</button>
-    </div>
-    <div class="stat-grid" id="statGrid"></div>
-    <div id="status-alarms" style="margin-bottom:12px;"></div>
-    <div class="grid-2">
-      <div class="card">
-        <h3>
-          <span>Boucles (<span id="loopCount">0</span>)</span>
-          <button class="btn btn-sm btn-primary" onclick="showAddLoop()">+ Nouvelle</button>
-        </h3>
-        <div id="loopList" style="margin-top:8px;"></div>
-      </div>
-    </div>
-    <div id="loopEditor" style="display:none;margin-top:16px;">
-      <div class="card">
-        <h3>
-          <span id="loopEditorTitle">Editeur</span>
-          <button class="btn btn-sm btn-secondary" onclick="closeLoopEditor()">Fermer</button>
-        </h3>
-        <div class="transport">
-          <button class="btn btn-success btn-sm" onclick="playCurrentLoop()">Play</button>
-          <button class="btn btn-danger btn-sm" onclick="stopLoop()">Stop</button>
-          <div class="bpm-display"><span id="loopBpmDisplay">120</span> BPM</div>
-          <input type="range" id="loopBpmSlider" min="40" max="300" value="120"
-                 oninput="updateLoopBpm(this.value)" style="flex:1;">
-          <select id="loopQuantize" onchange="renderCurrentLoopGrid()" style="width:80px;">
-            <option value="4">1/4</option>
-            <option value="8" selected>1/8</option>
-            <option value="16">1/16</option>
-          </select>
-        </div>
-        <div class="loop-grid" id="loopGrid"></div>
-      </div>
-    </div>
-  </div>
+
 </div>
 
 <!-- ====== MODAL: Add/Edit Actuator ====== -->
@@ -665,6 +644,41 @@ input[type=checkbox] { width: auto; }
   </div>
 </div>
 
+<!-- ====== MODAL: Loop Editor ====== -->
+<div class="modal-overlay" id="modalLoopEditor">
+  <div class="modal" style="max-width:700px;">
+    <h2 style="display:flex;justify-content:space-between;align-items:center;">
+      <span>Boucles (<span id="loopCount">0</span>)</span>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-sm btn-primary" onclick="showModal('modalLoop')">+ Nouvelle</button>
+        <button class="btn btn-secondary btn-sm" onclick="closeModal('modalLoopEditor')">Fermer</button>
+      </div>
+    </h2>
+    <div id="loopList" style="margin-top:8px;"></div>
+    <div id="loopEditor" style="display:none;margin-top:12px;">
+      <div class="card">
+        <h3>
+          <span id="loopEditorTitle">Editeur</span>
+          <button class="btn btn-sm btn-secondary" onclick="closeLoopEditor()">Fermer editeur</button>
+        </h3>
+        <div class="transport">
+          <button class="btn btn-success btn-sm" onclick="playCurrentLoop()">&#9654; Play</button>
+          <button class="btn btn-danger btn-sm" onclick="stopLoop()">&#9632; Stop</button>
+          <div class="bpm-display"><span id="loopBpmDisplay">120</span> BPM</div>
+          <input type="range" id="loopBpmSlider" min="40" max="300" value="120"
+                 oninput="updateLoopBpm(this.value)" style="flex:1;">
+          <select id="loopQuantize" onchange="renderCurrentLoopGrid()" style="width:80px;">
+            <option value="4">1/4</option>
+            <option value="8" selected>1/8</option>
+            <option value="16">1/16</option>
+          </select>
+        </div>
+        <div class="loop-grid" id="loopGrid"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ====== MODAL: System Settings ====== -->
 <div class="modal-overlay" id="modalSettings">
   <div class="modal" style="max-width:550px;">
@@ -720,6 +734,16 @@ input[type=checkbox] { width: auto; }
         <button class="btn btn-secondary btn-sm" onclick="scanI2C()">Scanner I2C</button>
       </div>
       <div id="i2cInfo" style="margin-top:8px;font-size:0.85em;color:var(--fg2);"></div>
+    </div>
+
+    <!-- Monitoring -->
+    <div class="card" style="margin-top:12px;">
+      <h3 style="display:flex;justify-content:space-between;align-items:center;">
+        <span>Monitoring</span>
+        <button class="btn btn-secondary btn-sm" onclick="refreshStatus()">Actualiser</button>
+      </h3>
+      <div id="status-alarms" style="margin:8px 0;"></div>
+      <div class="monitor-grid" id="monitorGrid"></div>
     </div>
 
     <!-- Preferences -->
@@ -2268,21 +2292,26 @@ async function refreshStatus() {
   document.getElementById('midiDot').className = 'dot ' + (data.midi_connected ? 'on' : 'off');
   document.getElementById('midiStatus').textContent = data.midi_connected ? data.midi_sessions + ' sess.' : '--';
 
-  // Monitoring stat grid
-  document.getElementById('statGrid').innerHTML = `
-    <div class="stat-card"><div class="stat-value">${data.actuator_configs||0}</div><div class="stat-label">Actionneurs</div></div>
-    <div class="stat-card"><div class="stat-value">${data.actuator_active||0}/${data.actuator_count||0}</div><div class="stat-label">Actifs / Charges</div></div>
-    <div class="stat-card"><div class="stat-value">${data.instrument_count||0}</div><div class="stat-label">Instruments</div></div>
-    <div class="stat-card"><div class="stat-value">${data.pipeline_count||0}</div><div class="stat-label">Pipelines</div></div>
-    <div class="stat-card"><div class="stat-value">${data.scheduler_dispatched||0}</div><div class="stat-label">Cmds dispatched</div></div>
-    <div class="stat-card"><div class="stat-value">${data.scheduler_jitter_us||0}us</div><div class="stat-label">Jitter (max: ${data.scheduler_max_jitter_us||0}us)</div></div>
-    <div class="stat-card"><div class="stat-value">${data.scheduler_queue||0}/${data.scheduler_usage||0}%</div><div class="stat-label">Queue scheduler</div></div>
-    <div class="stat-card"><div class="stat-value">${((data.free_heap||0)/1024).toFixed(1)} KB</div><div class="stat-label">Memoire libre</div></div>
-    <div class="stat-card"><div class="stat-value">${data.midi_notes_rx||0}</div><div class="stat-label">MIDI RX</div></div>
-    <div class="stat-card"><div class="stat-value">${data.wifi_rssi||0} dBm</div><div class="stat-label">WiFi RSSI</div></div>
-    <div class="stat-card"><div class="stat-value">${Math.floor((data.uptime_s||0)/3600)}h${Math.floor(((data.uptime_s||0)%3600)/60)}m</div><div class="stat-label">Uptime</div></div>
-    <div class="stat-card"><div class="stat-value">${data.loop_playing ? 'Lecture' : 'Arrete'}</div><div class="stat-label">Loop ${data.loop_playing ? data.loop_bpm + ' BPM' : ''}</div></div>
-  `;
+  // Monitoring compact grid (in settings modal)
+  const mg = document.getElementById('monitorGrid');
+  if (mg) {
+    const m = (v,l) => `<div class="monitor-item"><div class="mv">${v}</div><div class="ml">${l}</div></div>`;
+    mg.innerHTML =
+      m(data.actuator_active||0, 'Actifs / '+(data.actuator_count||0)+' charges') +
+      m(data.pipeline_count||0, 'Pipelines') +
+      m(data.scheduler_dispatched||0, 'Dispatched') +
+      m((data.scheduler_jitter_us||0)+'us', 'Jitter (max '+(data.scheduler_max_jitter_us||0)+'us)') +
+      m((data.scheduler_queue||0)+' / '+(data.scheduler_usage||0)+'%', 'Queue') +
+      m(((data.free_heap||0)/1024).toFixed(0)+' KB', 'Mem libre') +
+      m(data.midi_notes_rx||0, 'MIDI RX') +
+      m((data.wifi_rssi||0)+' dBm', 'RSSI') +
+      m(Math.floor((data.uptime_s||0)/3600)+'h'+Math.floor(((data.uptime_s||0)%3600)/60)+'m', 'Uptime') +
+      m(data.loop_playing ? '&#9654;' : '&#9632;', 'Loop');
+  }
+
+  // Loop button indicator
+  const btnLoop = document.getElementById('btnLoop');
+  if (btnLoop) btnLoop.classList.toggle('playing', !!data.loop_playing);
 
   // Alarms
   let alarms = '';
@@ -2369,7 +2398,8 @@ async function updateGlobalVolume(val) {
 // ====================================================================
 function showModal(id) {
   document.getElementById(id).classList.add('show');
-  if (id === 'modalSettings') { loadWifiSettings(); if (statusData) updateSettingsInfo(statusData); document.getElementById('settHideUsedActuators').checked = hideUsedActuators; }
+  if (id === 'modalSettings') { loadWifiSettings(); refreshStatus(); document.getElementById('settHideUsedActuators').checked = hideUsedActuators; }
+  if (id === 'modalLoopEditor') { renderLoops(); }
 }
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
 

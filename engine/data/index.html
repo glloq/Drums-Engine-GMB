@@ -55,9 +55,11 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
 input[type=range] { padding: 0; }
 input[type=checkbox] { width: auto; }
 
-.list-item { background: var(--bg); border-radius: var(--radius); padding: 12px; margin-bottom: 8px; border-left: 3px solid var(--accent2); }
-.list-item .item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-.list-item .item-detail { font-size: 0.8em; color: var(--fg2); line-height: 1.6; }
+.list-item { background: var(--bg); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 6px; border-left: 3px solid var(--accent2); }
+.list-item .item-title { font-size: 0.95em; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.list-item .item-title strong { margin-right: 2px; }
+.list-item .item-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+.list-item .item-detail { font-size: 0.78em; color: var(--fg2); line-height: 1.5; }
 
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 768px) { .grid-2 { grid-template-columns: 1fr; } }
@@ -153,7 +155,11 @@ input[type=checkbox] { width: auto; }
 
 <div class="header">
   <h1>Drums Engine</h1>
-  <button class="btn-loop" id="btnLoop" onclick="showModal('modalLoopEditor')" title="Boucles">&#8734;</button>
+  <div style="display:flex;align-items:center;gap:4px;">
+    <span id="loopBpmLeft" style="font-size:0.7em;color:var(--fg2);min-width:12px;text-align:right;">b</span>
+    <button class="btn-loop" id="btnLoop" onclick="showModal('modalLoopEditor')" title="Boucles">&#8734;</button>
+    <span id="loopBpmRight" style="font-size:0.7em;color:var(--fg2);min-width:12px;">p</span>
+  </div>
   <div class="header-right">
     <div class="status">
       <span><span class="dot" id="wifiDot"></span><span id="wifiStatus">--</span></span>
@@ -610,51 +616,42 @@ input[type=checkbox] { width: auto; }
   </div>
 </div>
 
-<!-- ====== MODAL: Add Loop ====== -->
-<div class="modal-overlay" id="modalLoop">
-  <div class="modal">
-    <h2>Nouvelle Boucle</h2>
-    <div class="form-group">
-      <label>Nom</label>
-      <input type="text" id="loopName" placeholder="Rock Beat">
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>BPM</label>
-        <input type="number" id="loopBpm" value="120" min="40" max="300">
-      </div>
-      <div class="form-group">
-        <label>Mesures</label>
-        <input type="number" id="loopBars" value="1" min="1" max="8">
-      </div>
-      <div class="form-group">
-        <label>Signature</label>
-        <select id="loopTimeSig">
-          <option value="4/4">4/4</option>
-          <option value="3/4">3/4</option>
-          <option value="6/8">6/8</option>
-          <option value="5/4">5/4</option>
-        </select>
-      </div>
-    </div>
-    <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="closeModal('modalLoop')">Annuler</button>
-      <button class="btn btn-primary" onclick="createLoop()">Creer</button>
-    </div>
-  </div>
-</div>
-
 <!-- ====== MODAL: Loop Editor ====== -->
 <div class="modal-overlay" id="modalLoopEditor">
   <div class="modal" style="max-width:700px;">
     <h2 style="display:flex;justify-content:space-between;align-items:center;">
       <span>Boucles (<span id="loopCount">0</span>)</span>
-      <div style="display:flex;gap:8px;">
-        <button class="btn btn-sm btn-primary" onclick="showModal('modalLoop')">+ Nouvelle</button>
-        <button class="btn btn-secondary btn-sm" onclick="closeModal('modalLoopEditor')">Fermer</button>
-      </div>
+      <button class="btn btn-secondary btn-sm" onclick="closeModal('modalLoopEditor')">Fermer</button>
     </h2>
     <div id="loopList" style="margin-top:8px;"></div>
+    <!-- Inline new loop form -->
+    <div class="card" style="margin-top:10px;">
+      <h3>Nouvelle boucle</h3>
+      <div class="form-row" style="margin-top:8px;">
+        <div class="form-group">
+          <label>Nom</label>
+          <input type="text" id="loopName" placeholder="Rock Beat">
+        </div>
+        <div class="form-group">
+          <label>BPM</label>
+          <input type="number" id="loopBpm" value="120" min="40" max="300">
+        </div>
+        <div class="form-group">
+          <label>Mesures</label>
+          <input type="number" id="loopBars" value="1" min="1" max="8">
+        </div>
+        <div class="form-group">
+          <label>Signature</label>
+          <select id="loopTimeSig">
+            <option value="4/4">4/4</option>
+            <option value="3/4">3/4</option>
+            <option value="6/8">6/8</option>
+            <option value="5/4">5/4</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="createLoop()" style="margin-top:6px;">+ Creer</button>
+    </div>
     <div id="loopEditor" style="display:none;margin-top:12px;">
       <div class="card">
         <h3>
@@ -1047,33 +1044,31 @@ function renderActuators() {
     el.innerHTML = '<div class="empty-state"><p>Aucun actionneur configure</p><p>Cliquez "+ Ajouter" pour commencer</p></div>';
     return;
   }
-  el.innerHTML = actuators.map(a => `
+  el.innerHTML = actuators.map(a => {
+    let details = a.busName + ' pin ' + a.hwPin;
+    if (a.type===1 && a.behavior===0) details += ' · Temps: '+a.paramMin+'-'+a.paramMax+'ms';
+    if (a.type===1 && a.behavior===1) details += ' · PWM: act='+a.paramMin+' hold='+a.paramMax+' tMax='+a.paramDefault+'ms';
+    if (a.type===0) details += ' · Angle: '+a.paramMin+'\u00b0-'+a.paramMax+'\u00b0' + (a.behavior===2 ? ' (repos:'+a.paramDefault+'\u00b0)' : '');
+    if (a.type===2) details += ' · PWM: '+a.paramMin+'%-'+a.paramMax+'%' + (a.hwAddress>0 ? ' Capteur:GPIO'+a.hwAddress : '') + (a.inverted ? ' [INV]' : '');
+    if (a.type===1 && a.cooldownUs > 0 && a.behavior===0) details += ' · Cooldown: '+Math.round(a.cooldownUs*0.1)+'ms';
+    if (a.type===1 && a.behavior===1) details += ' · Actif max: '+Math.round(a.cooldownUs*0.1)+'ms';
+    return `
     <div class="list-item" style="border-left-color:${a.active?'var(--success)':'var(--accent2)'}">
-      <div class="item-header">
-        <span>
-          <strong>${a.name}</strong>
-          <span class="badge">${a.typeName}</span>
-          <span class="badge">${a.behaviorName}</span>
-          ${a.active ? '<span class="badge badge-green">ACTIF</span>' : ''}
-          ${!a.enabled ? '<span class="badge badge-warn">OFF</span>' : ''}
-        </span>
-        <span>
-          <button class="btn btn-sm btn-success" onclick="testActuator(${a.id})">Test</button>
-          <button class="btn btn-sm btn-secondary" onclick="editActuator(${a.id})">Modifier</button>
-          <button class="btn btn-sm btn-danger" onclick="confirmDelete(this, () => deleteActuator(${a.id}))">Suppr</button>
-        </span>
+      <div class="item-title">
+        <strong>${a.name}</strong>
+        <span class="badge">${a.typeName}</span>
+        <span class="badge">${a.behaviorName}</span>
+        ${a.active ? '<span class="badge badge-green">ACTIF</span>' : ''}
+        ${!a.enabled ? '<span class="badge badge-warn">OFF</span>' : ''}
       </div>
-      <div class="item-detail">
-        ${a.busName} pin ${a.hwPin}
-        ${a.type===1 && a.behavior===0 ? '| Temps: '+a.paramMin+'-'+a.paramMax+'ms' : ''}
-        ${a.type===1 && a.behavior===1 ? '| PWM: act='+a.paramMin+' hold='+a.paramMax+' tMax='+a.paramDefault+'ms' : ''}
-        ${a.type===0 ? '| Angle: '+a.paramMin+'\u00b0-'+a.paramMax+'\u00b0' + (a.behavior===2 ? ' (repos:'+a.paramDefault+'\u00b0)' : '') : ''}
-        ${a.type===2 ? '| PWM: '+a.paramMin+'%-'+a.paramMax+'%' + (a.hwAddress>0 ? ' Capteur:GPIO'+a.hwAddress : '') + (a.inverted ? ' [INV]' : '') : ''}
-        ${a.type===1 && a.cooldownUs > 0 && a.behavior===0 ? '| Cooldown: '+Math.round(a.cooldownUs*0.1)+'ms' : ''}
-        ${a.type===1 && a.behavior===1 ? '| Actif max: '+Math.round(a.cooldownUs*0.1)+'ms' : ''}
+      <div class="item-actions">
+        <button class="btn btn-sm btn-success" onclick="testActuator(${a.id})">Test</button>
+        <button class="btn btn-sm btn-secondary" onclick="editActuator(${a.id})">Modifier</button>
+        <button class="btn btn-sm btn-danger" onclick="confirmDelete(this, () => deleteActuator(${a.id}))">Suppr</button>
       </div>
-    </div>
-  `).join('');
+      <div class="item-detail">${details}</div>
+    </div>`;
+  }).join('');
 }
 
 function nextFreePin() {
@@ -1380,7 +1375,7 @@ function populateActuatorSelects() {
 function onMidiNoteChange() {
   const nameEl = document.getElementById('instrName');
   const noteVal = parseInt(document.getElementById('instrMidiNote').value);
-  const noteInfo = midiNotes.find(n => n.note === noteVal);
+  const noteInfo = midiNotes.find(n => parseInt(n.note) === noteVal);
   // Auto-fill name if empty or if it matches a previous MIDI note name
   if (noteInfo && (!nameEl.value || midiNotes.some(n => n.name === nameEl.value))) {
     nameEl.value = noteInfo.name;
@@ -1442,8 +1437,9 @@ function renderInstruments() {
     return;
   }
   el.innerHTML = instruments.map(inst => {
-    const noteInfo = midiNotes.find(n => n.note === inst.midiNote);
-    const noteName = noteInfo ? noteInfo.name : 'Note ' + inst.midiNote;
+    const mNote = parseInt(inst.midiNote);
+    const noteInfo = midiNotes.find(n => parseInt(n.note) === mNote);
+    const noteName = noteInfo ? noteInfo.name : '';
     const actNames = (inst.actuatorIds || [])
       .filter(id => id !== 255)
       .map(id => { const a = actuators.find(x => x.id === id); return a ? a.name : 'ID:'+id; });
@@ -1452,27 +1448,25 @@ function renderInstruments() {
     const ccCount = (inst.ccBindings || []).length;
     return `
     <div class="list-item">
-      <div class="item-header">
-        <span>
-          <strong>${inst.name}</strong>
-          <span class="badge">${inst.category}</span>
-          <span class="badge">${inst.midiNote} - ${noteName}</span>
-          <span class="badge badge-green">On:${onCount}</span>
-          <span class="badge badge-warn">Off:${offCount}</span>
-          <span class="badge">CC:${ccCount}</span>
-          ${!inst.enabled ? '<span class="badge badge-warn">OFF</span>' : ''}
-        </span>
-        <span>
-          <button class="btn btn-sm btn-success" onclick="testInstrument(${inst.id})">Test</button>
-          <button class="btn btn-sm btn-secondary" onclick="testInstrumentAction(${inst.id}, 'on', 0)">Test On#1</button>
-          <button class="btn btn-sm btn-secondary" onclick="testInstrumentAction(${inst.id}, 'off', 0)">Test Off#1</button>
-          <button class="btn btn-sm btn-secondary" onclick="editInstrument(${inst.id})">Modifier</button>
-          <button class="btn btn-sm btn-danger" onclick="confirmDelete(this, () => deleteInstrument(${inst.id}))">Suppr</button>
-        </span>
+      <div class="item-title">
+        <strong>${inst.name}</strong>
+        <span class="badge">${inst.category}</span>
+        <span class="badge">${mNote}${noteName ? ' · ' + noteName : ''}</span>
+        <span class="badge badge-green">On:${onCount}</span>
+        <span class="badge badge-warn">Off:${offCount}</span>
+        <span class="badge">CC:${ccCount}</span>
+        ${!inst.enabled ? '<span class="badge badge-warn">OFF</span>' : ''}
+      </div>
+      <div class="item-actions">
+        <button class="btn btn-sm btn-success" onclick="testInstrument(${inst.id})">Test</button>
+        <button class="btn btn-sm btn-secondary" onclick="testInstrumentAction(${inst.id}, 'on', 0)">On#1</button>
+        <button class="btn btn-sm btn-secondary" onclick="testInstrumentAction(${inst.id}, 'off', 0)">Off#1</button>
+        <button class="btn btn-sm btn-secondary" onclick="editInstrument(${inst.id})">Modifier</button>
+        <button class="btn btn-sm btn-danger" onclick="confirmDelete(this, () => deleteInstrument(${inst.id}))">Suppr</button>
       </div>
       <div class="item-detail">
         Actionneurs: ${actNames.length > 0 ? actNames.join(', ') : '<em>aucun</em>'}
-        | Retrigger: ${['Ignore','Reset','Stack'][inst.retriggerMode ?? 0]}
+        · Retrigger: ${['Ignore','Reset','Stack'][inst.retriggerMode ?? 0]}
       </div>
     </div>`;
   }).join('');
@@ -1991,19 +1985,27 @@ function describeStep(step) {
   const verbs = BEHAVIOR_VERBS[beh] || ['Actionner','Action'];
   const delay = step.delayMs || 0;
   const curve = step.velocityCurve || 0;
+  const dMin = step.durationMinMs || 0;
+  const dMax = step.durationMaxMs || 0;
 
   let desc = '';
   let cls = '';
+  let durInfo = '';
+  if (dMin > 0 || dMax > 0) {
+    durInfo = dMin === dMax ? ` ${dMin}ms` : ` ${dMin}-${dMax}ms`;
+  }
 
   switch (step.commandType) {
-    case 0: // PULSE
+    case 0: { // PULSE
       cls = 'time';
-      if (step.valueSource === 0) desc = `${verbs[0]} <b>${name}</b> <small>(velocite${curve > 0 ? ' ' + CURVE_NAMES[curve] : ''})</small>`;
-      else if (step.valueSource === 1) desc = `${verbs[0]} <b>${name}</b> <small>(fixe=${step.valueFixed ?? 0})</small>`;
-      else if (step.valueSource === 3) desc = `${verbs[0]} <b>${name}</b> <small>(inv. vel)</small>`;
-      else desc = `${verbs[0]} <b>${name}</b>`;
+      let src = '';
+      if (step.valueSource === 0) src = `velocite${curve > 0 ? ' ' + CURVE_NAMES[curve] : ''}`;
+      else if (step.valueSource === 1) src = `fixe=${step.valueFixed ?? 0}`;
+      else if (step.valueSource === 3) src = 'inv. vel';
+      desc = `${verbs[0]} <b>${name}</b>` + (src || durInfo ? ` <small>(${src}${durInfo})</small>` : '');
       break;
-    case 1: // POSITION
+    }
+    case 1: { // POSITION
       cls = 'out';
       const val = step.valueFixed ?? 0;
       if (beh === 8 || beh === 9) {
@@ -2018,10 +2020,11 @@ function describeStep(step) {
         else desc = `Position <b>${name}</b> <small>(inv. vel)</small>`;
       }
       break;
+    }
     case 2: // PWM
       cls = 'trans';
-      if (step.valueSource === 0) desc = `Rotation <b>${name}</b> <small>(velocite)</small>`;
-      else desc = `PWM <b>${name}</b> <small>(fixe=${step.valueFixed ?? 0})</small>`;
+      if (step.valueSource === 0) desc = `Rotation <b>${name}</b> <small>(velocite${durInfo})</small>`;
+      else desc = `PWM <b>${name}</b> <small>(fixe=${step.valueFixed ?? 0}${durInfo})</small>`;
       break;
     case 3: // OFF
       cls = 'cond';
@@ -2038,11 +2041,12 @@ function renderPipelineCard(inst) {
   const onActions = inst.noteOnActions || [];
   const offActions = inst.noteOffActions || [];
   const ccBinds = inst.ccBindings || [];
-  const noteInfo = midiNotes.find(n => n.note === inst.midiNote);
-  const noteName = noteInfo ? noteInfo.name : 'Note ' + inst.midiNote;
+  const mNote = parseInt(inst.midiNote);
+  const noteInfo = midiNotes.find(n => parseInt(n.note) === mNote);
+  const noteName = noteInfo ? noteInfo.name : '';
   const maxGrp = Math.max(0, ...onActions.map(s => s.alternateGroup || 0));
 
-  let badges = `<span class="badge">${inst.midiNote} ${noteName}</span>`;
+  let badges = `<span class="badge">${mNote}${noteName ? ' · ' + noteName : ''}</span>`;
   if (inst.pipelineId !== undefined && inst.pipelineId !== 255)
     badges += `<span class="badge badge-green">P#${inst.pipelineId}</span>`;
   if (maxGrp > 0)
@@ -2157,18 +2161,19 @@ function renderLoops() {
   }
   el.innerHTML = loops.map((loop, i) => `
     <div class="list-item" style="border-left-color:var(--accent);">
-      <div class="item-header">
-        <span><strong>${loop.name}</strong> <span class="badge">${loop.bpm} BPM</span></span>
-        <span>
-          <button class="btn btn-sm btn-success" onclick="openLoopEditor(${i})">Editer</button>
-          <button class="btn btn-sm btn-danger" onclick="confirmDelete(this, () => deleteLoopItem(${i}))">Suppr</button>
-        </span>
+      <div class="item-title">
+        <strong>${loop.name}</strong>
+        <span class="badge">${loop.bpm} BPM</span>
+        <span class="badge">${loop.beatsPerBar||4}/${loop.beatValue||4}</span>
+        <span class="badge">${loop.bars||1} mes.</span>
+      </div>
+      <div class="item-actions">
+        <button class="btn btn-sm btn-success" onclick="openLoopEditor(${i})">Editer</button>
+        <button class="btn btn-sm btn-danger" onclick="confirmDelete(this, () => deleteLoopItem(${i}))">Suppr</button>
       </div>
     </div>
   `).join('');
 }
-
-function showAddLoop() { showModal('modalLoop'); }
 
 async function createLoop() {
   const ts = document.getElementById('loopTimeSig').value.split('/');
@@ -2180,8 +2185,8 @@ async function createLoop() {
     beatValue: parseInt(ts[1])
   };
   await api('loops', 'POST', data);
-  closeModal('modalLoop');
   await loadLoops();
+  document.getElementById('loopName').value = '';
   toast('Boucle creee', 'success');
 }
 
@@ -2309,9 +2314,24 @@ async function refreshStatus() {
       m(data.loop_playing ? '&#9654;' : '&#9632;', 'Loop');
   }
 
-  // Loop button indicator
+  // Loop button indicator + bpm in header
   const btnLoop = document.getElementById('btnLoop');
   if (btnLoop) btnLoop.classList.toggle('playing', !!data.loop_playing);
+  const bL = document.getElementById('loopBpmLeft');
+  const bR = document.getElementById('loopBpmRight');
+  if (bL && bR) {
+    if (data.loop_playing && data.loop_bpm) {
+      bL.textContent = data.loop_bpm;
+      bL.style.color = 'var(--success)';
+      bR.textContent = 'bpm';
+      bR.style.color = 'var(--success)';
+    } else {
+      bL.textContent = 'b';
+      bL.style.color = 'var(--fg2)';
+      bR.textContent = 'p';
+      bR.style.color = 'var(--fg2)';
+    }
+  }
 
   // Alarms
   let alarms = '';

@@ -15,14 +15,16 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
 
     const CompiledPipeline& pipeline = _lookup.pipelines[pipelineIdx];
 
-    if (_noteActive[ev.data1]) {
+    if (_noteActive[ev.data1] > 0) {
       if (pipeline.retrigger_mode == (uint8_t)RetriggerMode::IGNORE) {
         return;
       }
       if (pipeline.retrigger_mode == (uint8_t)RetriggerMode::RESET && pipeline.note_off_count > 0) {
         _scheduler->scheduleActionSteps(pipeline.note_off_actions, pipeline.note_off_count,
                                         ev.data2, ev.timestamp, _state->raw().variables);
+        _noteActive[ev.data1] = 0;  // Reset counter before re-triggering
       }
+      // STACK: counter will increment below, allowing proper NoteOff tracking
     }
 
     if (pipeline.note_on_count > 0) {
@@ -35,22 +37,30 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
       _scheduler->scheduleActionSteps(pipeline.note_on_actions, pipeline.note_on_count,
                                       ev.data2, ev.timestamp, _state->raw().variables,
                                       activeGroup);
-      _noteActive[ev.data1] = true;
+      if (_noteActive[ev.data1] < 255) _noteActive[ev.data1]++;
       return;
     }
 
     _executePipeline(pipelineIdx, ev.data2, ev.timestamp);
-    _noteActive[ev.data1] = true;
+    if (_noteActive[ev.data1] < 255) _noteActive[ev.data1]++;
   }
   else if (ev.type == MIDI_EVT_NOTE_OFF || (ev.type == MIDI_EVT_NOTE_ON && ev.data2 == 0)) {
     uint8_t pipelineIdx = _lookup.note_to_pipeline[ev.data1];
     if (pipelineIdx == 0xFF || pipelineIdx >= _lookup.pipeline_count) return;
 
     const CompiledPipeline& pipeline = _lookup.pipelines[pipelineIdx];
+
+    // Decrement stack counter; only fire noteOff actions when last instance releases
+    if (_noteActive[ev.data1] > 1 &&
+        pipeline.retrigger_mode == (uint8_t)RetriggerMode::STACK) {
+      _noteActive[ev.data1]--;
+      return;  // Other instances still active, don't fire noteOff yet
+    }
+
     if (pipeline.note_off_count > 0) {
       _scheduler->scheduleActionSteps(pipeline.note_off_actions, pipeline.note_off_count,
                                       ev.data2, ev.timestamp, _state->raw().variables);
-      _noteActive[ev.data1] = false;
+      _noteActive[ev.data1] = 0;
       return;
     }
 
@@ -63,18 +73,19 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
       cmd.execute_at = ev.timestamp;
       _scheduler->scheduleCommand(cmd);
     }
-    _noteActive[ev.data1] = false;
+    _noteActive[ev.data1] = 0;
   }
   else if (ev.type == MIDI_EVT_CC) {
     _processCcEvent(ev);
   }
   else if (ev.type == MIDI_EVT_PITCH_BEND) {
-    // Treat pitch bend as virtual CC127 for pitch-oriented routes
+    // Route pitch bend to all actuators with PITCH_BEND behavior via CC routes
+    // Uses virtual CC#126 (reserved) to avoid collision with real CC#127 (Poly Mode On)
     uint16_t bend14 = ((uint16_t)ev.data1 << 7) | (uint16_t)ev.data2;
     uint8_t mapped = map((int)bend14, 0, 16383, 0, 127);
     MidiEvent ccEv = ev;
     ccEv.type = MIDI_EVT_CC;
-    ccEv.data1 = 127;
+    ccEv.data1 = 126;  // Virtual CC#126 for pitch bend routing
     ccEv.data2 = mapped;
     _processCcEvent(ccEv);
   }

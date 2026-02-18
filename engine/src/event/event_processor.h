@@ -53,7 +53,7 @@ private:
   EngineState* _state;
   PipelineLookup _lookup;
   uint32_t _lastCcDispatchUs[128];
-  bool _noteActive[128];
+  uint8_t _noteActive[128];  // Counter: 0=inactive, N=N stacked instances active
 
   CcDispatchStats _ccStats;
 

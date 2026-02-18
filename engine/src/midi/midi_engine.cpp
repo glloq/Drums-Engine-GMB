@@ -125,7 +125,7 @@ void MidiEngine::_onNoteOff(byte channel, byte note, byte velocity) {
     ev.type = MIDI_EVT_NOTE_OFF;
     ev.channel = channel;
     ev.data1 = note;
-    ev.data2 = 0;
+    ev.data2 = velocity;  // Pass through NoteOff velocity for noteOffActions
     ev.timestamp = micros();
     _instance->_eventProc->processMidiEvent(ev);
   } else {

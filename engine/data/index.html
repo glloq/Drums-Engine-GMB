@@ -1309,7 +1309,7 @@ const INSTRUMENT_TEMPLATES = {
     name: 'Timpani', category:'drums', midiNote:47, midiChannel:10,
     noteOnActions: [{commandType:0, valueSource:0, delayMs:0, durationMinMs:0, durationMaxMs:0, velocityCurve:0}],
     noteOffActions: [],
-    ccBindings: [{ccNumber:127, commandType:1, rangeMin:30, rangeMax:110, curve:0, inverted:false}]
+    ccBindings: [{ccNumber:126, commandType:1, rangeMin:30, rangeMax:110, curve:0, inverted:false}]
   },
   motorOptical: {
     name: 'Motor Optical', category:'other', midiNote:60, midiChannel:10,
@@ -2140,7 +2140,9 @@ async function renderMappings() {
       }).join(' | ');
       return `<div class="list-item"><strong>CC${r.cc}</strong> &rarr; ${entries}</div>`;
     }).join('');
-    el.innerHTML += `<div class="card"><h3>Routage CC compile (${ccRouteData.count||0})</h3>${routeCards}</div>`;
+    const dropped = ccRouteData.dropped || 0;
+    const droppedBadge = dropped > 0 ? ` <span class="badge" style="background:#f44336;">⚠ ${dropped} routes perdues (max ${ccRouteData.max||16})</span>` : '';
+    el.innerHTML += `<div class="card"><h3>Routage CC compile (${ccRouteData.count||0})${droppedBadge}</h3>${routeCards}</div>`;
   }
 }
 

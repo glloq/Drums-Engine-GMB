@@ -107,9 +107,9 @@ input[type=checkbox] { width: auto; }
 .transport { display: flex; align-items: center; gap: 12px; padding: 12px 0; }
 .transport .bpm-display { font-size: 1.4em; font-weight: bold; min-width: 80px; text-align: center; }
 
-.modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 100; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 20px 0; }
-.modal-overlay.show { display: block; }
-.modal { background: var(--bg2); border-radius: var(--radius); padding: 24px; width: 90%; max-width: 500px; margin: 20px auto; }
+.modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 100; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.modal-overlay.show { display: flex; align-items: flex-start; justify-content: center; }
+.modal { background: var(--bg2); border-radius: var(--radius); padding: 24px; width: 90%; max-width: 500px; margin: 20px auto; flex-shrink: 0; }
 .modal h2 { margin-bottom: 16px; }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
 
@@ -470,7 +470,7 @@ input[type=checkbox] { width: auto; }
       </div>
       <div class="form-group">
         <label>Note MIDI</label>
-        <select id="instrMidiNote"></select>
+        <select id="instrMidiNote" onchange="onMidiNoteChange()"></select>
       </div>
       <div class="form-group" style="display:flex;align-items:flex-end;">
         <label><input type="checkbox" id="instrEnabled" checked> Actif</label>
@@ -715,6 +715,15 @@ input[type=checkbox] { width: auto; }
       </div>
       <div id="i2cInfo" style="margin-top:8px;font-size:0.85em;color:var(--fg2);"></div>
     </div>
+
+    <!-- Preferences -->
+    <div class="card" style="margin-top:12px;">
+      <h3>Preferences</h3>
+      <label style="font-size:0.85em;cursor:pointer;">
+        <input type="checkbox" id="settHideUsedActuators" checked onchange="hideUsedActuators=this.checked;localStorage.setItem('hideUsedAct',this.checked?'1':'0');">
+        Masquer les actionneurs deja utilises dans les listes d'instruments
+      </label>
+    </div>
   </div>
 </div>
 
@@ -732,6 +741,7 @@ let statusData = {};
 let currentLoopIdx = -1;
 let capabilities = null;
 let apiToken = '';
+let hideUsedActuators = localStorage.getItem('hideUsedAct') !== '0';
 
 // ====================================================================
 // API helper
@@ -1036,6 +1046,21 @@ function renderActuators() {
   `).join('');
 }
 
+function nextFreePin() {
+  // Find next unused I2C pin (1-64) across all existing actuators on MCP/PCA buses
+  const usedPins = new Set(actuators.filter(a => a.bus === 0 || a.bus === 1).map(a => {
+    // Reconstruct global pin: hwAddress module offset + hwPin
+    const baseAddr = a.bus === 0 ? 0x20 : 0x40;
+    const moduleIdx = a.hwAddress - baseAddr;
+    const pinsPerModule = a.bus === 0 ? 16 : 16;
+    return moduleIdx * pinsPerModule + a.hwPin + 1; // 1-based
+  }));
+  for (let p = 1; p <= 64; p++) {
+    if (!usedPins.has(p)) return p;
+  }
+  return 1;
+}
+
 function showAddActuator() {
   document.getElementById('modalActTitle').textContent = 'Nouvel Actionneur';
   document.getElementById('editActId').value = '';
@@ -1044,7 +1069,7 @@ function showAddActuator() {
   document.getElementById('actQuickPreset').value = '';
   document.getElementById('actType').value = '1';
   document.getElementById('actBus').value = '0';
-  document.getElementById('actPinGlobal').value = '1';
+  document.getElementById('actPinGlobal').value = nextFreePin();
   document.getElementById('actTimeMin').value = '8';
   document.getElementById('actTimeMax').value = '30';
   document.getElementById('actCooldownMs').value = '20';
@@ -1275,6 +1300,17 @@ let editNoteOffActions = [];
 let editCcBindings = [];
 
 function populateActuatorSelects() {
+  // Compute used actuator IDs (by other instruments, not the one being edited)
+  const editId = document.getElementById('editInstrId').value;
+  const usedIds = new Set();
+  if (hideUsedActuators) {
+    instruments.forEach(inst => {
+      if (editId && String(inst.id) === editId) return; // exclude current
+      (inst.actuatorIds || []).filter(id => id !== 255).forEach(id => usedIds.add(id));
+    });
+  }
+  const avail = (list) => list.filter(a => !usedIds.has(a.id));
+
   const solenoidActs = actuators.filter(a => a.type === 1);
   const strikeActs = solenoidActs.filter(a => a.behavior !== 9);
   const muteActs = actuators.filter(a => a.behavior === 8 || a.behavior === 9);
@@ -1285,8 +1321,8 @@ function populateActuatorSelects() {
   const motorActs = actuators.filter(a => a.type === 2);
   const allActs = actuators;
 
-  const makeOpts = (list, sel) => list.map(a => `<option value="${a.id}" ${a.id===sel?'selected':''}>${a.name}</option>`).join('') || '<option value="255">-- aucun --</option>';
-  const makeOptsOptional = (list, sel) => '<option value="255">-- aucun --</option>' + list.map(a => `<option value="${a.id}" ${a.id===sel?'selected':''}>${a.name}</option>`).join('');
+  const makeOpts = (list, sel) => avail(list).map(a => `<option value="${a.id}" ${a.id===sel?'selected':''}>${a.name}</option>`).join('') || '<option value="255">-- aucun --</option>';
+  const makeOptsOptional = (list, sel) => '<option value="255">-- aucun --</option>' + avail(list).map(a => `<option value="${a.id}" ${a.id===sel?'selected':''}>${a.name}</option>`).join('');
 
   // Simple
   document.getElementById('instrStrikeAct').innerHTML = makeOpts(strikeActs.length ? strikeActs : allActs, -1);
@@ -1310,6 +1346,16 @@ function populateActuatorSelects() {
   document.getElementById('instrHHMuteAct').innerHTML = makeOptsOptional(servoMuteActs.length ? servoMuteActs : muteActs, -1);
   // Motor
   document.getElementById('instrMotorAct').innerHTML = makeOpts(motorActs.length ? motorActs : allActs, -1);
+}
+
+function onMidiNoteChange() {
+  const nameEl = document.getElementById('instrName');
+  const noteVal = parseInt(document.getElementById('instrMidiNote').value);
+  const noteInfo = midiNotes.find(n => n.note === noteVal);
+  // Auto-fill name if empty or if it matches a previous MIDI note name
+  if (noteInfo && (!nameEl.value || midiNotes.some(n => n.name === nameEl.value))) {
+    nameEl.value = noteInfo.name;
+  }
 }
 
 function onInstrTypeChange() {
@@ -1536,6 +1582,7 @@ function showAddInstrument(template=null) {
     editCcBindings = [];
   }
   onInstrTypeChange();
+  if (!template) onMidiNoteChange();
   showModal('modalInstrument');
 }
 
@@ -1736,9 +1783,11 @@ async function saveInstrument() {
     actIds = [strikeId, muteId];
     const muteAct = actuators.find(a => a.id === muteId);
     const muteCmd = (muteAct && muteAct.type === 0) ? 1 : 0;
+    // Mute servo needs ~20ms to open before solenoid strikes
+    const strikeDelay = (muteAct && muteAct.type === 0) ? 20 : 0;
     noteOn = [
       {actuatorId: muteId, commandType: muteCmd, valueSource: 1, valueFixed: 127, ccIndex: 0, delayMs: 0, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0},
-      mkPulse(strikeId)
+      {actuatorId: strikeId, commandType: 0, valueSource: 0, valueFixed: 0, ccIndex: 0, delayMs: strikeDelay, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0}
     ];
     noteOff = [
       {actuatorId: muteId, commandType: muteCmd, valueSource: 1, valueFixed: 0, ccIndex: 0, delayMs: 50, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0}
@@ -2243,7 +2292,7 @@ async function updateGlobalVolume(val) {
 // ====================================================================
 function showModal(id) {
   document.getElementById(id).classList.add('show');
-  if (id === 'modalSettings') { loadWifiSettings(); if (statusData) updateSettingsInfo(statusData); }
+  if (id === 'modalSettings') { loadWifiSettings(); if (statusData) updateSettingsInfo(statusData); document.getElementById('settHideUsedActuators').checked = hideUsedActuators; }
 }
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
 

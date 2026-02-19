@@ -20,6 +20,8 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .header .status { display: flex; gap: 10px; font-size: 0.8em; color: var(--fg2); }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 3px; }
 .dot.on { background: var(--success); } .dot.off { background: var(--accent); }
+.midi-rx { width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-left: 3px; background: transparent; transition: background 0.05s; }
+.midi-rx.flash { background: #ffeb3b; }
 .btn-gear { background: none; border: 1px solid #555; border-radius: 50%; width: 34px; height: 34px; font-size: 1.2em; color: var(--fg2); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
 .btn-gear:hover { color: var(--fg); border-color: var(--accent); background: rgba(233,69,96,0.1); }
 
@@ -215,7 +217,7 @@ input[type=checkbox] { width: auto; }
   <div class="header-right">
     <div class="status">
       <span><span class="dot" id="wifiDot"></span><span id="wifiStatus">--</span></span>
-      <span><span class="dot" id="midiDot"></span><span id="midiStatus">--</span></span>
+      <span><span class="dot" id="midiDot"></span><span id="midiStatus">--</span><span class="midi-rx" id="midiRxDot" title="MIDI RX"></span></span>
     </div>
     <button class="btn-gear" onclick="showModal('modalSettings')" title="Reglages">&#9881;</button>
   </div>
@@ -365,7 +367,10 @@ input[type=checkbox] { width: auto; }
   <!-- ====== CALIBRATION TAB ====== -->
   <div class="panel" id="tab-calibration">
     <div class="card">
-      <h3>Calibration Actionneurs <span class="badge" id="calibActCount">0</span></h3>
+      <h3 style="display:flex;justify-content:space-between;align-items:center;">
+        <span>Calibration Actionneurs <span class="badge" id="calibActCount">0</span></span>
+        <button class="btn btn-danger btn-sm" onclick="emergencyStopAll()" style="font-weight:700;">STOP ALL</button>
+      </h3>
       <p class="hint" style="margin-bottom:12px;">Testez chaque actionneur individuellement. Ajustez la valeur et la duree puis cliquez sur Tester.</p>
       <div id="calibActuatorList"></div>
     </div>
@@ -931,6 +936,20 @@ input[type=checkbox] { width: auto; }
       </label>
     </div>
 
+    <!-- Import/Export -->
+    <div class="card" style="margin-top:12px;">
+      <h3>Sauvegarde / Restauration</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+        <button class="btn btn-primary btn-sm" onclick="exportConfig()">Exporter config (JSON)</button>
+        <label class="btn btn-secondary btn-sm" style="cursor:pointer;">
+          Importer config
+          <input type="file" accept=".json" style="display:none;" onchange="importConfig(this.files[0])">
+        </label>
+      </div>
+      <div class="hint" style="margin-top:6px;">Exporte tous les actionneurs et instruments en un fichier JSON.</div>
+      <div id="importStatus" style="margin-top:6px;font-size:0.85em;"></div>
+    </div>
+
     <!-- System Logs -->
     <div class="card" style="margin-top:12px;">
       <h3 style="display:flex;justify-content:space-between;align-items:center;">
@@ -1274,6 +1293,8 @@ async function init() {
   await Promise.all([loadMidiNotes(), loadCapabilities(), loadActuators(), loadInstruments(), loadLoops(), loadLedData()]);
   refreshStatus();
   setInterval(refreshStatus, 5000);
+  // Auto-connect WebSocket for MIDI RX indicator
+  connectWebSocket();
 }
 
 async function loadMidiNotes() {
@@ -2977,6 +2998,85 @@ async function clearSystemLogs() {
   toast('Logs effaces', 'success');
 }
 
+async function exportConfig() {
+  const actData = await api('actuators');
+  const instrData = await api('instruments');
+  if (!actData || !instrData) { toast('Erreur lors de l\'export', 'error'); return; }
+  const config = {
+    version: 2,
+    exportDate: new Date().toISOString(),
+    actuators: actData.actuators || actData,
+    instruments: instrData.instruments || instrData
+  };
+  const blob = new Blob([JSON.stringify(config, null, 2)], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'drums-engine-config-' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('Configuration exportee', 'success');
+}
+
+async function importConfig(file) {
+  if (!file) return;
+  const status = document.getElementById('importStatus');
+  status.innerHTML = '<span style="color:var(--warn);">Lecture du fichier...</span>';
+  try {
+    const text = await file.text();
+    const config = JSON.parse(text);
+    if (!config.actuators || !config.instruments) {
+      status.innerHTML = '<span style="color:var(--accent);">Format invalide: actuators et instruments requis</span>';
+      return;
+    }
+    const actCount = config.actuators.length;
+    const instrCount = config.instruments.length;
+    status.innerHTML = '<span style="color:var(--warn);">Import: ' + actCount + ' actionneurs, ' + instrCount + ' instruments...</span>';
+
+    // Import actuators first
+    let actOk = 0, actErr = 0;
+    for (const act of config.actuators) {
+      const existing = actuators.find(a => a.id === act.id);
+      let result;
+      if (existing) {
+        result = await api('actuator?id=' + act.id, 'PUT', act);
+      } else {
+        result = await api('actuators', 'POST', act);
+      }
+      if (result !== null && result !== undefined) actOk++; else actErr++;
+    }
+
+    // Import instruments
+    let instrOk = 0, instrErr = 0;
+    for (const inst of config.instruments) {
+      const existing = instruments.find(i => i.id === inst.id);
+      let result;
+      if (existing) {
+        result = await api('instrument?id=' + inst.id, 'PUT', inst);
+      } else {
+        result = await api('instruments', 'POST', inst);
+      }
+      if (result !== null && result !== undefined) instrOk++; else instrErr++;
+    }
+
+    // Save and reload
+    await api('save', 'POST');
+    await Promise.all([loadActuators(), loadInstruments()]);
+
+    const errTotal = actErr + instrErr;
+    if (errTotal === 0) {
+      status.innerHTML = '<span style="color:var(--success);">Import reussi: ' + actOk + ' actionneurs, ' + instrOk + ' instruments</span>';
+      toast('Configuration importee avec succes', 'success');
+    } else {
+      status.innerHTML = '<span style="color:var(--warn);">Import partiel: ' + actOk + '/' + actCount + ' act., ' + instrOk + '/' + instrCount + ' instr. (' + errTotal + ' erreurs)</span>';
+      toast('Import partiel - verifiez les erreurs', 'warn');
+    }
+  } catch (e) {
+    status.innerHTML = '<span style="color:var(--accent);">Erreur: ' + e.message + '</span>';
+    toast('Erreur d\'import', 'error');
+  }
+}
+
 // ====================================================================
 // UI Helpers
 // ====================================================================
@@ -3878,6 +3978,9 @@ function connectWebSocket() {
     try {
       const msg = JSON.parse(evt.data);
       if (msg.type === 'midi_note') {
+        // Flash MIDI RX indicator in header
+        const rxDot = document.getElementById('midiRxDot');
+        if (rxDot) { rxDot.classList.add('flash'); clearTimeout(rxDot._t); rxDot._t = setTimeout(() => rxDot.classList.remove('flash'), 80); }
         // Piano live display
         if (pianoLiveActive) {
           const grid = document.getElementById('pianoPadGrid');
@@ -3902,7 +4005,7 @@ function connectWebSocket() {
     } catch(e) {}
   };
   ws.onclose = () => {
-    if (pianoLiveActive || midiMonitorActive) setTimeout(connectWebSocket, 2000);
+    setTimeout(connectWebSocket, 3000); // Always reconnect for MIDI RX indicator
   };
 }
 
@@ -3983,6 +4086,14 @@ async function calibTestInstrument(id) {
   const vel = parseInt(document.getElementById('calibInstVel' + id).value) || 80;
   await api('test/instrument', 'POST', {id, velocity:vel});
   toast('Instrument #' + id + ' teste (vel=' + vel + ')', 'success');
+}
+
+async function emergencyStopAll() {
+  // Send OFF command to all actuators
+  for (const a of actuators) {
+    api('test/actuator', 'POST', {id: a.id, value: 0});
+  }
+  toast('STOP ALL - Tous les actionneurs arretes', 'warn');
 }
 
 window.addEventListener('load', init);

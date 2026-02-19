@@ -387,6 +387,7 @@ uint32_t EventProcessor::_processTimePulse(const CompiledBlock& block, uint8_t a
 void EventProcessor::_processTimeRamp(const CompiledBlock& block, uint8_t actuatorId,
                                       uint8_t value, uint32_t timestamp, uint32_t delayAccum) {
   uint32_t totalDurationUs = (uint32_t)block.param2 * 1000;
+  if (totalDurationUs == 0) return;  // No duration = no ramp
   uint8_t stepCount = block.param1;
   if (stepCount == 0) {
     stepCount = totalDurationUs / 5000;

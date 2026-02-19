@@ -42,27 +42,19 @@ void WebServerManager::update() {
 }
 
 void WebServerManager::_broadcastNoteChanges() {
+  if (!_eventProc) return;
   uint8_t current[128];
   _eventProc->getNoteActive(current);
 
-  // Build compact JSON with only changes
-  String msg;
-  bool hasChanges = false;
   for (uint8_t i = 0; i < 128; i++) {
     bool wasActive = _wsNoteCache[i] > 0;
     bool isActive = current[i] > 0;
     if (wasActive != isActive) {
-      if (!hasChanges) {
-        msg.reserve(64);
-        hasChanges = true;
-      }
-      // Send individual note change
-      String noteMsg = "{\"type\":\"midi_note\",\"note\":";
-      noteMsg += String(i);
-      noteMsg += ",\"on\":";
-      noteMsg += isActive ? "true" : "false";
-      noteMsg += "}";
-      _ws.textAll(noteMsg);
+      // Send individual note change via WebSocket
+      char buf[64];
+      snprintf(buf, sizeof(buf), "{\"type\":\"midi_note\",\"note\":%d,\"on\":%s}",
+               i, isActive ? "true" : "false");
+      _ws.textAll(buf);
     }
   }
   memcpy(_wsNoteCache, current, 128);

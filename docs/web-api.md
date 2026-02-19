@@ -80,6 +80,10 @@ Base URL: `http://<ip-esp32>/`
 - `GET /api/wifi` — statut WiFi (mode, ssid, ip, rssi)
 - `POST /api/wifi` — configurer credentials WiFi (redemarrage auto)
 
+### MIDI Configuration
+- `GET /api/midi/channels` — canaux MIDI actifs (bitmask + array)
+- `PUT /api/midi/channels` — configurer les canaux (`{channelMask: 0xFFFF}` ou `{channels: [1,10]}`)
+
 ### Securite
 - `GET /api/auth-token` — obtenir le token API (acces local uniquement)
 

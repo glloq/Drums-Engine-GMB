@@ -139,6 +139,22 @@
 - [x] Guide de demarrage: instructions pour les nouveaux utilisateurs
 - [x] Fix TIME_RAMP: protection division par zero quand la duree est 0
 
+## Phase 13 — Editeur boucles, routage MIDI et calibration avancee
+**Statut: implementee**
+- [x] Loop editor: separateurs visuels mesures/temps (bordures accent, fonds alternes)
+- [x] Loop editor: visualisation velocity (opacite proportionnelle, tooltip)
+- [x] Loop editor: slider velocity pour nouvelles notes + clic droit cycle (40/70/100/127)
+- [x] Loop editor: playhead temps reel (polling status 100ms, colonne surlignee vert)
+- [x] Loop editor: bouton Effacer, compteur notes, grille max 64 pas
+- [x] MIDI channel routing: bitmask 16 canaux configurable (defaut: tous)
+- [x] MIDI channel routing: filtrage dans tous les callbacks (NoteOn/Off, CC, PitchBend, Aftertouch)
+- [x] MIDI channel routing: API `GET/PUT /api/midi/channels`, persistance `/midi.json`
+- [x] MIDI channel routing: grille 16 canaux dans Reglages + presets (Tous, Ch.10 Drums)
+- [x] Calibration: sweep velocity progressif (20→40→60→80→100→120→127)
+- [x] Calibration: affichage des actionneurs lies a chaque instrument
+- [x] LED segments: apercu couleurs temps reel dans l'editeur (hit/idle/luminosite)
+- [x] Status API enrichi: `loop_tick`, `loop_index`, `midi_channel_mask`
+
 ## Risques / dette technique
 - Couverture tests: script curl fonctionnel mais pas de CI automatise.
 - Dependance environnement outillage (`pio`) pour validation complete firmware.

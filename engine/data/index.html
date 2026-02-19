@@ -300,12 +300,7 @@ input[type=checkbox] { width: auto; }
           <option value="note">Note MIDI</option>
           <option value="category">Categorie</option>
         </select>
-        <select id="instrBulkAction" style="padding:6px;font-size:0.85em;" onchange="instrBulkOp(this.value);this.value='';">
-          <option value="">Actions...</option>
-          <option value="enableAll">Activer tous</option>
-          <option value="disableAll">Desactiver tous</option>
-          <option value="testAll">Tester tous</option>
-        </select>
+        <button class="btn btn-sm btn-secondary" onclick="instrTestAll()" title="Tester tous les instruments actifs">Tester tous</button>
         <button class="btn btn-secondary btn-sm" onclick="toggleNoteMap()" title="Carte des notes MIDI">Note Map</button>
         <button class="btn btn-secondary" onclick="showCreateInstrumentFromTemplate()">Template</button>
         <button class="btn btn-primary" onclick="showAddInstrument()">+ Ajouter</button>
@@ -1859,7 +1854,15 @@ function renderActuators() {
     if (a.type===1 && a.behavior===0) details += ' · Temps: '+a.paramMin+'-'+a.paramMax+'ms';
     if (a.type===1 && a.behavior===1) details += ' · PWM: act='+a.paramMin+' hold='+a.paramMax+' tMax='+a.paramDefault+'ms';
     if (a.type===0) details += ' · Angle: '+a.paramMin+'\u00b0-'+a.paramMax+'\u00b0' + (a.behavior===2 ? ' (repos:'+a.paramDefault+'\u00b0)' : '');
-    if (a.type===2) details += ' · PWM: '+a.paramMin+'%-'+a.paramMax+'%' + (a.hwAddress>0 ? ' Capteur:GPIO'+a.hwAddress : '') + (a.inverted ? ' [INV]' : '');
+    if (a.type===2) {
+      details += ' · PWM: '+a.paramMin+'%-'+a.paramMax+'%';
+      if (a.behavior===6) details += ' · Rotation optique' + (a.hwAddress>0 ? ' Capteur:GPIO'+a.hwAddress : '');
+      else if (a.behavior===10) details += ' · Chrono (duree)';
+      else if (a.behavior===11) details += ' · Vitesse continue';
+      else if (a.behavior===12) details += ' · Balayage' + (a.endStopPin1!=null&&a.endStopPin1!==255 ? ' FC1:GPIO'+a.endStopPin1 : '') + (a.endStopPin2!=null&&a.endStopPin2!==255 ? ' FC2:GPIO'+a.endStopPin2 : '');
+      else if (a.behavior===13) details += ' · Alternance' + (a.endStopPin1!=null&&a.endStopPin1!==255 ? ' FC1:GPIO'+a.endStopPin1 : '') + (a.endStopPin2!=null&&a.endStopPin2!==255 ? ' FC2:GPIO'+a.endStopPin2 : '');
+      if (a.inverted) details += ' [INV]';
+    }
     if (a.type===1 && a.cooldownUs > 0 && a.behavior===0) details += ' · Cooldown: '+Math.round(a.cooldownUs*0.1)+'ms';
     if (a.type===1 && a.behavior===1) details += ' · Actif max: '+Math.round(a.cooldownUs*0.1)+'ms';
     const usedBy = actUsedBy[a.id];
@@ -2466,25 +2469,15 @@ async function batchCreateFromNoteMap() {
   markConfigDirty();
 }
 
-async function instrBulkOp(action) {
-  if (!action || instruments.length === 0) return;
-  if (action === 'enableAll' || action === 'disableAll') {
-    const enabled = action === 'enableAll';
-    for (const inst of instruments) {
-      inst.enabled = enabled;
-      await api('instrument?id=' + inst.id, 'PUT', inst);
+async function instrTestAll() {
+  if (instruments.length === 0) return;
+  for (const inst of instruments) {
+    if (inst.enabled) {
+      api('test/instrument', 'POST', {id: inst.id, velocity: 80});
+      await new Promise(r => setTimeout(r, 200));
     }
-    toast(enabled ? 'Tous actives' : 'Tous desactives', 'success');
-    await loadInstruments();
-  } else if (action === 'testAll') {
-    for (const inst of instruments) {
-      if (inst.enabled) {
-        api('test/instrument', 'POST', {id: inst.id, velocity: 80});
-        await new Promise(r => setTimeout(r, 200));
-      }
-    }
-    toast('Test de tous les instruments termine', 'success');
   }
+  toast('Test de tous les instruments termine', 'success');
 }
 
 function sortInstruments(key) {

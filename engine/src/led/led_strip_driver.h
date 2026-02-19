@@ -2,6 +2,7 @@
 #define LED_STRIP_DRIVER_H
 
 #include <Arduino.h>
+#include <driver/rmt_tx.h>
 #include "../core/config.h"
 #include "../core/types.h"
 
@@ -11,7 +12,7 @@
 // Gere jusqu'a 4 strips physiques, chacun sur son propre canal RMT.
 // Le buffer de pixels est partage : chaque strip a un offset dans le buffer.
 // Pas de dependance FastLED — utilise directement le peripherique RMT ESP32
-// via la lib Adafruit NeoPixel (legere, stable, RMT natif).
+// via l'API ESP-IDF 5.x (rmt_new_tx_channel / rmt_new_bytes_encoder).
 // ============================================================================
 
 class LedStripDriver {
@@ -50,14 +51,14 @@ public:
   bool isActive(uint8_t stripIdx) const;
 
 private:
-  // Buffer interne : 3 octets (RGB) par pixel, pour tous les strips
-  // Chaque strip a son propre sous-buffer
   struct StripState {
     uint8_t* buffer;       // Buffer RGB (3 * ledCount)
     uint16_t ledCount;
     uint8_t gpioPin;
     uint8_t brightness;    // Max brightness 0-255
     bool active;
+    rmt_channel_handle_t rmtChannel;   // ESP-IDF RMT TX channel
+    rmt_encoder_handle_t rmtEncoder;   // ESP-IDF bytes encoder
   };
   StripState _strips[LED_MAX_STRIPS];
 

@@ -298,6 +298,7 @@ input[type=checkbox] { width: auto; }
       <h2>Instruments (<span id="instrCount">0</span>)</h2>
       <div style="display:flex;gap:8px;align-items:center;">
         <input type="text" id="instrSearch" placeholder="Filtrer..." oninput="filterList('instrumentList',this.value)" style="width:120px;padding:6px 10px;font-size:0.85em;">
+        <label style="font-size:0.75em;display:flex;align-items:center;gap:3px;cursor:pointer;" title="Afficher uniquement les instruments incomplets"><input type="checkbox" id="instrFilterIncomplete" onchange="filterIncompleteInstruments(this.checked)">Incomplets</label>
         <select id="instrSort" style="padding:6px;font-size:0.85em;" onchange="sortInstruments(this.value)">
           <option value="">Tri...</option>
           <option value="name">Nom</option>
@@ -2364,6 +2365,17 @@ function sortInstruments(key) {
   if (cmp[key]) { instruments.sort(cmp[key]); renderInstruments(); }
 }
 
+function filterIncompleteInstruments(showOnlyIncomplete) {
+  const items = document.querySelectorAll('#instrumentList .list-item');
+  items.forEach(item => {
+    if (showOnlyIncomplete) {
+      item.style.display = item.dataset.complete === '1' ? 'none' : '';
+    } else {
+      item.style.display = '';
+    }
+  });
+}
+
 function renderInstruments() {
   const el = document.getElementById('instrumentList');
   document.getElementById('instrCount').textContent = instruments.length;
@@ -2393,7 +2405,7 @@ function renderInstruments() {
     const statusColor = !inst.enabled ? 'var(--fg2)' : (!hasActuator || onCount === 0) ? 'var(--warn)' : 'var(--success)';
     const catColor = catColors[inst.category] || 'var(--accent2)';
     return `
-    <div class="list-item" data-midinote="${mNote}" style="border-left-color:${catColor};transition:box-shadow 0.15s;" ondblclick="editInstrument(${inst.id})" title="Double-clic pour modifier">
+    <div class="list-item" data-midinote="${mNote}" data-complete="${isComplete?1:0}" style="border-left-color:${catColor};transition:box-shadow 0.15s;" ondblclick="editInstrument(${inst.id})" title="Double-clic pour modifier">
       <div class="item-title">
         <span style="color:${statusColor};font-size:0.9em;" title="${isComplete ? 'Complet' : !inst.enabled ? 'Desactive' : !hasActuator ? 'Sans actionneur' : 'Sans actions NoteOn'}">${statusIcon}</span>
         <strong>${inst.name}</strong>
@@ -4048,17 +4060,21 @@ async function clearSystemLogs() {
 }
 
 async function exportConfig() {
-  const [actData, instrData, loopsData, midiData] = await Promise.all([
-    api('actuators'), api('instruments'), api('loops'), api('midi/channels')
+  const [actData, instrData, loopsData, midiData, ledStripsData, ledSegsData, ledThemesData] = await Promise.all([
+    api('actuators'), api('instruments'), api('loops'), api('midi/channels'),
+    api('led/strips'), api('led/segments'), api('led/themes')
   ]);
   if (!actData || !instrData) { toast('Erreur lors de l\'export', 'error'); return; }
   const config = {
-    version: 3,
+    version: 4,
     exportDate: new Date().toISOString(),
     actuators: actData.actuators || actData,
     instruments: instrData.instruments || instrData,
-    loops: (loopsData && loopsData.loops) ? loopsData.loops : [],
-    midiChannelMask: midiData ? midiData.channelMask : 0xFFFF
+    loops: (loopsData && loopsData.loops) ? loopsData.loops : (Array.isArray(loopsData) ? loopsData : []),
+    midiChannelMask: midiData ? midiData.channelMask : 0xFFFF,
+    ledStrips: (ledStripsData && ledStripsData.strips) ? ledStripsData.strips : (Array.isArray(ledStripsData) ? ledStripsData : []),
+    ledSegments: (ledSegsData && ledSegsData.segments) ? ledSegsData.segments : (Array.isArray(ledSegsData) ? ledSegsData : []),
+    ledThemes: (ledThemesData && ledThemesData.themes) ? ledThemesData.themes : (Array.isArray(ledThemesData) ? ledThemesData : [])
   };
   const blob = new Blob([JSON.stringify(config, null, 2)], {type: 'application/json'});
   const url = URL.createObjectURL(blob);
@@ -4067,7 +4083,10 @@ async function exportConfig() {
   a.download = 'drums-engine-config-' + new Date().toISOString().slice(0,10) + '.json';
   a.click();
   URL.revokeObjectURL(url);
-  toast('Configuration exportee (' + config.actuators.length + ' act, ' + config.instruments.length + ' instr, ' + config.loops.length + ' loops)', 'success');
+  let exportSummary = config.actuators.length + ' act, ' + config.instruments.length + ' instr';
+  if (config.loops.length > 0) exportSummary += ', ' + config.loops.length + ' loops';
+  if (config.ledStrips.length > 0) exportSummary += ', ' + config.ledStrips.length + ' LED strips';
+  toast('Configuration exportee (' + exportSummary + ')', 'success');
 }
 
 async function importConfig(file) {
@@ -4125,13 +4144,26 @@ async function importConfig(file) {
       await api('midi/channels', 'PUT', {channelMask: config.midiChannelMask});
     }
 
+    // Import LED config (v4+)
+    let ledOk = 0;
+    if (config.ledStrips && config.ledStrips.length > 0) {
+      for (const strip of config.ledStrips) { const r = await api('led/strips', 'POST', strip); if (r) ledOk++; }
+    }
+    if (config.ledSegments && config.ledSegments.length > 0) {
+      for (const seg of config.ledSegments) { const r = await api('led/segments', 'POST', seg); if (r) ledOk++; }
+    }
+    if (config.ledThemes && config.ledThemes.length > 0) {
+      for (const theme of config.ledThemes) { const r = await api('led/themes', 'POST', theme); if (r) ledOk++; }
+    }
+
     // Save and reload
     await api('save', 'POST');
-    await Promise.all([loadActuators(), loadInstruments()]);
+    await Promise.all([loadActuators(), loadInstruments(), loadLedData()]);
 
     const errTotal = actErr + instrErr;
     let summary = actOk + ' actionneurs, ' + instrOk + ' instruments';
     if (loopsOk > 0) summary += ', ' + loopsOk + ' boucles';
+    if (ledOk > 0) summary += ', ' + ledOk + ' LED configs';
     if (errTotal === 0) {
       status.innerHTML = '<span style="color:var(--success);">Import reussi: ' + summary + '</span>';
       toast('Configuration importee avec succes', 'success');
@@ -4273,15 +4305,44 @@ function renderLedStrips() {
     el.innerHTML = '<div class="empty-state">Aucun strip configure. Ajoutez un strip WS2812B.</div>';
     return;
   }
-  el.innerHTML = ledStrips.map(s =>
-    `<div class="list-item">
+  el.innerHTML = ledStrips.map(s => {
+    // Build strip pixel layout visualization
+    const stripSegs = ledSegments.filter(seg => seg.stripId === s.id);
+    let layoutHtml = '';
+    if (s.ledCount > 0 && stripSegs.length > 0) {
+      const pixels = new Array(s.ledCount).fill(null);
+      stripSegs.forEach(seg => {
+        for (let p = seg.pixelStart; p < seg.pixelStart + seg.pixelCount && p < s.ledCount; p++) {
+          pixels[p] = seg;
+        }
+      });
+      // Render compact layout bar
+      layoutHtml = '<div style="display:flex;height:12px;border-radius:3px;overflow:hidden;margin:4px 0;border:1px solid rgba(255,255,255,0.1);">';
+      let i = 0;
+      while (i < s.ledCount) {
+        const seg = pixels[i];
+        let count = 1;
+        while (i + count < s.ledCount && pixels[i + count] === seg) count++;
+        const pct = (count / s.ledCount * 100).toFixed(1);
+        if (seg) {
+          const hc = seg.hitColor || {r:255,g:255,b:255};
+          layoutHtml += `<div style="width:${pct}%;background:rgb(${hc.r},${hc.g},${hc.b});opacity:0.7;" title="${seg.name||'Segment'} (${seg.pixelStart}-${seg.pixelStart+seg.pixelCount-1})"></div>`;
+        } else {
+          layoutHtml += `<div style="width:${pct}%;background:rgba(128,128,128,0.15);" title="Non assigne (${i}-${i+count-1})"></div>`;
+        }
+        i += count;
+      }
+      layoutHtml += '</div>';
+    }
+    return `<div class="list-item">
       <div class="item-title"><strong>Strip #${s.id}</strong> <span class="badge">${s.ledCount} LEDs</span> <span class="badge">GPIO ${s.gpioPin}</span> ${s.enabled?'<span class="badge badge-green">ON</span>':''}</div>
+      ${layoutHtml}
       <div class="item-actions">
         <button class="btn btn-sm btn-secondary" onclick="testLedStrip(${s.id})">Test</button>
         <button class="btn btn-sm btn-danger" onclick="confirmDelete(this,()=>deleteLedStrip(${s.id}))">Supprimer</button>
       </div>
-    </div>`
-  ).join('');
+    </div>`;
+  }).join('');
 }
 
 function renderLedSegments() {

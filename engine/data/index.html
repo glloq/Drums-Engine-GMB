@@ -43,6 +43,7 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .tab:hover { color: var(--fg); background: rgba(255,255,255,0.05); }
 .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 .tab-badge { font-size: 0.7em; background: var(--accent2); color: #fff; border-radius: 8px; padding: 1px 5px; margin-left: 2px; vertical-align: top; }
+.tab-step { display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--accent);color:#fff;font-size:0.6em;font-weight:700;margin-right:2px;vertical-align:middle; }
 
 .content { padding: 16px; }
 .panel { display: none; } .panel.active { display: block; }
@@ -258,10 +259,10 @@ input[type=checkbox] { width: auto; }
 </div>
 
 <div class="tabs">
-  <div class="tab active" data-tab="actuators">Actionneurs <span id="tabBadgeAct" class="tab-badge"></span></div>
-  <div class="tab" data-tab="instruments">Instruments <span id="tabBadgeInstr" class="tab-badge"></span></div>
+  <div class="tab active" data-tab="actuators"><span class="tab-step">1</span> Actionneurs <span id="tabBadgeAct" class="tab-badge"></span></div>
+  <div class="tab" data-tab="instruments"><span class="tab-step">2</span> Instruments <span id="tabBadgeInstr" class="tab-badge"></span></div>
   <div class="tab" data-tab="leds">LEDs</div>
-  <div class="tab" data-tab="mappings">Pipeline</div>
+  <div class="tab" data-tab="mappings">Traitement MIDI</div>
   <div class="tab" data-tab="piano">Piano</div>
   <div class="tab" data-tab="calibration">Calibration</div>
 </div>
@@ -300,12 +301,7 @@ input[type=checkbox] { width: auto; }
           <option value="note">Note MIDI</option>
           <option value="category">Categorie</option>
         </select>
-        <select id="instrBulkAction" style="padding:6px;font-size:0.85em;" onchange="instrBulkOp(this.value);this.value='';">
-          <option value="">Actions...</option>
-          <option value="enableAll">Activer tous</option>
-          <option value="disableAll">Desactiver tous</option>
-          <option value="testAll">Tester tous</option>
-        </select>
+        <button class="btn btn-sm btn-secondary" onclick="instrTestAll()" title="Tester tous les instruments actifs">Tester tous</button>
         <button class="btn btn-secondary btn-sm" onclick="toggleNoteMap()" title="Carte des notes MIDI">Note Map</button>
         <button class="btn btn-secondary" onclick="showCreateInstrumentFromTemplate()">Template</button>
         <button class="btn btn-primary" onclick="showAddInstrument()">+ Ajouter</button>
@@ -364,13 +360,17 @@ input[type=checkbox] { width: auto; }
   <!-- ====== PIPELINE EDITOR TAB ====== -->
   <div class="panel" id="tab-mappings">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
-      <h2>Pipeline Editor</h2>
+      <h2>Traitement MIDI</h2>
       <div style="display:flex;gap:8px;">
         <button class="btn btn-secondary" onclick="refreshMappings()">Actualiser</button>
       </div>
     </div>
+    <div class="help-box" style="margin-bottom:16px;">
+      <strong>Optionnel</strong> — Ajoutez des filtres, courbes, delais et conditions au traitement MIDI de vos instruments.
+      Sans pipeline, la velocite MIDI est transmise directement a l'actionneur.
+    </div>
     <p style="font-size:0.85em;color:var(--fg2);margin-bottom:16px;">
-      Chaque instrument est lie a un pipeline de traitement MIDI. Cliquez sur un instrument pour editer son pipeline visuellement.
+      Cliquez sur un instrument pour editer son pipeline visuellement.
     </p>
     <div id="mappingList"></div>
   </div>
@@ -513,11 +513,9 @@ input[type=checkbox] { width: auto; }
     <input type="hidden" id="actId" value="">
     <input type="hidden" id="actInverted" value="false">
 
-    <div id="actHelpBox" class="help-box" style="margin-bottom:12px;display:none;"></div>
-
-    <div class="quick-actions" style="margin-bottom:12px;">
+    <div class="quick-actions" style="margin-bottom:12px;border:1px solid var(--accent);border-radius:8px;padding:10px 12px;background:rgba(79,195,247,0.05);">
       <div class="form-group" style="min-width:220px; margin-bottom:0;">
-        <label>Preset rapide</label>
+        <label style="font-weight:700;">Preset rapide (recommande)</label>
         <select id="actQuickPreset" onchange="applyActuatorPreset()">
           <option value="">-- Choisir un preset --</option>
           <option value="solenoid_kick">Solenoide - Strike (Kick/Snare/Tom)</option>
@@ -531,8 +529,11 @@ input[type=checkbox] { width: auto; }
           <option value="motor_sweep">Moteur - Balayage</option>
           <option value="motor_alternate">Moteur - Alternance</option>
         </select>
+        <div class="hint">Astuce : commencez par un preset, puis personnalisez si necessaire.</div>
       </div>
     </div>
+
+    <div id="actHelpBox" class="help-box" style="margin-bottom:12px;display:none;"></div>
 
     <div class="form-group">
       <label>Nom</label>
@@ -556,12 +557,12 @@ input[type=checkbox] { width: auto; }
 
     <div class="form-row" id="busRow">
       <div class="form-group">
-        <label>Bus</label>
+        <label title="Type de connexion hardware entre l'ESP32 et l'actionneur">Bus</label>
         <select id="actBus" onchange="onActBusChange()">
-          <option value="0">MCP23017 (I2C GPIO)</option>
-          <option value="1">PCA9685 (I2C PWM)</option>
-          <option value="2">ESP32 GPIO</option>
-          <option value="3">ESP32 LEDC PWM</option>
+          <option value="0" title="Carte d'extension I2C avec 16 sorties digitales par module. Pour solenoides.">Carte GPIO I2C (solenoides)</option>
+          <option value="1" title="Carte d'extension I2C avec 16 sorties PWM par module. Pour servos.">Carte PWM I2C (servos)</option>
+          <option value="2" title="Pin digitale directe sur l'ESP32.">Pin directe ESP32</option>
+          <option value="3" title="Sortie PWM haute frequence de l'ESP32. Pour moteurs et LEDs.">PWM ESP32 (moteurs/LEDs)</option>
         </select>
       </div>
       <div class="form-group" id="pinGroupI2C">
@@ -588,6 +589,7 @@ input[type=checkbox] { width: auto; }
       <input type="text" id="actAddr" value="0x40" readonly>
       <input type="number" id="actPin" value="0" readonly>
     </div>
+    <div id="pinConflictWarning" style="display:none;color:var(--warn);font-size:0.85em;margin-bottom:8px;padding:4px 8px;background:rgba(255,152,0,0.1);border-radius:4px;"></div>
 
     <div class="form-row" id="paramRowSolenoid">
       <div class="form-group">
@@ -731,24 +733,32 @@ input[type=checkbox] { width: auto; }
       <div class="form-group">
         <label>Type d\u0027instrument</label>
         <select id="instrType" onchange="onInstrTypeChange()">
-          <option value="simple">Simple (1 actionneur frappe)</option>
-          <option value="alternate">Frappe alternee (2 actionneurs)</option>
-          <option value="muted">Avec mute (frappe + mute)</option>
-          <option value="servo_toggle">Servo alterné (angle A / angle B)</option>
-          <option value="shake">Shaker (servo + solenoide alternés)</option>
-          <option value="comb_dual">Brosse double servo (descente + brosse)</option>
-          <option value="hihat">Hi-Hat (frappe + pedale + mute)</option>
-          <option value="motor">Moteur (vitesse/chrono/sweep/alternance)</option>
-          <option value="custom">Personnalise (editeur complet)</option>
+          <optgroup label="Basique">
+            <option value="simple">Simple (1 actionneur frappe)</option>
+          </optgroup>
+          <optgroup label="Intermediaire">
+            <option value="alternate">Frappe alternee (2 actionneurs)</option>
+            <option value="muted">Avec mute (frappe + mute)</option>
+            <option value="servo_toggle">Servo alterne (angle A / angle B)</option>
+          </optgroup>
+          <optgroup label="Avance">
+            <option value="shake">Shaker (servo + solenoide)</option>
+            <option value="comb_dual">Brosse double servo (descente + brosse)</option>
+            <option value="hihat">Hi-Hat (frappe + pedale + mute)</option>
+            <option value="motor">Moteur (vitesse/chrono/sweep/alternance)</option>
+            <option value="custom">Personnalise (editeur complet)</option>
+          </optgroup>
         </select>
+        <div id="instrTypeHint" class="hint" style="margin-top:4px;"></div>
       </div>
-      <div class="form-group" style="max-width:160px;">
-        <label>Retrigger</label>
+      <div class="form-group" style="max-width:200px;">
+        <label title="Comportement quand la meme note est rejouee rapidement">Retrigger</label>
         <select id="instrRetriggerMode">
           <option value="0">Ignore</option>
           <option value="1">Reset</option>
           <option value="2">Stack</option>
         </select>
+        <div class="hint">Ignore : 2e frappe ignoree. Reset : relance. Stack : les 2 jouent.</div>
       </div>
     </div>
 
@@ -761,7 +771,7 @@ input[type=checkbox] { width: auto; }
         <label>Note MIDI</label>
         <div style="display:flex;gap:4px;">
           <select id="instrMidiNote" onchange="onMidiNoteChange()" style="flex:1;"></select>
-          <button class="btn btn-sm btn-secondary" id="btnMidiLearn" onclick="toggleMidiLearn()" title="Jouer une note MIDI pour l'assigner automatiquement" style="white-space:nowrap;">Learn</button>
+          <button class="btn btn-sm btn-secondary" id="btnMidiLearn" onclick="toggleMidiLearn()" title="Appuyez puis jouez une note sur votre controleur MIDI pour l'assigner automatiquement" style="white-space:nowrap;">Auto-detect</button>
         </div>
       </div>
       <div class="form-group" style="display:flex;align-items:flex-end;">
@@ -1571,14 +1581,33 @@ function updateAddressFromPin() {
     const gpioPin = parseInt(document.getElementById('actPinGPIO').value) || 2;
     document.getElementById('actAddr').value = '0x00';
     document.getElementById('actPin').value = gpioPin;
-    return;
+  } else {
+    const pin = parseInt(document.getElementById('actPinGlobal').value) || 1;
+    const moduleIdx = Math.floor((pin - 1) / 16);
+    const localPin = (pin - 1) % 16;
+    let baseAddr = (bus === 0) ? 0x20 + moduleIdx : 0x40 + moduleIdx;
+    document.getElementById('actAddr').value = '0x' + baseAddr.toString(16).padStart(2, '0');
+    document.getElementById('actPin').value = localPin;
   }
-  const pin = parseInt(document.getElementById('actPinGlobal').value) || 1;
-  const moduleIdx = Math.floor((pin - 1) / 16);
-  const localPin = (pin - 1) % 16;
-  let baseAddr = (bus === 0) ? 0x20 + moduleIdx : 0x40 + moduleIdx;
-  document.getElementById('actAddr').value = '0x' + baseAddr.toString(16).padStart(2, '0');
-  document.getElementById('actPin').value = localPin;
+  checkPinConflict();
+}
+
+function checkPinConflict() {
+  const bus = parseInt(document.getElementById('actBus').value);
+  const hwAddr = parseInt(document.getElementById('actAddr').value);
+  const hwPin = parseInt(document.getElementById('actPin').value);
+  const editId = document.getElementById('editActId').value;
+  const editIdNum = editId !== '' ? parseInt(editId) : -1;
+  const conflict = actuators.find(a =>
+    a.id !== editIdNum && a.bus === bus && a.hwAddress === hwAddr && a.hwPin === hwPin
+  );
+  const el = document.getElementById('pinConflictWarning');
+  if (conflict) {
+    el.textContent = 'Attention : "' + conflict.name + '" utilise deja ce bus/pin.';
+    el.style.display = 'block';
+  } else {
+    el.style.display = 'none';
+  }
 }
 
 function toggleCooldownField() {
@@ -1859,22 +1888,32 @@ function renderActuators() {
     if (a.type===1 && a.behavior===0) details += ' · Temps: '+a.paramMin+'-'+a.paramMax+'ms';
     if (a.type===1 && a.behavior===1) details += ' · PWM: act='+a.paramMin+' hold='+a.paramMax+' tMax='+a.paramDefault+'ms';
     if (a.type===0) details += ' · Angle: '+a.paramMin+'\u00b0-'+a.paramMax+'\u00b0' + (a.behavior===2 ? ' (repos:'+a.paramDefault+'\u00b0)' : '');
-    if (a.type===2) details += ' · PWM: '+a.paramMin+'%-'+a.paramMax+'%' + (a.hwAddress>0 ? ' Capteur:GPIO'+a.hwAddress : '') + (a.inverted ? ' [INV]' : '');
+    if (a.type===2) {
+      details += ' · PWM: '+a.paramMin+'%-'+a.paramMax+'%';
+      if (a.behavior===6) details += ' · Rotation optique' + (a.hwAddress>0 ? ' Capteur:GPIO'+a.hwAddress : '');
+      else if (a.behavior===10) details += ' · Chrono (duree)';
+      else if (a.behavior===11) details += ' · Vitesse continue';
+      else if (a.behavior===12) details += ' · Balayage' + (a.endStopPin1!=null&&a.endStopPin1!==255 ? ' FC1:GPIO'+a.endStopPin1 : '') + (a.endStopPin2!=null&&a.endStopPin2!==255 ? ' FC2:GPIO'+a.endStopPin2 : '');
+      else if (a.behavior===13) details += ' · Alternance' + (a.endStopPin1!=null&&a.endStopPin1!==255 ? ' FC1:GPIO'+a.endStopPin1 : '') + (a.endStopPin2!=null&&a.endStopPin2!==255 ? ' FC2:GPIO'+a.endStopPin2 : '');
+      if (a.inverted) details += ' [INV]';
+    }
     if (a.type===1 && a.cooldownUs > 0 && a.behavior===0) details += ' · Cooldown: '+Math.round(a.cooldownUs*0.1)+'ms';
     if (a.type===1 && a.behavior===1) details += ' · Actif max: '+Math.round(a.cooldownUs*0.1)+'ms';
     const usedBy = actUsedBy[a.id];
     const usedByHtml = usedBy ? ' · <span style="color:var(--accent);">\u266a ' + usedBy.join(', ') + '</span>' : ' · <span style="color:var(--fg2);opacity:0.6;">non assigne</span>';
     const tIcon = typeIcons[a.type] || '?';
     const tColor = typeColors[a.type] || 'var(--fg2)';
+    const disabledStyle = !a.enabled ? 'opacity:0.5;' : '';
+    const borderColor = !a.enabled ? 'var(--danger)' : (a.active ? 'var(--success)' : 'var(--accent2)');
     return `
-    <div class="list-item" style="border-left-color:${a.active?'var(--success)':'var(--accent2)'}" ondblclick="editActuator(${a.id})" title="Double-clic pour modifier">
+    <div class="list-item" style="border-left-color:${borderColor};${disabledStyle}" ondblclick="editActuator(${a.id})" title="Double-clic pour modifier">
       <div class="item-title">
         <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:${tColor};color:#000;font-weight:700;font-size:0.65em;margin-right:4px;">${tIcon}</span>
         <strong>${a.name}</strong>
         <span class="badge">${a.typeName}</span>
         <span class="badge">${a.behaviorName}</span>
         ${a.active ? '<span class="badge badge-green">ACTIF</span>' : ''}
-        ${!a.enabled ? '<span class="badge badge-warn">OFF</span>' : ''}
+        ${!a.enabled ? '<span class="badge badge-warn">DESACTIVE</span>' : ''}
       </div>
       <div class="item-actions">
         <button class="btn btn-sm btn-success" onclick="testActuator(${a.id})">Test</button>
@@ -2091,7 +2130,12 @@ async function saveActuator() {
   const newId = (editId === '' && result && result.id) ? result.id : null;
   await loadActuators();
   markConfigDirty();
-  toast('Actionneur enregistre', 'success');
+  const actName = data.name || 'Actionneur';
+  if (editId === '' && instruments.length === 0) {
+    toast(actName + ' cree. Prochaine etape : creez un instrument dans l\'onglet Instruments.', 'success');
+  } else {
+    toast(actName + ' enregistre', 'success');
+  }
   // Auto-scroll to newly created item
   if (newId !== null) {
     const el = document.querySelector('.list-item[onclick*="editActuator(' + newId + ')"]');
@@ -2340,6 +2384,19 @@ function onInstrTypeChange() {
   document.getElementById('instrCustomConfig').style.display = type === 'custom' ? 'block' : 'none';
   // Hide main MIDI note selector for hi-hat (uses 3 separate notes)
   document.getElementById('instrMidiNote').closest('.form-group').style.display = type === 'hihat' ? 'none' : 'block';
+  // Dynamic type description
+  const hints = {
+    simple: 'Un seul actionneur frappe a chaque note MIDI. Ideal pour kick, snare, tom.',
+    alternate: '2 actionneurs alternent a chaque frappe (round-robin). Pour roulements rapides.',
+    muted: 'Frappe + actionneur mute qui etouffe le son au relachement de la note.',
+    servo_toggle: 'Un servo bascule entre 2 angles a chaque NoteOn. Pour agogo, cloche.',
+    shake: 'Servo oscillant + solenoide : simule un shaker ou des maracas.',
+    comb_dual: '2 servos : un descend le systeme, l\'autre fait le mouvement de brosse (balai jazz).',
+    hihat: 'Configuration complete : frappe + pedale CC#4 + mute. Cree 3 instruments (closed/pedal/open).',
+    motor: 'Instrument motorise : rotation, vitesse continue, balayage ou alternance.',
+    custom: 'Editeur complet : actions NoteOn/NoteOff, bindings CC, pipeline. Pour les configurations avancees.'
+  };
+  document.getElementById('instrTypeHint').textContent = hints[type] || '';
   populateActuatorSelects();
   if (type === 'hihat') populateHiHatNoteSelects();
 }
@@ -2466,25 +2523,15 @@ async function batchCreateFromNoteMap() {
   markConfigDirty();
 }
 
-async function instrBulkOp(action) {
-  if (!action || instruments.length === 0) return;
-  if (action === 'enableAll' || action === 'disableAll') {
-    const enabled = action === 'enableAll';
-    for (const inst of instruments) {
-      inst.enabled = enabled;
-      await api('instrument?id=' + inst.id, 'PUT', inst);
+async function instrTestAll() {
+  if (instruments.length === 0) return;
+  for (const inst of instruments) {
+    if (inst.enabled) {
+      api('test/instrument', 'POST', {id: inst.id, velocity: 80});
+      await new Promise(r => setTimeout(r, 200));
     }
-    toast(enabled ? 'Tous actives' : 'Tous desactives', 'success');
-    await loadInstruments();
-  } else if (action === 'testAll') {
-    for (const inst of instruments) {
-      if (inst.enabled) {
-        api('test/instrument', 'POST', {id: inst.id, velocity: 80});
-        await new Promise(r => setTimeout(r, 200));
-      }
-    }
-    toast('Test de tous les instruments termine', 'success');
   }
+  toast('Test de tous les instruments termine', 'success');
 }
 
 function sortInstruments(key) {
@@ -2512,12 +2559,21 @@ function renderInstruments() {
   const el = document.getElementById('instrumentList');
   document.getElementById('instrCount').textContent = instruments.length;
   if (instruments.length === 0) {
-    el.innerHTML = '<div class="empty-state"><p>Aucun instrument configure</p><p>Cliquez "+ Ajouter" ou utilisez un kit rapide:</p>' +
-      '<div style="display:flex;gap:6px;justify-content:center;margin-top:8px;flex-wrap:wrap;">' +
-      '<button class="btn btn-sm btn-primary" onclick="quickStartKit(\'minimal\')">Kit Minimal (3)</button>' +
-      '<button class="btn btn-sm btn-primary" onclick="quickStartKit(\'standard\')">Kit Standard (6)</button>' +
-      '<button class="btn btn-sm btn-primary" onclick="quickStartKit(\'full\')">Kit Complet (10)</button>' +
-      '</div></div>';
+    if (actuators.length === 0) {
+      el.innerHTML = '<div class="empty-state">' +
+        '<p>Aucun instrument configure</p>' +
+        '<div class="help-box" style="text-align:left;max-width:400px;margin:8px auto;">' +
+        '<p><strong>Etape 1 :</strong> Ajoutez d\'abord des actionneurs dans l\'onglet <strong>Actionneurs</strong>.</p>' +
+        '<p><strong>Etape 2 :</strong> Revenez ici pour creer vos instruments.</p></div></div>';
+    } else {
+      el.innerHTML = '<div class="empty-state"><p>Aucun instrument configure</p>' +
+        '<p>' + actuators.length + ' actionneur(s) disponible(s). Cliquez "+ Ajouter" ou utilisez un kit rapide:</p>' +
+        '<div style="display:flex;gap:6px;justify-content:center;margin-top:8px;flex-wrap:wrap;">' +
+        '<button class="btn btn-sm btn-primary" onclick="quickStartKit(\'minimal\')">Kit Minimal (3)</button>' +
+        '<button class="btn btn-sm btn-primary" onclick="quickStartKit(\'standard\')">Kit Standard (6)</button>' +
+        '<button class="btn btn-sm btn-primary" onclick="quickStartKit(\'full\')">Kit Complet (10)</button>' +
+        '</div></div>';
+    }
     return;
   }
   const catColors = {drums:'#e94560', cymbals:'#ffd700', latin:'#4caf50', other:'#64b5f6'};
@@ -2735,6 +2791,10 @@ async function quickStartKit(kitId) {
 }
 
 function showAddInstrument(template=null) {
+  if (actuators.length === 0) {
+    toast('Aucun actionneur configure. Ajoutez d\'abord un actionneur dans l\'onglet Actionneurs.', 'error');
+    return;
+  }
   document.getElementById('modalInstrTitle').textContent = 'Nouvel Instrument';
   document.getElementById('editInstrId').value = '';
   document.getElementById('instrName').value = template?.name || '';

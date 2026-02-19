@@ -1362,8 +1362,11 @@ input[type=checkbox] { width: auto; }
       MIDI In &rarr; <span class="pe-vel">Velocity</span> &rarr; <span class="pe-blocks">Blocks</span> &rarr; <span class="pe-out">Actuateur</span>
     </div>
 
-    <!-- Pipeline Blocks -->
-    <div class="pe-section">
+    <!-- Pipeline Blocks: hidden by default, revealed when blocks exist or user clicks -->
+    <div id="peBlocksPrompt" class="pe-section" style="text-align:center;padding:8px 0;">
+      <button class="btn btn-sm btn-secondary" onclick="peAddBlock()" title="Ajouter un bloc de traitement (filtre, courbe, delai...)">+ Ajouter un bloc de traitement</button>
+    </div>
+    <div id="peBlocksSection" class="pe-section" style="display:none;">
       <h4><span class="pe-dot" style="background:#4CAF50;"></span> Blocs Pipeline <span class="badge" id="peBlockCount">0</span></h4>
       <div id="peBlockList" class="pe-block-list"></div>
       <div class="pe-add-block" onclick="peAddBlock()" style="margin-top:6px;">+ Ajouter un bloc</div>
@@ -4824,11 +4827,17 @@ function peBlockDesc(block) {
 
 function peRenderBlocks() {
   const el = document.getElementById('peBlockList');
+  const prompt = document.getElementById('peBlocksPrompt');
+  const section = document.getElementById('peBlocksSection');
   document.getElementById('peBlockCount').textContent = peBlocks.length;
   if (peBlocks.length === 0) {
-    el.innerHTML = '<div class="hint">Aucun bloc. Le pipeline transmettra la velocite directement a l\'actionneur de sortie.</div>';
+    prompt.style.display = '';
+    section.style.display = 'none';
+    el.innerHTML = '';
     return;
   }
+  prompt.style.display = 'none';
+  section.style.display = '';
   el.innerHTML = peBlocks.map((b, i) => {
     const cls = b.type;
     const icon = PE_TYPE_ICONS[b.type] || '?';

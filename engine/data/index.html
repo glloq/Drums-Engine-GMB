@@ -898,7 +898,7 @@ input[type=checkbox] { width: auto; }
     <div id="loopEditor" style="display:none;margin-top:12px;">
       <div class="card">
         <h3>
-          <span id="loopEditorTitle">Editeur</span>
+          <input type="text" id="loopEditorTitle" value="Editeur" style="background:transparent;border:1px solid transparent;color:var(--fg);font-weight:600;font-size:1em;padding:2px 6px;border-radius:4px;width:auto;max-width:200px;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='transparent';renameCurrentLoop(this.value)">
           <button class="btn btn-sm btn-secondary" onclick="closeLoopEditor()">Fermer editeur</button>
         </h3>
         <div class="transport">
@@ -2105,6 +2105,22 @@ async function loadInstruments() {
   if (data) { instruments = data; renderInstruments(); }
 }
 
+function quickCreateInstrument(note, gmName) {
+  // Detect category from GM note
+  const cymbals = [42,44,46,49,51,52,53,55,57,59,80,81]; // HH, crashes, rides, triangles
+  const latin = [54,56,60,61,62,63,64,65,66,67,68,69,70,75,76,77,78,79]; // Bongo, conga, timbale, etc.
+  let cat = 'drums';
+  if (cymbals.includes(note)) cat = 'cymbals';
+  else if (latin.includes(note)) cat = 'latin';
+  showAddInstrument({name: gmName, midiNote: note, category: cat});
+  // Set category and channel after modal opens
+  setTimeout(() => {
+    const catSel = document.getElementById('instrCategory');
+    if (catSel) catSel.value = cat;
+    document.getElementById('instrMidiChannel').value = '10';
+  }, 50);
+}
+
 function toggleNoteMap() {
   const container = document.getElementById('noteMapContainer');
   if (container.style.display === 'none') {
@@ -2130,8 +2146,8 @@ function renderNoteMap() {
       html += `<div style="padding:4px 6px;border-radius:4px;font-size:0.72em;background:var(--accent);color:#fff;cursor:pointer;line-height:1.3;" onclick="editInstrument(${inst.id})" title="${gm}">
         <strong>${n}</strong> ${inst.name.substring(0,10)}${!inst.enabled ? ' [OFF]' : ''}</div>`;
     } else if (gm) {
-      html += `<div style="padding:4px 6px;border-radius:4px;font-size:0.72em;background:var(--bg);color:var(--fg2);line-height:1.3;opacity:0.5;" title="${gm}">
-        <strong>${n}</strong> ${gm.substring(0,10)}</div>`;
+      html += `<div style="padding:4px 6px;border-radius:4px;font-size:0.72em;background:var(--bg);color:var(--fg2);line-height:1.3;opacity:0.6;cursor:pointer;" title="${gm} - Cliquer pour creer" onclick="quickCreateInstrument(${n},'${gm.replace(/'/g, "\\'")}')">
+        <strong>${n}</strong> ${gm.substring(0,10)} <span style="color:var(--accent);">+</span></div>`;
     } else {
       html += `<div style="padding:4px 6px;border-radius:4px;font-size:0.72em;background:var(--bg);color:var(--fg2);line-height:1.3;opacity:0.3;">
         <strong>${n}</strong></div>`;
@@ -3044,7 +3060,7 @@ function openLoopEditor(idx) {
   currentLoopIdx = idx;
   const loop = loops[idx];
   if (!loop) return;
-  document.getElementById('loopEditorTitle').textContent = 'Editeur: ' + loop.name;
+  document.getElementById('loopEditorTitle').value = loop.name;
   document.getElementById('loopBpmDisplay').textContent = loop.bpm;
   document.getElementById('loopBpmSlider').value = loop.bpm;
   document.getElementById('loopEditor').style.display = 'block';
@@ -3055,6 +3071,14 @@ function closeLoopEditor() {
   document.getElementById('loopEditor').style.display = 'none';
   currentLoopIdx = -1;
   stopLoopPlayhead();
+}
+
+function renameCurrentLoop(name) {
+  if (currentLoopIdx < 0 || !loops[currentLoopIdx] || !name.trim()) return;
+  if (loops[currentLoopIdx].name === name.trim()) return;
+  loops[currentLoopIdx].name = name.trim();
+  api('loop?id=' + currentLoopIdx, 'PUT', loops[currentLoopIdx]);
+  renderLoops();
 }
 
 function renderCurrentLoopGrid() {

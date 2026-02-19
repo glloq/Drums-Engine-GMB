@@ -4373,15 +4373,24 @@ async function loadCalibrationData() {
     instrList.innerHTML = '<div class="empty-state">Aucun instrument configure</div>';
   } else {
     instrList.innerHTML = instrs.map(inst => {
+      // Find linked actuator names
+      const actIds = inst.actuatorIds || [];
+      const actNames = actIds.map(aid => {
+        const a = acts.find(x => x.id === aid);
+        return a ? ('#' + a.id + ' ' + (a.name||'?')) : '#' + aid;
+      });
+      const actInfo = actNames.length ? actNames.join(', ') : 'Aucun';
       return '<div class="calib-item">' +
         '<h4><span>' + (inst.name||'Sans nom') + '</span>' +
         '<span class="badge">Note ' + inst.midiNote + ' | CH ' + inst.midiChannel + '</span></h4>' +
+        '<div style="font-size:0.78em;color:var(--fg2);margin-bottom:6px;">Actionneurs: ' + actInfo + '</div>' +
         '<div class="calib-controls">' +
           '<label style="font-size:0.8em;color:var(--fg2);min-width:50px;">Velocity:</label>' +
           '<input type="range" class="calib-slider" id="calibInstVel' + inst.id + '" min="1" max="127" value="80" ' +
             'oninput="document.getElementById(\'calibInstDisp' + inst.id + '\').textContent=this.value">' +
           '<span class="calib-val" id="calibInstDisp' + inst.id + '">80</span>' +
           '<button class="btn btn-success btn-sm" onclick="calibTestInstrument(' + inst.id + ')">Tester</button>' +
+          '<button class="btn btn-secondary btn-sm" onclick="calibSweepInstrument(' + inst.id + ')" title="Test progressif de velocity">Sweep</button>' +
         '</div>' +
       '</div>';
     }).join('');
@@ -4402,6 +4411,15 @@ async function calibTestInstrument(id) {
   const vel = parseInt(document.getElementById('calibInstVel' + id).value) || 80;
   await api('test/instrument', 'POST', {id, velocity:vel});
   toast('Instrument #' + id + ' teste (vel=' + vel + ')', 'success');
+}
+
+async function calibSweepInstrument(id) {
+  const velocities = [20, 40, 60, 80, 100, 120, 127];
+  toast('Sweep velocity: ' + velocities.join(' → '), 'success');
+  for (let i = 0; i < velocities.length; i++) {
+    await api('test/instrument', 'POST', {id, velocity: velocities[i]});
+    await new Promise(r => setTimeout(r, 400));
+  }
 }
 
 async function emergencyStopAll() {

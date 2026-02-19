@@ -909,6 +909,19 @@ input[type=checkbox] { width: auto; }
       <div class="monitor-grid" id="monitorGrid"></div>
     </div>
 
+    <!-- MIDI Monitor -->
+    <div class="card" style="margin-top:12px;">
+      <h3 style="display:flex;justify-content:space-between;align-items:center;">
+        <span>MIDI Monitor</span>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-secondary btn-sm" id="btnMidiMonitor" onclick="toggleMidiMonitor()">Demarrer</button>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('midiMonitorLog').innerHTML=''">Vider</button>
+        </div>
+      </h3>
+      <div id="midiMonitorLog" style="max-height:180px;overflow-y:auto;font-family:monospace;font-size:0.78em;color:var(--fg2);background:var(--bg);border-radius:var(--radius);padding:8px;line-height:1.6;"></div>
+      <div class="hint" style="margin-top:4px;">Affiche les notes MIDI recues en temps reel via WebSocket</div>
+    </div>
+
     <!-- Preferences -->
     <div class="card" style="margin-top:12px;">
       <h3>Preferences</h3>
@@ -916,6 +929,20 @@ input[type=checkbox] { width: auto; }
         <input type="checkbox" id="settHideUsedActuators" checked onchange="hideUsedActuators=this.checked;localStorage.setItem('hideUsedAct',this.checked?'1':'0');">
         Masquer les actionneurs deja utilises dans les listes d'instruments
       </label>
+    </div>
+
+    <!-- System Logs -->
+    <div class="card" style="margin-top:12px;">
+      <h3 style="display:flex;justify-content:space-between;align-items:center;">
+        <span>Journal systeme</span>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-secondary btn-sm" onclick="loadSystemLogs()">Charger</button>
+          <button class="btn btn-danger btn-sm" onclick="clearSystemLogs()">Vider</button>
+        </div>
+      </h3>
+      <div id="systemLogList" style="max-height:200px;overflow-y:auto;font-family:monospace;font-size:0.78em;color:var(--fg2);background:var(--bg);border-radius:var(--radius);padding:8px;line-height:1.6;">
+        <em>Cliquez "Charger" pour voir les logs</em>
+      </div>
     </div>
   </div>
 </div>
@@ -1673,8 +1700,21 @@ async function saveActuator() {
     endStopPin2: (type === 2) ? parseInt(document.getElementById('actMotorEndStop2').value) : 255
   };
 
+  // Validations
+  if (!data.name || data.name.trim() === '' || data.name === 'Actuator') {
+    toast('Donnez un nom descriptif a l\'actionneur', 'error');
+    return;
+  }
   if (data.type === 0 && data.bus !== 1) {
     toast('Servo: le bus PCA9685 est requis', 'error');
+    return;
+  }
+  if (data.type === 1 && data.behavior === 0 && data.paramMin >= data.paramMax) {
+    toast('Temps min doit etre inferieur au max', 'error');
+    return;
+  }
+  if (data.type === 0 && data.paramMin >= data.paramMax) {
+    toast('Angle min doit etre inferieur au max', 'error');
     return;
   }
   let result;
@@ -2296,6 +2336,25 @@ async function saveInstrument() {
     ccBinds = editCcBindings;
   }
 
+  // Validations
+  if (!baseName || baseName.trim() === '' || baseName === 'Instrument') {
+    toast('Donnez un nom descriptif a l\'instrument', 'error');
+    return;
+  }
+  if (midiNote < 0 || midiNote > 127) {
+    toast('Note MIDI invalide (0-127)', 'error');
+    return;
+  }
+  if (actIds.length === 0 && instrType !== 'custom') {
+    toast('Selectionnez au moins un actionneur', 'error');
+    return;
+  }
+  // Check for duplicate MIDI note (except when editing same instrument)
+  const duplicate = instruments.find(i => i.midiNote === midiNote && (editId === '' || String(i.id) !== editId));
+  if (duplicate) {
+    toast('Note ' + midiNote + ' deja utilisee par "' + duplicate.name + '"', 'warn');
+  }
+
   const data = {
     name: baseName,
     category: 'drums',
@@ -2890,6 +2949,32 @@ async function saveAll() {
 async function updateGlobalVolume(val) {
   document.getElementById('globalVolumeDisplay').textContent = val;
   await api('test/cc', 'POST', {cc: 7, value: parseInt(val)});
+}
+
+async function loadSystemLogs() {
+  const data = await api('logs');
+  if (!data) return;
+  const log = document.getElementById('systemLogList');
+  const entries = data.recent || [];
+  if (entries.length === 0) {
+    log.innerHTML = '<em>Aucun log enregistre</em>';
+    return;
+  }
+  const levelColors = {'E':'var(--accent)','W':'var(--warn)','I':'var(--fg2)'};
+  const levelNames = {'E':'ERR','W':'WRN','I':'INF'};
+  log.innerHTML = entries.map(e => {
+    const c = levelColors[e.level] || 'var(--fg2)';
+    const l = levelNames[e.level] || e.level;
+    const t = Math.floor(e.uptimeS/3600)+'h'+Math.floor((e.uptimeS%3600)/60)+'m'+Math.floor(e.uptimeS%60)+'s';
+    return '<div><span style="color:var(--fg2);">['+t+']</span> <span style="color:'+c+';font-weight:600;">'+l+'</span> '+e.message+'</div>';
+  }).join('');
+  log.scrollTop = log.scrollHeight;
+}
+
+async function clearSystemLogs() {
+  await api('logs', 'DELETE');
+  document.getElementById('systemLogList').innerHTML = '<em>Logs vides</em>';
+  toast('Logs effaces', 'success');
 }
 
 // ====================================================================
@@ -3748,6 +3833,43 @@ async function pollActiveNotes() {
 
 // WebSocket connection for real-time updates
 let ws = null;
+let midiMonitorActive = false;
+
+function toggleMidiMonitor() {
+  midiMonitorActive = !midiMonitorActive;
+  const btn = document.getElementById('btnMidiMonitor');
+  if (midiMonitorActive) {
+    btn.textContent = 'Arreter';
+    btn.classList.add('btn-danger');
+    btn.classList.remove('btn-secondary');
+    connectWebSocket();
+  } else {
+    btn.textContent = 'Demarrer';
+    btn.classList.remove('btn-danger');
+    btn.classList.add('btn-secondary');
+  }
+}
+
+function logMidiEvent(msg) {
+  if (!midiMonitorActive) return;
+  const log = document.getElementById('midiMonitorLog');
+  if (!log) return;
+  const now = new Date();
+  const ts = now.toLocaleTimeString('fr', {hour12:false}) + '.' + String(now.getMilliseconds()).padStart(3,'0');
+  const noteName = GM_DRUMS[msg.note] || ('Note ' + msg.note);
+  const color = msg.on ? 'var(--success)' : 'var(--fg2)';
+  const label = msg.on ? 'ON ' : 'OFF';
+  const line = document.createElement('div');
+  line.innerHTML = '<span style="color:var(--fg2);">' + ts + '</span> ' +
+    '<span style="color:' + color + ';font-weight:600;">' + label + '</span> ' +
+    '<span style="color:var(--accent);">' + msg.note + '</span> ' +
+    '<span style="color:var(--fg2);">' + noteName + '</span>';
+  log.appendChild(line);
+  // Keep only last 100 entries
+  while (log.children.length > 100) log.removeChild(log.firstChild);
+  log.scrollTop = log.scrollHeight;
+}
+
 function connectWebSocket() {
   if (ws && ws.readyState <= 1) return; // already open/connecting
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -3755,25 +3877,32 @@ function connectWebSocket() {
   ws.onmessage = (evt) => {
     try {
       const msg = JSON.parse(evt.data);
-      if (msg.type === 'midi_note' && pianoLiveActive) {
-        const grid = document.getElementById('pianoPadGrid');
-        if (!grid) return;
-        const pad = grid.querySelector('[data-note="'+msg.note+'"]');
-        if (!pad) return;
-        if (msg.on) {
-          pad.classList.add('ext-active');
-          const flash = document.createElement('div');
-          flash.className = 'pad-flash';
-          pad.appendChild(flash);
-          setTimeout(() => flash.remove(), 300);
-        } else {
-          pad.classList.remove('ext-active');
+      if (msg.type === 'midi_note') {
+        // Piano live display
+        if (pianoLiveActive) {
+          const grid = document.getElementById('pianoPadGrid');
+          if (grid) {
+            const pad = grid.querySelector('[data-note="'+msg.note+'"]');
+            if (pad) {
+              if (msg.on) {
+                pad.classList.add('ext-active');
+                const flash = document.createElement('div');
+                flash.className = 'pad-flash';
+                pad.appendChild(flash);
+                setTimeout(() => flash.remove(), 300);
+              } else {
+                pad.classList.remove('ext-active');
+              }
+            }
+          }
         }
+        // MIDI Monitor log
+        logMidiEvent(msg);
       }
     } catch(e) {}
   };
   ws.onclose = () => {
-    if (pianoLiveActive) setTimeout(connectWebSocket, 2000);
+    if (pianoLiveActive || midiMonitorActive) setTimeout(connectWebSocket, 2000);
   };
 }
 

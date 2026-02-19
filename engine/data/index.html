@@ -105,14 +105,21 @@ input[type=checkbox] { width: auto; }
 .small-select, .small-input { font-size:0.82em; padding:6px 8px; }
 
 /* Loop Grid */
-.loop-grid { display: grid; gap: 2px; margin-top: 12px; }
-.loop-cell { width: 100%; aspect-ratio: 1; background: var(--bg); border-radius: 3px; cursor: pointer; transition: background 0.1s; border: 1px solid #333; }
-.loop-cell:hover { border-color: var(--accent); }
-.loop-cell.active { background: var(--accent); border-color: var(--accent); }
+.loop-grid { display: grid; gap: 1px; margin-top: 12px; }
+.loop-cell { width: 100%; aspect-ratio: 1; background: var(--bg); border-radius: 2px; cursor: pointer; transition: background 0.1s, opacity 0.1s; border: 1px solid #333; position: relative; min-height: 18px; }
+.loop-cell:hover { border-color: var(--accent); z-index: 1; }
+.loop-cell.active { border-color: var(--accent); }
+.loop-cell.beat-start { border-left: 2px solid #555; }
+.loop-cell.bar-start { border-left: 3px solid var(--accent); }
+.loop-cell.bar-odd { background: rgba(255,255,255,0.02); }
 .loop-label { font-size: 0.7em; color: var(--fg2); display: flex; align-items: center; justify-content: flex-end; padding-right: 4px; white-space: nowrap; overflow: hidden; }
 .beat-marker { font-size: 0.65em; color: var(--fg2); text-align: center; }
-.transport { display: flex; align-items: center; gap: 12px; padding: 12px 0; }
-.transport .bpm-display { font-size: 1.4em; font-weight: bold; min-width: 80px; text-align: center; }
+.beat-marker.bar-first { color: var(--accent); font-weight: bold; }
+.transport { display: flex; align-items: center; gap: 8px; padding: 10px 0; flex-wrap: wrap; }
+.transport .bpm-display { font-size: 1.4em; font-weight: bold; min-width: 70px; text-align: center; }
+.loop-toolbar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 4px; padding-bottom: 4px; border-bottom: 1px solid #333; }
+.loop-vel-label { font-size: 0.75em; color: var(--fg2); min-width: 32px; text-align: center; }
+.loop-playhead { border-left: 2px solid var(--success); }
 
 .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 100; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .modal-overlay.show { display: flex; align-items: flex-start; justify-content: center; }
@@ -842,11 +849,19 @@ input[type=checkbox] { width: auto; }
           <div class="bpm-display"><span id="loopBpmDisplay">120</span> BPM</div>
           <input type="range" id="loopBpmSlider" min="40" max="300" value="120"
                  oninput="updateLoopBpm(this.value)" style="flex:1;">
-          <select id="loopQuantize" onchange="renderCurrentLoopGrid()" style="width:80px;">
+        </div>
+        <div class="loop-toolbar">
+          <select id="loopQuantize" onchange="renderCurrentLoopGrid()" style="width:70px;" title="Resolution grille">
             <option value="4">1/4</option>
             <option value="8" selected>1/8</option>
             <option value="16">1/16</option>
           </select>
+          <span style="color:var(--fg2);font-size:0.8em;">Vel:</span>
+          <input type="range" id="loopVelocity" min="1" max="127" value="100" style="width:80px;"
+                 oninput="document.getElementById('loopVelVal').textContent=this.value">
+          <span class="loop-vel-label" id="loopVelVal">100</span>
+          <button class="btn btn-sm btn-secondary" onclick="clearCurrentLoopEvents()" title="Effacer toutes les notes">Effacer</button>
+          <span id="loopEventCount" style="font-size:0.75em;color:var(--fg2);margin-left:auto;"></span>
         </div>
         <div class="loop-grid" id="loopGrid"></div>
       </div>
@@ -2839,26 +2854,63 @@ function renderCurrentLoopGrid() {
   const totalBeats = beatsPerBar * bars;
   const subdivision = parseInt(document.getElementById('loopQuantize').value) || 8;
   const stepsPerBeat = subdivision / (loop.beatValue || 4);
-  const totalSteps = Math.min(totalBeats * stepsPerBeat, 32);
+  const totalSteps = Math.min(totalBeats * stepsPerBeat, 64);
   const ticksPerStep = (ppq * 4) / subdivision;
+  const stepsPerBar = beatsPerBar * stepsPerBeat;
 
   const rows = instruments.length > 0 ? instruments : [{id:0, name:'(aucun)', midiNote:36}];
+  const events = loop.events || [];
+
+  // Update event count
+  const cntEl = document.getElementById('loopEventCount');
+  if (cntEl) cntEl.textContent = events.length + ' notes';
+
+  // Header row: beat markers
   let html = '<div></div>';
   for (let s = 0; s < totalSteps; s++) {
-    const beat = Math.floor(s / stepsPerBeat) + 1;
-    const sub = (s % stepsPerBeat) + 1;
-    html += `<div class="beat-marker">${sub === 1 ? beat : '.'}</div>`;
+    const globalBeat = Math.floor(s / stepsPerBeat);
+    const beatInBar = globalBeat % beatsPerBar;
+    const sub = (s % stepsPerBeat);
+    const isBarStart = s > 0 && (s % stepsPerBar) === 0;
+    const isBeatStart = sub === 0 && !isBarStart;
+    const cls = isBarStart ? 'beat-marker bar-first' : 'beat-marker';
+    const label = sub === 0 ? (beatInBar + 1) : '\u00b7';
+    html += `<div class="${cls}">${label}</div>`;
   }
+
+  // Instrument rows
   rows.forEach(inst => {
     html += `<div class="loop-label" title="${inst.name}">${inst.name.substring(0, 8)}</div>`;
     for (let s = 0; s < totalSteps; s++) {
       const tick = Math.round(s * ticksPerStep);
-      const events = loop.events || [];
-      const isActive = events.some(e =>
+      const barIdx = Math.floor(s / stepsPerBar);
+      const isBarStart = s > 0 && (s % stepsPerBar) === 0;
+      const isBeatStart = (s % stepsPerBeat) === 0 && !isBarStart;
+
+      // Find matching event
+      const evt = events.find(e =>
         e[1] === inst.midiNote && Math.abs(e[0] - tick) < ticksPerStep/2 && e[2] > 0
       );
-      html += `<div class="loop-cell ${isActive ? 'active' : ''}"
-                    onclick="toggleLoopCell(${currentLoopIdx}, ${inst.midiNote}, ${tick}, ${ticksPerStep}, this)"></div>`;
+      const isActive = !!evt;
+      const vel = evt ? evt[2] : 0;
+
+      let cls = 'loop-cell';
+      if (isActive) cls += ' active';
+      if (isBarStart) cls += ' bar-start';
+      else if (isBeatStart) cls += ' beat-start';
+      if (barIdx % 2 === 1) cls += ' bar-odd';
+
+      // Velocity-based color: opacity 0.4 (ppp) to 1.0 (fff)
+      let style = '';
+      if (isActive) {
+        const opacity = 0.4 + (vel / 127) * 0.6;
+        style = `background:rgba(233,69,96,${opacity.toFixed(2)})`;
+      }
+
+      const title = isActive ? `vel: ${vel}` : '';
+      html += `<div class="${cls}" style="${style}" title="${title}"
+                    onclick="toggleLoopCell(${currentLoopIdx}, ${inst.midiNote}, ${tick}, ${ticksPerStep}, this)"
+                    oncontextmenu="cycleLoopVelocity(event, ${currentLoopIdx}, ${inst.midiNote}, ${tick}, ${ticksPerStep})"></div>`;
     }
   });
   grid.style.gridTemplateColumns = `60px repeat(${totalSteps}, 1fr)`;
@@ -2874,13 +2926,43 @@ async function toggleLoopCell(loopIdx, note, tick, ticksPerStep, el) {
   );
   if (existingIdx >= 0) {
     events.splice(existingIdx, 1);
-    el.classList.remove('active');
   } else {
-    events.push([tick, note, 80, 10]);
-    el.classList.add('active');
+    const vel = parseInt(document.getElementById('loopVelocity').value) || 100;
+    events.push([tick, note, vel, 10]);
   }
   loop.events = events;
   await api('loop?id=' + loopIdx, 'PUT', loop);
+  renderCurrentLoopGrid();
+}
+
+function cycleLoopVelocity(e, loopIdx, note, tick, ticksPerStep) {
+  e.preventDefault();
+  if (loopIdx < 0 || loopIdx >= loops.length) return;
+  const loop = loops[loopIdx];
+  const events = loop.events || [];
+  const existingIdx = events.findIndex(ev =>
+    ev[1] === note && Math.abs(ev[0] - tick) < ticksPerStep/2 && ev[2] > 0
+  );
+  if (existingIdx < 0) return; // nothing to cycle
+  // Cycle through velocity levels: 40 → 70 → 100 → 127 → 40
+  const levels = [40, 70, 100, 127];
+  const cur = events[existingIdx][2];
+  let nextIdx = 0;
+  for (let i = 0; i < levels.length; i++) {
+    if (cur <= levels[i]) { nextIdx = (i + 1) % levels.length; break; }
+  }
+  events[existingIdx][2] = levels[nextIdx];
+  api('loop?id=' + loopIdx, 'PUT', loop);
+  renderCurrentLoopGrid();
+}
+
+async function clearCurrentLoopEvents() {
+  if (currentLoopIdx < 0 || !loops[currentLoopIdx]) return;
+  const loop = loops[currentLoopIdx];
+  loop.events = [];
+  await api('loop?id=' + currentLoopIdx, 'PUT', loop);
+  renderCurrentLoopGrid();
+  toast('Notes effacees', 'success');
 }
 
 function updateLoopBpm(val) {

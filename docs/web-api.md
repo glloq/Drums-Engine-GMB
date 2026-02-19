@@ -22,6 +22,8 @@ Base URL: `http://<ip-esp32>/`
 ### Tests
 - `POST /api/test/instrument`
 - `POST /api/test/actuator`
+- `POST /api/test/note` — envoyer une note MIDI brute (piano virtuel)
+- `POST /api/test/cc` — envoyer un CC MIDI
 
 ### Loops
 - `GET /api/loops`

@@ -25,6 +25,17 @@ void SolenoidActuator::execute(const ActuatorCommand& cmd) {
         return; // Encore en cooldown, ignorer la commande
       }
 
+      // SOLENOID_MUTE: PULSE toggles state (energized = libre, de-energized = mute)
+      if (_config.behavior == ActuatorBehavior::SOLENOID_MUTE) {
+        if (_active) {
+          stop();
+        } else {
+          _driver->digitalWrite(_config.hwPin, !_config.inverted);
+          markActivation(now);
+        }
+        break;
+      }
+
       // Activation: ecrire HIGH (ou PWM pour solenoid hold)
       if (_config.behavior == ActuatorBehavior::SOLENOID_HOLD) {
         // Start at full activation PWM (paramMin stores activation level 0-255)
@@ -35,6 +46,18 @@ void SolenoidActuator::execute(const ActuatorCommand& cmd) {
         _driver->digitalWrite(_config.hwPin, !_config.inverted);
       }
       markActivation(now);
+      break;
+
+    case CommandType::POSITION:
+      // SOLENOID_MUTE: explicit position control (< 64 = mute/contact, >= 64 = libre)
+      if (_config.behavior == ActuatorBehavior::SOLENOID_MUTE) {
+        if (cmd.value >= 64) {
+          _driver->digitalWrite(_config.hwPin, !_config.inverted);
+          markActivation(now);
+        } else {
+          stop();
+        }
+      }
       break;
 
     case CommandType::OFF:
@@ -72,6 +95,11 @@ bool SolenoidActuator::checkTimeout(uint32_t nowUs) {
       DBGF("[Actuator] Solenoid HOLD '%s' transitioned to hold PWM (%d)\n",
            _config.name, _config.paramMax);
     }
+  }
+
+  // MUTE behavior: no safety timeout (holds position indefinitely like servo mute)
+  if (_config.behavior == ActuatorBehavior::SOLENOID_MUTE) {
+    return false;
   }
 
   // HOLD behavior: use configured max active time (cooldownUs stores maxActiveTime*10)

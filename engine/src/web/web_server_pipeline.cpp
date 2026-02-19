@@ -61,10 +61,10 @@ void WebServerManager::_handleGetPipelineBlockSchema(AsyncWebServerRequest* req)
       s["subtype"] = COND_NOTE_RANGE;
       s["id"] = "note_range";
       s["label"] = "Note Range";
-      s["description"] = "Passe si la valeur est dans la plage [min, max]";
+      s["description"] = "Passe si la note MIDI source est dans la plage [min, max]";
       JsonArray params = s["params"].to<JsonArray>();
-      { JsonObject p = params.add<JsonObject>(); p["name"] = "param1"; p["label"] = "Min"; p["type"] = "uint8"; p["default"] = 0; p["min"] = 0; p["max"] = 127; }
-      { JsonObject p = params.add<JsonObject>(); p["name"] = "param2"; p["label"] = "Max"; p["type"] = "uint16"; p["default"] = 127; p["min"] = 0; p["max"] = 127; }
+      { JsonObject p = params.add<JsonObject>(); p["name"] = "param1"; p["label"] = "Note min (0-127)"; p["type"] = "uint8"; p["default"] = 0; p["min"] = 0; p["max"] = 127; }
+      { JsonObject p = params.add<JsonObject>(); p["name"] = "param2"; p["label"] = "Note max (0-127)"; p["type"] = "uint16"; p["default"] = 127; p["min"] = 0; p["max"] = 127; }
     }
   }
 

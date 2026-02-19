@@ -64,12 +64,12 @@ private:
 
   CcDispatchStats _ccStats;
 
-  // Executer un pipeline sur une valeur
-  void _executePipeline(uint8_t pipelineIdx, uint8_t value, uint32_t timestamp);
+  // Executer un pipeline sur une valeur (midiNote passé pour COND_NOTE_RANGE)
+  void _executePipeline(uint8_t pipelineIdx, uint8_t value, uint32_t timestamp, uint8_t midiNote = 0xFF);
   void _processCcEvent(const MidiEvent& ev);
 
   // Traitement des blocs individuels
-  int16_t _processConditionBlock(const CompiledBlock& block, uint8_t value, uint8_t pipelineIdx);
+  int16_t _processConditionBlock(const CompiledBlock& block, uint8_t value, uint8_t pipelineIdx, uint8_t midiNote);
   uint8_t _processTransformBlock(const CompiledBlock& block, uint8_t value);
   void _processOutputBlock(const CompiledBlock& block, uint8_t value,
                             uint32_t timestamp, uint32_t delayAccum);

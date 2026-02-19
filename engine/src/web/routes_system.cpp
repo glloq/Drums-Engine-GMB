@@ -621,3 +621,25 @@ void WebServerManager::_handleTestCC(AsyncWebServerRequest* req, uint8_t* data, 
 
   _sendError(req, 200, "CC sent");
 }
+
+void WebServerManager::_handleTestNote(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
+  JsonDocument doc;
+  if (deserializeJson(doc, data, len)) { _sendError(req, 400, "Invalid JSON"); return; }
+  uint8_t note = doc["note"] | 60;
+  uint8_t velocity = doc["velocity"] | 80;
+  uint8_t channel = doc["channel"] | 10;
+  bool noteOff = doc["noteOff"] | false;
+
+  MidiEvent ev;
+  ev.type = noteOff ? MIDI_EVT_NOTE_OFF : MIDI_EVT_NOTE_ON;
+  ev.channel = channel;
+  ev.data1 = note;
+  ev.data2 = velocity;
+  ev.timestamp = micros();
+
+  if (_eventProc) {
+    _eventProc->processMidiEvent(ev);
+  }
+
+  _sendError(req, 200, noteOff ? "NoteOff sent" : "NoteOn sent");
+}

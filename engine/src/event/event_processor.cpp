@@ -61,7 +61,7 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
       return;
     }
 
-    _executePipeline(pipelineIdx, ev.data2, ev.timestamp);
+    _executePipeline(pipelineIdx, ev.data2, ev.timestamp, ev.data1);
     // Push LED event for pipeline-path notes too
     if (_ledQueue) {
       LedEvent ledEv;
@@ -138,6 +138,15 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
     ccEv.data2 = ev.data1;  // aftertouch: data1 = pressure, data2 unused
     _processCcEvent(ccEv);
   }
+  else if (ev.type == MIDI_EVT_POLY_AFTERTOUCH) {
+    // Poly aftertouch: data1 = note, data2 = pressure
+    // Route via same virtual CC#125 — pressure value drives the CC route
+    MidiEvent ccEv = ev;
+    ccEv.type = MIDI_EVT_CC;
+    ccEv.data1 = VIRTUAL_CC_AFTERTOUCH;
+    ccEv.data2 = ev.data2;  // poly aftertouch: data2 = pressure
+    _processCcEvent(ccEv);
+  }
 }
 
 void EventProcessor::_processCcEvent(const MidiEvent& ev) {
@@ -184,7 +193,7 @@ void EventProcessor::_processCcEvent(const MidiEvent& ev) {
   }
 }
 
-void EventProcessor::_executePipeline(uint8_t pipelineIdx, uint8_t value, uint32_t timestamp) {
+void EventProcessor::_executePipeline(uint8_t pipelineIdx, uint8_t value, uint32_t timestamp, uint8_t midiNote) {
   if (pipelineIdx >= _lookup.pipeline_count) return;
 
   const CompiledPipeline& pipeline = _lookup.pipelines[pipelineIdx];
@@ -196,7 +205,7 @@ void EventProcessor::_executePipeline(uint8_t pipelineIdx, uint8_t value, uint32
 
     switch ((BlockType)block.type) {
       case BlockType::CONDITION: {
-        int16_t result = _processConditionBlock(block, currentValue, pipelineIdx);
+        int16_t result = _processConditionBlock(block, currentValue, pipelineIdx, midiNote);
         if (result < 0) return;
         currentValue = (uint8_t)result;
         break;
@@ -254,7 +263,7 @@ void EventProcessor::_executePipeline(uint8_t pipelineIdx, uint8_t value, uint32
 }
 
 int16_t EventProcessor::_processConditionBlock(const CompiledBlock& block, uint8_t value,
-                                               uint8_t pipelineIdx) {
+                                               uint8_t pipelineIdx, uint8_t midiNote) {
   switch (block.subtype) {
     case COND_THRESHOLD: {
       uint8_t varIdx = block.param1 & 0x7F;
@@ -299,13 +308,10 @@ int16_t EventProcessor::_processConditionBlock(const CompiledBlock& block, uint8
     }
 
     case COND_NOTE_RANGE: {
-      // param1 = note min, param2 = note max
-      // Uses pipeline's source note stored in global var slot (set before pipeline exec)
+      // param1 = note min, param2 = note max — filter by MIDI note number
       uint8_t noteMin = block.param1;
       uint8_t noteMax = block.param2 & 0xFF;
-      // The current value carries velocity, not note — we check via the pipeline context
-      // For simple use: pass if value is treated as a threshold within range
-      return (value >= noteMin && value <= noteMax) ? value : -1;
+      return (midiNote >= noteMin && midiNote <= noteMax) ? value : -1;
     }
 
     default:

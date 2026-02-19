@@ -167,6 +167,23 @@ input[type=checkbox] { width: auto; }
 .pe-flow .pe-blocks { background: rgba(76,175,80,0.2); color: #81c784; }
 .pe-flow .pe-out { background: rgba(255,152,0,0.2); color: #ffb74d; }
 
+/* Virtual Piano */
+.piano-pad { min-width: 60px; min-height: 52px; border-radius: 6px; border: 2px solid #444; background: var(--bg); color: var(--fg2); cursor: pointer; font-size: 0.7em; text-align: center; padding: 4px 2px; transition: all 0.1s; display: flex; flex-direction: column; align-items: center; justify-content: center; user-select: none; }
+.piano-pad:hover { border-color: var(--accent); background: rgba(233,69,96,0.1); }
+.piano-pad:active, .piano-pad.active { background: var(--accent); color: #fff; border-color: var(--accent); transform: scale(0.95); }
+.piano-pad.configured { border-color: var(--success); }
+.piano-pad.configured:hover { background: rgba(76,175,80,0.15); }
+.piano-pad.configured:active, .piano-pad.configured.active { background: var(--success); color: #fff; }
+.piano-pad .pad-note { font-size: 1.1em; font-weight: 700; }
+.piano-pad .pad-name { font-size: 0.85em; line-height: 1.1; overflow: hidden; text-overflow: ellipsis; max-width: 58px; }
+
+/* Calibration */
+.calib-item { background: var(--bg); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 8px; border-left: 3px solid var(--accent2); }
+.calib-item h4 { font-size: 0.9em; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+.calib-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.calib-slider { flex: 2; min-width: 100px; }
+.calib-val { min-width: 32px; text-align: center; font-weight: 600; font-size: 0.9em; }
+
 @media (max-width: 600px) {
   .content { padding: 8px; }
   .header { padding: 6px 10px; }
@@ -201,7 +218,9 @@ input[type=checkbox] { width: auto; }
   <div class="tab active" data-tab="actuators">Actionneurs</div>
   <div class="tab" data-tab="instruments">Instruments</div>
   <div class="tab" data-tab="leds">LEDs</div>
-  <div class="tab" data-tab="mappings">Mappings</div>
+  <div class="tab" data-tab="mappings">Pipeline</div>
+  <div class="tab" data-tab="piano">Piano</div>
+  <div class="tab" data-tab="calibration">Calibration</div>
 </div>
 
 <div class="content">
@@ -285,6 +304,67 @@ input[type=checkbox] { width: auto; }
       Chaque instrument est lie a un pipeline de traitement MIDI. Cliquez sur un instrument pour editer son pipeline visuellement.
     </p>
     <div id="mappingList"></div>
+  </div>
+
+  <!-- ====== VIRTUAL PIANO TAB ====== -->
+  <div class="panel" id="tab-piano">
+    <div class="card">
+      <h3>Piano Virtuel MIDI <span class="badge" id="pianoNoteBadge">GM Percussion</span></h3>
+      <p class="hint" style="margin-bottom:12px;">Cliquez sur un pad pour envoyer un NoteOn. Les pads verts correspondent aux instruments configures.</p>
+      <div class="form-row" style="margin-bottom:12px;">
+        <div class="form-group" style="max-width:120px;">
+          <label>Velocity</label>
+          <input type="range" id="pianoVelocity" min="1" max="127" value="80" oninput="document.getElementById('pianoVelVal').textContent=this.value">
+          <div style="text-align:center;font-size:0.8em;color:var(--fg2);"><span id="pianoVelVal">80</span></div>
+        </div>
+        <div class="form-group" style="max-width:120px;">
+          <label>Canal MIDI</label>
+          <select id="pianoChannel">
+            <option value="10" selected>10 (Percussion)</option>
+            <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+            <option value="4">4</option><option value="5">5</option>
+          </select>
+        </div>
+        <div class="form-group" style="max-width:160px;">
+          <label>Affichage</label>
+          <select id="pianoLayout" onchange="renderPianoPads()">
+            <option value="gm">GM Percussion (27-81)</option>
+            <option value="all">Toutes notes (0-127)</option>
+          </select>
+        </div>
+      </div>
+      <div id="pianoPadGrid" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
+    </div>
+    <div class="card" style="margin-top:16px;">
+      <h3>Test CC / Controles</h3>
+      <div class="form-row">
+        <div class="form-group" style="max-width:100px;">
+          <label>CC #</label>
+          <input type="number" id="testCcNumber" min="0" max="127" value="4">
+        </div>
+        <div class="form-group" style="flex:2;">
+          <label>Valeur: <span id="testCcValDisp">64</span></label>
+          <input type="range" id="testCcValue" min="0" max="127" value="64" oninput="document.getElementById('testCcValDisp').textContent=this.value">
+        </div>
+        <div class="form-group" style="max-width:100px;display:flex;align-items:flex-end;">
+          <button class="btn btn-primary" onclick="sendTestCC()">Envoyer CC</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== CALIBRATION TAB ====== -->
+  <div class="panel" id="tab-calibration">
+    <div class="card">
+      <h3>Calibration Actionneurs <span class="badge" id="calibActCount">0</span></h3>
+      <p class="hint" style="margin-bottom:12px;">Testez chaque actionneur individuellement. Ajustez la valeur et la duree puis cliquez sur Tester.</p>
+      <div id="calibActuatorList"></div>
+    </div>
+    <div class="card" style="margin-top:16px;">
+      <h3>Test Rapide Instruments</h3>
+      <p class="hint" style="margin-bottom:12px;">Declenchez un instrument complet avec une velocity choisie.</p>
+      <div id="calibInstrumentList"></div>
+    </div>
   </div>
 
 
@@ -2818,9 +2898,10 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
     tab.classList.add('active');
     document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
-    // Refresh mappings when switching to that tab
     if (tab.dataset.tab === 'mappings') refreshMappings();
     if (tab.dataset.tab === 'leds') loadLedData();
+    if (tab.dataset.tab === 'piano') renderPianoPads();
+    if (tab.dataset.tab === 'calibration') loadCalibrationData();
   });
 });
 
@@ -3506,6 +3587,163 @@ async function peTestPipeline() {
   if (isNaN(velocity) || velocity < 1 || velocity > 127) return;
   const r = await api('pipeline/test', 'POST', { instrumentId: peInstrId, velocity });
   if (r && r.ok) toast('Test envoye (note=' + r.note + ' vel=' + r.velocity + ')', 'success');
+}
+
+// ============================================================================
+// Virtual Piano
+// ============================================================================
+
+const GM_DRUMS = {
+  27:'High Q',28:'Slap',29:'Scratch Push',30:'Scratch Pull',31:'Sticks',
+  32:'Square Click',33:'Metro Click',34:'Metro Bell',35:'Acoustic BD',
+  36:'Bass Drum 1',37:'Side Stick',38:'Acoustic Snare',39:'Hand Clap',
+  40:'Electric Snare',41:'Low Floor Tom',42:'Closed HH',43:'High Floor Tom',
+  44:'Pedal HH',45:'Low Tom',46:'Open HH',47:'Low-Mid Tom',
+  48:'Hi-Mid Tom',49:'Crash 1',50:'High Tom',51:'Ride 1',
+  52:'Chinese Cym',53:'Ride Bell',54:'Tambourine',55:'Splash Cym',
+  56:'Cowbell',57:'Crash 2',58:'Vibraslap',59:'Ride 2',
+  60:'Hi Bongo',61:'Low Bongo',62:'Mute Conga',63:'Open Conga',
+  64:'Low Conga',65:'High Timbale',66:'Low Timbale',67:'High Agogo',
+  68:'Low Agogo',69:'Cabasa',70:'Maracas',71:'Short Whistle',
+  72:'Long Whistle',73:'Short Guiro',74:'Long Guiro',75:'Claves',
+  76:'Hi Wood Block',77:'Low Wood Block',78:'Mute Cuica',79:'Open Cuica',
+  80:'Mute Triangle',81:'Open Triangle'
+};
+
+let pianoConfiguredNotes = new Set();
+
+function renderPianoPads() {
+  const layout = document.getElementById('pianoLayout').value;
+  const grid = document.getElementById('pianoPadGrid');
+  grid.innerHTML = '';
+
+  // Build set of configured notes
+  pianoConfiguredNotes.clear();
+  instruments.forEach(inst => {
+    if (inst.enabled !== false) pianoConfiguredNotes.add(inst.midiNote);
+  });
+
+  let notes = [];
+  if (layout === 'gm') {
+    for (let n = 27; n <= 81; n++) notes.push(n);
+  } else {
+    for (let n = 0; n <= 127; n++) notes.push(n);
+  }
+
+  notes.forEach(n => {
+    const pad = document.createElement('div');
+    pad.className = 'piano-pad' + (pianoConfiguredNotes.has(n) ? ' configured' : '');
+    const name = GM_DRUMS[n] || ('Note ' + n);
+    pad.innerHTML = '<div class="pad-note">' + n + '</div><div class="pad-name">' + name + '</div>';
+
+    pad.addEventListener('mousedown', (e) => { e.preventDefault(); pianoNoteOn(n, pad); });
+    pad.addEventListener('mouseup', () => pianoNoteOff(n, pad));
+    pad.addEventListener('mouseleave', () => pianoNoteOff(n, pad));
+    pad.addEventListener('touchstart', (e) => { e.preventDefault(); pianoNoteOn(n, pad); }, {passive:false});
+    pad.addEventListener('touchend', (e) => { e.preventDefault(); pianoNoteOff(n, pad); });
+    grid.appendChild(pad);
+  });
+}
+
+function pianoNoteOn(note, pad) {
+  if (pad.classList.contains('active')) return;
+  pad.classList.add('active');
+  const vel = parseInt(document.getElementById('pianoVelocity').value) || 80;
+  const ch = parseInt(document.getElementById('pianoChannel').value) || 10;
+  api('test/note', 'POST', {note, velocity:vel, channel:ch});
+}
+
+function pianoNoteOff(note, pad) {
+  if (!pad.classList.contains('active')) return;
+  pad.classList.remove('active');
+  const ch = parseInt(document.getElementById('pianoChannel').value) || 10;
+  api('test/note', 'POST', {note, velocity:0, channel:ch, noteOff:true});
+}
+
+async function sendTestCC() {
+  const cc = parseInt(document.getElementById('testCcNumber').value) || 0;
+  const val = parseInt(document.getElementById('testCcValue').value) || 64;
+  const r = await api('test/cc', 'POST', {cc, value:val});
+  if (r) toast('CC#' + cc + ' = ' + val + ' envoye', 'success');
+}
+
+// ============================================================================
+// Calibration Page
+// ============================================================================
+
+async function loadCalibrationData() {
+  const actData = await api('actuators');
+  const instrData = await api('instruments');
+  if (!actData || !instrData) return;
+
+  const acts = actData.actuators || [];
+  const instrs = instrData.instruments || [];
+
+  document.getElementById('calibActCount').textContent = acts.length;
+
+  // Render actuator calibration list
+  const actList = document.getElementById('calibActuatorList');
+  if (acts.length === 0) {
+    actList.innerHTML = '<div class="empty-state">Aucun actionneur configure</div>';
+  } else {
+    actList.innerHTML = acts.map(a => {
+      const typeName = ['Servo','Solenoide','PWM Motor','Motor Optical'][a.type] || 'Inconnu';
+      const behavNames = ['Sol.Strike','Sol.Hold','Servo Pos','Servo Strike','Comb/Brush',
+        'Pitch Bend','Motor Optical','Hi-Hat Ctrl','Servo Mute','Sol.Mute',
+        'Motor Timed','Motor Speed','Motor Sweep','Motor Alt.'];
+      const behavName = behavNames[a.behavior] || '?';
+      return '<div class="calib-item">' +
+        '<h4><span>#' + a.id + ' ' + (a.name||'Sans nom') + '</span>' +
+        '<span class="badge">' + typeName + ' / ' + behavName + '</span></h4>' +
+        '<div class="calib-controls">' +
+          '<label style="font-size:0.8em;color:var(--fg2);min-width:50px;">Valeur:</label>' +
+          '<input type="range" class="calib-slider" id="calibVal' + a.id + '" min="0" max="127" value="80" ' +
+            'oninput="document.getElementById(\'calibDisp' + a.id + '\').textContent=this.value">' +
+          '<span class="calib-val" id="calibDisp' + a.id + '">80</span>' +
+          '<button class="btn btn-primary btn-sm" onclick="calibTestActuator(' + a.id + ')">Tester</button>' +
+          '<button class="btn btn-danger btn-sm" onclick="calibStopActuator(' + a.id + ')">Stop</button>' +
+        '</div>' +
+        '<div style="margin-top:6px;font-size:0.78em;color:var(--fg2);">Range: ' + a.paramMin + '-' + a.paramMax + ' | Default: ' + a.paramDefault +
+          (a.cooldownUs > 0 ? ' | Cooldown: ' + Math.round(a.cooldownUs * 0.1) + 'ms' : '') + '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  // Render instrument test list
+  const instrList = document.getElementById('calibInstrumentList');
+  if (instrs.length === 0) {
+    instrList.innerHTML = '<div class="empty-state">Aucun instrument configure</div>';
+  } else {
+    instrList.innerHTML = instrs.map(inst => {
+      return '<div class="calib-item">' +
+        '<h4><span>' + (inst.name||'Sans nom') + '</span>' +
+        '<span class="badge">Note ' + inst.midiNote + ' | CH ' + inst.midiChannel + '</span></h4>' +
+        '<div class="calib-controls">' +
+          '<label style="font-size:0.8em;color:var(--fg2);min-width:50px;">Velocity:</label>' +
+          '<input type="range" class="calib-slider" id="calibInstVel' + inst.id + '" min="1" max="127" value="80" ' +
+            'oninput="document.getElementById(\'calibInstDisp' + inst.id + '\').textContent=this.value">' +
+          '<span class="calib-val" id="calibInstDisp' + inst.id + '">80</span>' +
+          '<button class="btn btn-success btn-sm" onclick="calibTestInstrument(' + inst.id + ')">Tester</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+}
+
+async function calibTestActuator(id) {
+  const val = parseInt(document.getElementById('calibVal' + id).value) || 80;
+  await api('test/actuator', 'POST', {id, value:val});
+  toast('Actuateur #' + id + ' teste (val=' + val + ')', 'success');
+}
+
+async function calibStopActuator(id) {
+  await api('test/actuator', 'POST', {id, value:0});
+}
+
+async function calibTestInstrument(id) {
+  const vel = parseInt(document.getElementById('calibInstVel' + id).value) || 80;
+  await api('test/instrument', 'POST', {id, velocity:vel});
+  toast('Instrument #' + id + ' teste (vel=' + vel + ')', 'success');
 }
 
 window.addEventListener('load', init);

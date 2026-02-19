@@ -80,6 +80,7 @@ private:
   void _handleTestInstrument(AsyncWebServerRequest* req, uint8_t* data, size_t len);
   void _handleTestInstrumentAction(AsyncWebServerRequest* req, uint8_t* data, size_t len);
   void _handleTestCC(AsyncWebServerRequest* req, uint8_t* data, size_t len);
+  void _handleTestNote(AsyncWebServerRequest* req, uint8_t* data, size_t len);
 
   // Loops
   void _handleGetLoops(AsyncWebServerRequest* req);

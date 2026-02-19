@@ -104,6 +104,17 @@
 - [x] CC virtuels documentes: CC#125 (aftertouch), CC#126 (pitch bend)
 - [x] Fix bug hideModal → closeModal dans les modals LED
 
+## Phase 10 — Audit, corrections et outils utilisateur
+**Statut: implementee**
+- [x] Fix COND_NOTE_RANGE: filtre par note MIDI (et non velocity) via parametre `midiNote` dans pipeline
+- [x] Poly aftertouch (MIDI_EVT_POLY_AFTERTOUCH) route via CC#125 comme channel aftertouch
+- [x] SOLENOID_MUTE: toggle PULSE, POSITION explicite (< 64 = mute, >= 64 = libre), pas de timeout safety
+- [x] API `POST /api/test/note` pour piano virtuel (NoteOn/NoteOff brut)
+- [x] Page Piano Virtuel: pads GM percussion (27-81) + mode full (0-127), velocity slider, test CC inline
+- [x] Page Calibration: test individuel actionneurs (slider + tester/stop), test instruments (velocity)
+- [x] Tab Pipeline renomme (Mappings → Pipeline)
+- [x] Block schema COND_NOTE_RANGE: description corrigee ("note MIDI source")
+
 ## Risques / dette technique
 - Couverture tests: script curl fonctionnel mais pas de CI automatise.
 - Dependance environnement outillage (`pio`) pour validation complete firmware.

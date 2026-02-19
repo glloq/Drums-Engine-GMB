@@ -112,6 +112,9 @@ void WebServerManager::_setupRoutes() {
   _server.on("/api/actuators", HTTP_GET,
     [this](AsyncWebServerRequest* req) { _handleGetActuators(req); });
 
+  _server.on("/api/actuators/status", HTTP_GET,
+    [this](AsyncWebServerRequest* req) { _handleGetActuatorStatus(req); });
+
   _server.on("/api/actuators", HTTP_POST,
     [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
     nullptr,

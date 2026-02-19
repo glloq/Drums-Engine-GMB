@@ -400,7 +400,7 @@ input[type=checkbox] { width: auto; }
   <div class="panel" id="tab-calibration">
     <div class="card">
       <h3 style="display:flex;justify-content:space-between;align-items:center;">
-        <span>Calibration Actionneurs <span class="badge" id="calibActCount">0</span></span>
+        <span>Calibration Actionneurs <span class="badge" id="calibActCount">0</span> <span class="badge badge-green" id="calibActiveCount" style="font-size:0.75em;">0</span> actifs</span>
         <button class="btn btn-danger btn-sm" onclick="emergencyStopAll()" style="font-weight:700;">STOP ALL</button>
       </h3>
       <p class="hint" style="margin-bottom:12px;">Testez chaque actionneur individuellement. Ajustez la valeur et la duree puis cliquez sur Tester.</p>
@@ -2126,7 +2126,10 @@ function renderInstruments() {
         ${!inst.enabled ? '<span class="badge badge-warn">OFF</span>' : ''}
       </div>
       <div class="item-actions">
-        <button class="btn btn-sm btn-success" onclick="testInstrument(${inst.id})">Test</button>
+        <input type="range" min="1" max="127" value="80" id="instrVel${inst.id}" style="width:60px;vertical-align:middle;" title="Velocity"
+          oninput="document.getElementById('instrVelD${inst.id}').textContent=this.value">
+        <span id="instrVelD${inst.id}" style="font-size:0.75em;min-width:22px;display:inline-block;text-align:center;">80</span>
+        <button class="btn btn-sm btn-success" onclick="testInstrumentVel(${inst.id})">Test</button>
         <button class="btn btn-sm btn-secondary" onclick="testInstrumentAction(${inst.id}, 'on', 0)">On#1</button>
         <button class="btn btn-sm btn-secondary" onclick="testInstrumentAction(${inst.id}, 'off', 0)">Off#1</button>
         <button class="btn btn-sm btn-secondary" onclick="editInstrument(${inst.id})">Modifier</button>
@@ -2689,6 +2692,12 @@ async function duplicateInstrument(id) {
 async function testInstrument(id) {
   await api('test/instrument', 'POST', {id: id, velocity: 80});
   toast('Test envoye', 'success');
+}
+
+async function testInstrumentVel(id) {
+  const vel = parseInt(document.getElementById('instrVel' + id).value) || 80;
+  await api('test/instrument', 'POST', {id: id, velocity: vel});
+  toast('Test vel=' + vel, 'success');
 }
 
 async function testInstrumentAction(id, eventType='on', index=0) {
@@ -3450,7 +3459,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     if (tab.dataset.tab === 'mappings') refreshMappings();
     if (tab.dataset.tab === 'leds') loadLedData();
     if (tab.dataset.tab === 'piano') renderPianoPads();
-    if (tab.dataset.tab === 'calibration') loadCalibrationData();
+    if (tab.dataset.tab === 'calibration') { loadCalibrationData(); startCalibPolling(); } else { stopCalibPolling(); }
     // Stop piano live polling when leaving piano tab
     if (tab.dataset.tab !== 'piano' && pianoLiveActive) {
       document.getElementById('pianoLiveToggle').checked = false;
@@ -4495,10 +4504,10 @@ async function loadCalibrationData() {
           '<button class="btn btn-sm btn-secondary" onclick="calibQuickVal(' + a.id + ',127)">Max (127)</button>' +
           '</div>';
       }
-      return '<div class="calib-item" style="border-left-color:' + border + ';">' +
+      return '<div class="calib-item" data-actid="' + a.id + '" style="border-left-color:' + border + ';">' +
         '<h4><span>#' + a.id + ' ' + (a.name||'Sans nom') + '</span>' +
         '<span class="badge">' + typeName + ' / ' + behavName + '</span>' +
-        (a.active ? '<span class="badge badge-green">ACTIF</span>' : '') + '</h4>' +
+        '<span class="badge badge-green" id="calibActive' + a.id + '" style="display:' + (a.active ? 'inline-block' : 'none') + ';">ACTIF</span></h4>' +
         '<div class="calib-controls">' +
           '<label style="font-size:0.8em;color:var(--fg2);min-width:55px;">' + sliderLabel + ':</label>' +
           '<input type="range" class="calib-slider" id="calibVal' + a.id + '" min="0" max="127" value="80" ' +
@@ -4572,6 +4581,33 @@ async function calibSweepInstrument(id) {
     await api('test/instrument', 'POST', {id, velocity: velocities[i]});
     await new Promise(r => setTimeout(r, 400));
   }
+}
+
+// Real-time actuator status polling (calibration tab)
+let calibPollTimer = null;
+function startCalibPolling() {
+  stopCalibPolling();
+  calibPollTimer = setInterval(updateCalibStatus, 500);
+}
+function stopCalibPolling() {
+  if (calibPollTimer) { clearInterval(calibPollTimer); calibPollTimer = null; }
+}
+async function updateCalibStatus() {
+  try {
+    const resp = await fetch('/api/actuators/status');
+    if (!resp.ok) return;
+    const statuses = await resp.json();
+    let activeCount = 0;
+    statuses.forEach(s => {
+      const badge = document.getElementById('calibActive' + s.id);
+      const card = document.querySelector('.calib-item[data-actid="' + s.id + '"]');
+      if (badge) badge.style.display = s.active ? 'inline-block' : 'none';
+      if (card) card.style.borderLeftColor = s.active ? 'var(--success)' : 'var(--accent2)';
+      if (s.active) activeCount++;
+    });
+    const countEl = document.getElementById('calibActiveCount');
+    if (countEl) countEl.textContent = activeCount;
+  } catch(e) {}
 }
 
 async function emergencyStopAll() {

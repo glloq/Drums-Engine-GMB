@@ -15,6 +15,7 @@ Base URL: `http://<ip-esp32>/`
 
 ### Actuators
 - `GET /api/actuators`
+- `GET /api/actuators/status` — etat temps reel leger (id + active seulement, pour polling)
 - `POST /api/actuators`
 - `PUT /api/actuator?id=<id>`
 - `DELETE /api/actuator?id=<id>`

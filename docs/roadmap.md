@@ -162,6 +162,10 @@
 - [x] Mobile responsive: taille tactile, modals scroll, header compact
 - [x] Derniere note MIDI recue dans l'en-tete (indicateur 2s)
 - [x] Storage generic: `saveJsonFile`/`loadJsonFile` pour configs simples
+- [x] Calibration: polling temps reel etat actionneurs (badge ACTIF + compteur, 500ms)
+- [x] API legere `/api/actuators/status` pour polling rapide (id + active seulement)
+- [x] Instruments: slider velocity inline + test direct depuis la liste
+- [x] Categorie couleur instruments: drums (rouge), cymbals (or), latin (vert), other (bleu)
 
 ## Risques / dette technique
 - Couverture tests: script curl fonctionnel mais pas de CI automatise.

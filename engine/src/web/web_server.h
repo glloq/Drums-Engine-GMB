@@ -71,6 +71,7 @@ private:
 
   // Actuators CRUD
   void _handleGetActuators(AsyncWebServerRequest* req);
+  void _handleGetActuatorStatus(AsyncWebServerRequest* req);
   void _handleCreateActuator(AsyncWebServerRequest* req, uint8_t* data, size_t len);
   void _handleUpdateActuator(AsyncWebServerRequest* req, uint8_t* data, size_t len);
   void _handleDeleteActuator(AsyncWebServerRequest* req);

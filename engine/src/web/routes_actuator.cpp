@@ -34,6 +34,20 @@ void WebServerManager::_handleGetActuators(AsyncWebServerRequest* req) {
   _sendJson(req, 200, doc);
 }
 
+void WebServerManager::_handleGetActuatorStatus(AsyncWebServerRequest* req) {
+  // Lightweight endpoint for polling: returns only id + active state
+  JsonDocument doc;
+  JsonArray arr = doc.to<JsonArray>();
+  for (uint8_t i = 0; i < _actFactory->getConfigCount(); i++) {
+    const ActuatorConfig& cfg = _actFactory->getConfig(i);
+    Actuator* act = _actMgr->getActuator(cfg.id);
+    JsonObject obj = arr.add<JsonObject>();
+    obj["id"] = cfg.id;
+    obj["active"] = act ? act->isActive() : false;
+  }
+  _sendJson(req, 200, doc);
+}
+
 void WebServerManager::_handleCreateActuator(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
   JsonDocument doc;
   if (deserializeJson(doc, data, len)) { _sendError(req, 400, "Invalid JSON"); return; }

@@ -2342,6 +2342,7 @@ function renderInstruments() {
         <strong>${inst.name}</strong>
         <span class="badge" style="background:${catColor};color:#000;">${inst.category}</span>
         <span class="badge">${mNote}${noteName ? ' · ' + noteName : ''}</span>
+        ${(inst.midiChannel && inst.midiChannel !== 10) ? '<span class="badge" style="background:#607d8b;color:#fff;">Ch.' + inst.midiChannel + '</span>' : ''}
         <span class="badge badge-green">On:${onCount}</span>
         <span class="badge badge-warn">Off:${offCount}</span>
         <span class="badge">CC:${ccCount}</span>

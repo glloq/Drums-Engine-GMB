@@ -97,3 +97,27 @@ void WebServerManager::_handleStopLoop(AsyncWebServerRequest* req) {
   _loopEngine->stop();
   _sendError(req, 200, "Stopped");
 }
+
+void WebServerManager::_handlePlayChain(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
+  JsonDocument doc;
+  if (deserializeJson(doc, data, len)) { _sendError(req, 400, "Invalid JSON"); return; }
+
+  JsonArray ids = doc["loopIds"].as<JsonArray>();
+  if (ids.isNull() || ids.size() == 0) { _sendError(req, 400, "loopIds required"); return; }
+
+  uint8_t chain[MAX_LOOPS];
+  uint8_t count = 0;
+  for (JsonVariant v : ids) {
+    if (count >= MAX_LOOPS) break;
+    chain[count++] = v.as<uint8_t>();
+  }
+
+  bool repeat = doc["repeat"] | true;
+  _loopEngine->playChain(chain, count, repeat);
+
+  JsonDocument resp;
+  resp["message"] = "Chain started";
+  resp["count"] = count;
+  resp["repeat"] = repeat;
+  _sendJson(req, 200, resp);
+}

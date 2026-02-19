@@ -16,6 +16,7 @@
 #include "../scheduler/scheduler.h"
 #include "../event/event_processor.h"
 #include "../event/pipeline_compiler.h"
+#include "../led/led_engine.h"
 #include "api_auth.h"
 
 // ============================================================================
@@ -28,7 +29,7 @@ public:
                    ActuatorFactory* actFactory,
                    LoopEngine* loopEngine, MidiEngine* midiEngine,
                    Storage* storage, Scheduler* scheduler,
-                   EventProcessor* eventProc);
+                   EventProcessor* eventProc, LedEngine* ledEngine);
 
   bool begin();
   void update();
@@ -57,6 +58,7 @@ private:
   Storage* _storage;
   Scheduler* _scheduler;
   EventProcessor* _eventProc;
+  LedEngine* _ledEngine;
 
   void _setupRoutes();
 
@@ -69,6 +71,7 @@ private:
 
   // Actuators CRUD
   void _handleGetActuators(AsyncWebServerRequest* req);
+  void _handleGetActuatorStatus(AsyncWebServerRequest* req);
   void _handleCreateActuator(AsyncWebServerRequest* req, uint8_t* data, size_t len);
   void _handleUpdateActuator(AsyncWebServerRequest* req, uint8_t* data, size_t len);
   void _handleDeleteActuator(AsyncWebServerRequest* req);
@@ -78,6 +81,8 @@ private:
   void _handleTestInstrument(AsyncWebServerRequest* req, uint8_t* data, size_t len);
   void _handleTestInstrumentAction(AsyncWebServerRequest* req, uint8_t* data, size_t len);
   void _handleTestCC(AsyncWebServerRequest* req, uint8_t* data, size_t len);
+  void _handleTestNote(AsyncWebServerRequest* req, uint8_t* data, size_t len);
+  void _handleGetActiveNotes(AsyncWebServerRequest* req);
 
   // Loops
   void _handleGetLoops(AsyncWebServerRequest* req);
@@ -87,6 +92,7 @@ private:
   void _handleDeleteLoop(AsyncWebServerRequest* req);
   void _handlePlayLoop(AsyncWebServerRequest* req);
   void _handleStopLoop(AsyncWebServerRequest* req);
+  void _handlePlayChain(AsyncWebServerRequest* req, uint8_t* data, size_t len);
 
   // System
   void _handleGetStatus(AsyncWebServerRequest* req);
@@ -100,6 +106,40 @@ private:
   void _handleGetLogs(AsyncWebServerRequest* req);
   void _handleClearLogs(AsyncWebServerRequest* req);
   void _handleGetAuthToken(AsyncWebServerRequest* req);
+  void _handleGetMidiChannels(AsyncWebServerRequest* req);
+  void _handleSetMidiChannels(AsyncWebServerRequest* req, uint8_t* data, size_t len);
+  void _handleFactoryReset(AsyncWebServerRequest* req);
+  void _handleValidateConfig(AsyncWebServerRequest* req);
+
+  // LED Strips
+  void _handleGetLedStrips(AsyncWebServerRequest* req);
+  void _handleConfigureLedStrip(AsyncWebServerRequest* req, uint8_t* data, size_t len);
+  void _handleDeleteLedStrip(AsyncWebServerRequest* req);
+  void _handleTestLedStrip(AsyncWebServerRequest* req, uint8_t* data, size_t len);
+
+  // LED Segments
+  void _handleGetLedSegments(AsyncWebServerRequest* req);
+  void _handleCreateLedSegment(AsyncWebServerRequest* req, uint8_t* data, size_t len);
+  void _handleUpdateLedSegment(AsyncWebServerRequest* req, uint8_t* data, size_t len);
+  void _handleDeleteLedSegment(AsyncWebServerRequest* req);
+  void _handleTestLedSegment(AsyncWebServerRequest* req, uint8_t* data, size_t len);
+
+  // LED Themes
+  void _handleGetLedThemes(AsyncWebServerRequest* req);
+  void _handleCreateLedTheme(AsyncWebServerRequest* req, uint8_t* data, size_t len);
+  void _handleUpdateLedTheme(AsyncWebServerRequest* req, uint8_t* data, size_t len);
+  void _handleDeleteLedTheme(AsyncWebServerRequest* req);
+  void _handleSetActiveLedTheme(AsyncWebServerRequest* req, uint8_t* data, size_t len);
+
+  // LED Master
+  void _handleGetLedStatus(AsyncWebServerRequest* req);
+  void _handleSetLedBrightness(AsyncWebServerRequest* req, uint8_t* data, size_t len);
+
+  // Pipeline Editor
+  void _handleGetPipelineBlocks(AsyncWebServerRequest* req);
+  void _handleGetPipelineBlockSchema(AsyncWebServerRequest* req);
+  void _handleSetPipelineBlocks(AsyncWebServerRequest* req, uint8_t* data, size_t len);
+  void _handleTestPipeline(AsyncWebServerRequest* req, uint8_t* data, size_t len);
 
   // WebSocket
   void _onWsEvent(AsyncWebSocket* server, AsyncWebSocketClient* client,
@@ -110,6 +150,11 @@ private:
   void _sendError(AsyncWebServerRequest* req, int code, const char* msg);
   uint8_t _extractId(AsyncWebServerRequest* req, const char* param);
   void _wsBroadcast(const char* type, const JsonObject& data);
+
+  // WebSocket MIDI note activity broadcast
+  uint8_t _wsNoteCache[128] = {};
+  uint32_t _wsLastBroadcastUs = 0;
+  void _broadcastNoteChanges();
 
   bool _validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg);
   bool _validateInstrumentConfig(InstrumentConfig& cfg, const char*& errMsg);

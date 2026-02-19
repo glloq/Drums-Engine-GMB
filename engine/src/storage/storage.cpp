@@ -1,4 +1,5 @@
 #include "storage.h"
+#include "../led/led_engine.h"
 
 bool Storage::begin() {
   if (!LittleFS.begin(true)) {
@@ -16,6 +17,14 @@ bool Storage::begin() {
 
 bool Storage::fileExists(const char* path) {
   return LittleFS.exists(path);
+}
+
+bool Storage::saveJsonFile(const char* path, const JsonDocument& doc) {
+  return _writeJson(path, doc);
+}
+
+bool Storage::loadJsonFile(const char* path, JsonDocument& doc) {
+  return _readJson(path, doc);
 }
 
 // ============================================================================
@@ -335,6 +344,204 @@ bool Storage::_writeJson(const char* path, const JsonDocument& doc) {
   LittleFS.remove(path);
   LittleFS.rename(tmpPath.c_str(), path);
   DBGF("[Storage] Wrote %d bytes to %s\n", written, path);
+  return true;
+}
+
+// ============================================================================
+// LED Configuration persistence
+// ============================================================================
+
+static void rgbToJsonArr(const RgbColor& c, JsonObject& obj) {
+  obj["r"] = c.r; obj["g"] = c.g; obj["b"] = c.b;
+}
+
+static RgbColor rgbFromJsonObj(const JsonObject& obj) {
+  return RgbColor(obj["r"] | 0, obj["g"] | 0, obj["b"] | 0);
+}
+
+bool Storage::saveLedConfig(const LedEngine& engine) {
+  JsonDocument doc;
+  doc["version"] = 1;
+
+  // Strips
+  JsonArray strips = doc["strips"].to<JsonArray>();
+  for (uint8_t i = 0; i < LED_MAX_STRIPS; i++) {
+    const LedStripConfig& cfg = engine.getStripConfig(i);
+    if (cfg.ledCount == 0 && !cfg.enabled) continue;
+    JsonObject obj = strips.add<JsonObject>();
+    obj["id"] = cfg.id;
+    obj["gpioPin"] = cfg.gpioPin;
+    obj["ledCount"] = cfg.ledCount;
+    obj["chipType"] = cfg.chipType;
+    obj["colorOrder"] = cfg.colorOrder;
+    obj["maxBrightness"] = cfg.maxBrightness;
+    obj["enabled"] = cfg.enabled;
+  }
+
+  // Segments
+  JsonArray segments = doc["segments"].to<JsonArray>();
+  for (uint8_t i = 0; i < engine.getSegmentCount(); i++) {
+    // Access segments through const-correct pattern
+    const LedEngine& ce = engine;
+    // We need non-const access for getSegmentByIndex, but we only read here
+    LedEngine& ncEngine = const_cast<LedEngine&>(engine);
+    LedSegmentConfig* seg = ncEngine.getSegmentByIndex(i);
+    if (!seg) continue;
+
+    JsonObject obj = segments.add<JsonObject>();
+    obj["id"] = seg->id;
+    obj["name"] = seg->name;
+    obj["stripId"] = seg->stripId;
+    obj["pixelStart"] = seg->pixelStart;
+    obj["pixelCount"] = seg->pixelCount;
+    obj["instrumentId"] = seg->instrumentId;
+
+    JsonObject hitColor = obj["hitColor"].to<JsonObject>();
+    rgbToJsonArr(seg->hitColor, hitColor);
+    obj["hitBrightness"] = seg->hitBrightness;
+    obj["hitFadeDurationMs"] = seg->hitFadeDurationMs;
+    obj["hitAnimation"] = seg->hitAnimation;
+
+    JsonObject idleColor = obj["idleColor"].to<JsonObject>();
+    rgbToJsonArr(seg->idleColor, idleColor);
+    obj["idleBrightness"] = seg->idleBrightness;
+    obj["idleAnimation"] = seg->idleAnimation;
+
+    obj["velocityToBrightness"] = seg->velocityToBrightness;
+    obj["enabled"] = seg->enabled;
+  }
+
+  doc["masterBrightness"] = engine.getMasterBrightness();
+
+  return _writeJson(LEDS_FILE, doc);
+}
+
+bool Storage::loadLedConfig(LedEngine& engine) {
+  JsonDocument doc;
+  if (!_readJson(LEDS_FILE, doc)) return false;
+
+  // Strips
+  JsonArray strips = doc["strips"].as<JsonArray>();
+  if (!strips.isNull()) {
+    for (JsonObject obj : strips) {
+      LedStripConfig cfg;
+      cfg.id = obj["id"] | 0;
+      cfg.gpioPin = obj["gpioPin"] | LED_DEFAULT_PIN_0;
+      cfg.ledCount = obj["ledCount"] | 0;
+      cfg.chipType = obj["chipType"] | 0;
+      cfg.colorOrder = obj["colorOrder"] | 0;
+      cfg.maxBrightness = obj["maxBrightness"] | 128;
+      cfg.enabled = obj["enabled"] | true;
+
+      if (cfg.id < LED_MAX_STRIPS) {
+        engine.configureStrip(cfg.id, cfg);
+      }
+    }
+  }
+
+  // Segments
+  JsonArray segments = doc["segments"].as<JsonArray>();
+  if (!segments.isNull()) {
+    for (JsonObject obj : segments) {
+      LedSegmentConfig seg;
+      seg.id = obj["id"] | 0;
+      strlcpy(seg.name, obj["name"] | "Segment", sizeof(seg.name));
+      seg.stripId = obj["stripId"] | 0;
+      seg.pixelStart = obj["pixelStart"] | 0;
+      seg.pixelCount = obj["pixelCount"] | 1;
+      seg.instrumentId = obj["instrumentId"] | 0xFF;
+
+      if (obj["hitColor"].is<JsonObject>()) {
+        seg.hitColor = rgbFromJsonObj(obj["hitColor"]);
+      }
+      seg.hitBrightness = obj["hitBrightness"] | 255;
+      seg.hitFadeDurationMs = obj["hitFadeDurationMs"] | 300;
+      seg.hitAnimation = obj["hitAnimation"] | 0;
+
+      if (obj["idleColor"].is<JsonObject>()) {
+        seg.idleColor = rgbFromJsonObj(obj["idleColor"]);
+      }
+      seg.idleBrightness = obj["idleBrightness"] | 30;
+      seg.idleAnimation = obj["idleAnimation"] | 0;
+
+      seg.velocityToBrightness = obj["velocityToBrightness"] | true;
+      seg.enabled = obj["enabled"] | true;
+
+      engine.addSegment(seg);
+    }
+  }
+
+  uint8_t masterBri = doc["masterBrightness"] | 128;
+  engine.setMasterBrightness(masterBri);
+
+  DBGF("[Storage] Loaded LED config: %d segments\n", engine.getSegmentCount());
+  return true;
+}
+
+bool Storage::saveLedThemes(const LedEngine& engine) {
+  JsonDocument doc;
+  doc["version"] = 1;
+  doc["activeThemeId"] = engine.getActiveThemeId();
+
+  JsonArray themes = doc["themes"].to<JsonArray>();
+  LedEngine& ncEngine = const_cast<LedEngine&>(engine);
+  for (uint8_t i = 0; i < engine.getThemeCount(); i++) {
+    LedThemeConfig* theme = ncEngine.getThemeByIndex(i);
+    if (!theme) continue;
+
+    JsonObject obj = themes.add<JsonObject>();
+    obj["id"] = theme->id;
+    obj["name"] = theme->name;
+    obj["globalBrightness"] = theme->globalBrightness;
+    obj["idleMode"] = theme->idleMode;
+    obj["hitMode"] = theme->hitMode;
+    obj["fadeSpeed"] = theme->fadeSpeed;
+    obj["enabled"] = theme->enabled;
+
+    JsonArray palette = obj["palette"].to<JsonArray>();
+    for (uint8_t j = 0; j < LED_THEME_PALETTE_SIZE; j++) {
+      JsonObject c = palette.add<JsonObject>();
+      rgbToJsonArr(theme->palette[j], c);
+    }
+  }
+
+  return _writeJson(THEMES_FILE, doc);
+}
+
+bool Storage::loadLedThemes(LedEngine& engine) {
+  JsonDocument doc;
+  if (!_readJson(THEMES_FILE, doc)) return false;
+
+  JsonArray themes = doc["themes"].as<JsonArray>();
+  if (!themes.isNull()) {
+    for (JsonObject obj : themes) {
+      LedThemeConfig theme;
+      theme.id = obj["id"] | 0;
+      strlcpy(theme.name, obj["name"] | "Theme", sizeof(theme.name));
+      theme.globalBrightness = obj["globalBrightness"] | 128;
+      theme.idleMode = obj["idleMode"] | 0;
+      theme.hitMode = obj["hitMode"] | 0;
+      theme.fadeSpeed = obj["fadeSpeed"] | 5;
+      theme.enabled = obj["enabled"] | true;
+
+      JsonArray palette = obj["palette"].as<JsonArray>();
+      if (!palette.isNull()) {
+        uint8_t j = 0;
+        for (JsonObject c : palette) {
+          if (j >= LED_THEME_PALETTE_SIZE) break;
+          theme.palette[j] = rgbFromJsonObj(c);
+          j++;
+        }
+      }
+
+      engine.addTheme(theme);
+    }
+  }
+
+  uint8_t activeId = doc["activeThemeId"] | 0xFF;
+  if (activeId != 0xFF) engine.setActiveTheme(activeId);
+
+  DBGF("[Storage] Loaded %d LED themes\n", engine.getThemeCount());
   return true;
 }
 

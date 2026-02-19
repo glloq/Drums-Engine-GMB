@@ -11,6 +11,12 @@ EventProcessor::EventProcessor(Scheduler* scheduler, EngineState* state)
   _ccStats = {};
 }
 
+void EventProcessor::getNoteActive(uint8_t* out) const {
+  portENTER_CRITICAL(&_noteActiveMux);
+  memcpy(out, _noteActive, 128);
+  portEXIT_CRITICAL(&_noteActiveMux);
+}
+
 void EventProcessor::processMidiEvent(const MidiEvent& ev) {
   if (ev.type == MIDI_EVT_NOTE_ON && ev.data2 > 0) {
     uint8_t pipelineIdx = _lookup.note_to_pipeline[ev.data1];
@@ -46,13 +52,31 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
       _scheduler->scheduleActionSteps(pipeline.note_on_actions, pipeline.note_on_count,
                                       ev.data2, ev.timestamp, _state->raw().variables,
                                       activeGroup);
+      // Push LED event (Core 1 → Core 0, lock-free)
+      if (_ledQueue) {
+        LedEvent ledEv;
+        ledEv.midiNote = ev.data1;
+        ledEv.velocity = ev.data2;
+        ledEv.noteOn = true;
+        ledEv.segmentId = 0xFF; // Broadcast: LedEngine will resolve via note lookup
+        _ledQueue->push(ledEv);
+      }
       portENTER_CRITICAL(&_noteActiveMux);
       if (_noteActive[ev.data1] < 255) _noteActive[ev.data1]++;
       portEXIT_CRITICAL(&_noteActiveMux);
       return;
     }
 
-    _executePipeline(pipelineIdx, ev.data2, ev.timestamp);
+    _executePipeline(pipelineIdx, ev.data2, ev.timestamp, ev.data1);
+    // Push LED event for pipeline-path notes too
+    if (_ledQueue) {
+      LedEvent ledEv;
+      ledEv.midiNote = ev.data1;
+      ledEv.velocity = ev.data2;
+      ledEv.noteOn = true;
+      ledEv.segmentId = 0xFF;
+      _ledQueue->push(ledEv);
+    }
     portENTER_CRITICAL(&_noteActiveMux);
     if (_noteActive[ev.data1] < 255) _noteActive[ev.data1]++;
     portEXIT_CRITICAL(&_noteActiveMux);
@@ -79,13 +103,7 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
     if (pipeline.note_off_count > 0) {
       _scheduler->scheduleActionSteps(pipeline.note_off_actions, pipeline.note_off_count,
                                       ev.data2, ev.timestamp, _state->raw().variables);
-      portENTER_CRITICAL(&_noteActiveMux);
-      _noteActive[ev.data1] = 0;
-      portEXIT_CRITICAL(&_noteActiveMux);
-      return;
-    }
-
-    if (pipeline.output_actuator_id != 0xFF) {
+    } else if (pipeline.output_actuator_id != 0xFF) {
       ActuatorCommand cmd;
       cmd.actuator_id = pipeline.output_actuator_id;
       cmd.command_type = (uint8_t)CommandType::OFF;
@@ -93,6 +111,16 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
       cmd.duration = 0;
       cmd.execute_at = ev.timestamp;
       _scheduler->scheduleCommand(cmd);
+    }
+
+    // Push LED NoteOff event (fade out animation)
+    if (_ledQueue) {
+      LedEvent ledEv;
+      ledEv.midiNote = ev.data1;
+      ledEv.velocity = ev.data2;
+      ledEv.noteOn = false;
+      ledEv.segmentId = 0xFF;
+      _ledQueue->push(ledEv);
     }
     portENTER_CRITICAL(&_noteActiveMux);
     _noteActive[ev.data1] = 0;
@@ -108,8 +136,25 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
     uint8_t mapped = map((int)bend14, 0, 16383, 0, 127);
     MidiEvent ccEv = ev;
     ccEv.type = MIDI_EVT_CC;
-    ccEv.data1 = 126;  // Virtual CC#126 for pitch bend routing
+    ccEv.data1 = VIRTUAL_CC_PITCH_BEND;
     ccEv.data2 = mapped;
+    _processCcEvent(ccEv);
+  }
+  else if (ev.type == MIDI_EVT_AFTERTOUCH) {
+    // Route channel aftertouch via virtual CC#125 — same anti-flood and routing as CC
+    MidiEvent ccEv = ev;
+    ccEv.type = MIDI_EVT_CC;
+    ccEv.data1 = VIRTUAL_CC_AFTERTOUCH;
+    ccEv.data2 = ev.data1;  // aftertouch: data1 = pressure, data2 unused
+    _processCcEvent(ccEv);
+  }
+  else if (ev.type == MIDI_EVT_POLY_AFTERTOUCH) {
+    // Poly aftertouch: data1 = note, data2 = pressure
+    // Route via same virtual CC#125 — pressure value drives the CC route
+    MidiEvent ccEv = ev;
+    ccEv.type = MIDI_EVT_CC;
+    ccEv.data1 = VIRTUAL_CC_AFTERTOUCH;
+    ccEv.data2 = ev.data2;  // poly aftertouch: data2 = pressure
     _processCcEvent(ccEv);
   }
 }
@@ -158,7 +203,7 @@ void EventProcessor::_processCcEvent(const MidiEvent& ev) {
   }
 }
 
-void EventProcessor::_executePipeline(uint8_t pipelineIdx, uint8_t value, uint32_t timestamp) {
+void EventProcessor::_executePipeline(uint8_t pipelineIdx, uint8_t value, uint32_t timestamp, uint8_t midiNote) {
   if (pipelineIdx >= _lookup.pipeline_count) return;
 
   const CompiledPipeline& pipeline = _lookup.pipelines[pipelineIdx];
@@ -170,7 +215,7 @@ void EventProcessor::_executePipeline(uint8_t pipelineIdx, uint8_t value, uint32
 
     switch ((BlockType)block.type) {
       case BlockType::CONDITION: {
-        int16_t result = _processConditionBlock(block, currentValue, pipelineIdx);
+        int16_t result = _processConditionBlock(block, currentValue, pipelineIdx, midiNote);
         if (result < 0) return;
         currentValue = (uint8_t)result;
         break;
@@ -195,6 +240,16 @@ void EventProcessor::_executePipeline(uint8_t pipelineIdx, uint8_t value, uint32
                           currentValue, timestamp, delayAccum);
           return;
         }
+        else if (block.subtype == TIME_GATE) {
+          // Minimum time between events (param2 = ms)
+          // If last activation was too recent, halt pipeline
+          uint32_t minIntervalUs = (uint32_t)block.param2 * 1000;
+          uint32_t lastTs = _state->raw().gate_timestamps[pipelineIdx];
+          if (lastTs != 0 && (timestamp - lastTs) < minIntervalUs) {
+            return; // Too soon, reject
+          }
+          _state->raw().gate_timestamps[pipelineIdx] = timestamp;
+        }
         break;
       }
 
@@ -218,7 +273,7 @@ void EventProcessor::_executePipeline(uint8_t pipelineIdx, uint8_t value, uint32
 }
 
 int16_t EventProcessor::_processConditionBlock(const CompiledBlock& block, uint8_t value,
-                                               uint8_t pipelineIdx) {
+                                               uint8_t pipelineIdx, uint8_t midiNote) {
   switch (block.subtype) {
     case COND_THRESHOLD: {
       uint8_t varIdx = block.param1 & 0x7F;
@@ -254,6 +309,24 @@ int16_t EventProcessor::_processConditionBlock(const CompiledBlock& block, uint8
       return -1;
     }
 
+    case COND_RANDOM: {
+      // param2 = probability percentage (0-100)
+      // XOR micros with value and pipelineIdx for better distribution
+      uint8_t chance = block.param2 & 0xFF;
+      uint32_t seed = micros();
+      seed ^= (seed >> 16);
+      seed ^= ((uint32_t)value << 8) ^ ((uint32_t)pipelineIdx << 4);
+      uint8_t roll = (uint8_t)(seed & 0xFF) % 100;
+      return (roll < chance) ? value : -1;
+    }
+
+    case COND_NOTE_RANGE: {
+      // param1 = note min, param2 = note max — filter by MIDI note number
+      uint8_t noteMin = block.param1;
+      uint8_t noteMax = block.param2 & 0xFF;
+      return (midiNote >= noteMin && midiNote <= noteMax) ? value : -1;
+    }
+
     default:
       return value;
   }
@@ -274,6 +347,19 @@ uint8_t EventProcessor::_processTransformBlock(const CompiledBlock& block, uint8
       uint8_t cMax = block.param2 & 0xFF;
       if (value < cMin) return cMin;
       if (value > cMax) return cMax;
+      return value;
+    }
+
+    case TRANS_INVERT:
+      return 127 - value;
+
+    case TRANS_SET_VAR: {
+      // Store current value in a global variable (param1 = variable index)
+      // Value passes through unchanged — side effect only
+      uint8_t varIdx = block.param1;
+      if (varIdx < MAX_GLOBAL_VARS) {
+        _state->setVariable(varIdx, value);
+      }
       return value;
     }
 
@@ -301,6 +387,7 @@ uint32_t EventProcessor::_processTimePulse(const CompiledBlock& block, uint8_t a
 void EventProcessor::_processTimeRamp(const CompiledBlock& block, uint8_t actuatorId,
                                       uint8_t value, uint32_t timestamp, uint32_t delayAccum) {
   uint32_t totalDurationUs = (uint32_t)block.param2 * 1000;
+  if (totalDurationUs == 0) return;  // No duration = no ramp
   uint8_t stepCount = block.param1;
   if (stepCount == 0) {
     stepCount = totalDurationUs / 5000;
@@ -345,6 +432,12 @@ void EventProcessor::_processOutputBlock(const CompiledBlock& block, uint8_t val
 
     case OUT_PWM:
       cmd.command_type = (uint8_t)CommandType::PWM;
+      cmd.duration = 0;
+      break;
+
+    case OUT_OFF:
+      cmd.command_type = (uint8_t)CommandType::OFF;
+      cmd.value = 0;
       cmd.duration = 0;
       break;
 

@@ -34,6 +34,14 @@ public:
   uint8_t getSessionCount() const { return _sessionCount; }
   unsigned long getLastActivity() const { return _lastActivity; }
 
+  // MIDI channel filter (bitmask: bit 0 = ch1, bit 9 = ch10, 0xFFFF = all)
+  uint16_t getChannelMask() const { return _channelMask; }
+  void setChannelMask(uint16_t mask) { _channelMask = mask; }
+  bool isChannelAllowed(uint8_t channel) const {
+    if (channel < 1 || channel > 16) return false;
+    return (_channelMask >> (channel - 1)) & 1;
+  }
+
   // Stats
   uint32_t getNotesReceived() const { return _notesReceived; }
   uint32_t getNotesSent() const { return _notesSent; }
@@ -47,6 +55,7 @@ private:
   unsigned long _lastActivity;
   uint32_t _notesReceived;
   uint32_t _notesSent;
+  uint16_t _channelMask = 0xFFFF;  // Default: all channels allowed
 
   // Use pipeline mode if pipelines are compiled
   bool _usePipelineMode() const;

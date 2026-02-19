@@ -70,7 +70,178 @@
 - [x] STACK retrigger compteur uint8_t (au lieu de bool)
 - [x] NoteOff velocity passthrough
 
+## Phase 8 — Systeme LED WS2812B
+**Statut: implementee**
+- [x] Types LED: `LedStripConfig`, `LedSegmentConfig`, `LedThemeConfig`, `LedEvent`, `RgbColor`
+- [x] Driver WS2812B via ESP32 RMT (`LedStripDriver`) — 4 strips max, buffer RGB
+- [x] Queue lock-free SPSC (`LedEventQueue`) — communication Core 1 → Core 0
+- [x] Moteur LED 60fps (`LedEngine`) — hit animations + idle/theme + alpha blend
+- [x] Animations hit: FLASH, PULSE, RIPPLE (declenchees par MIDI velocity)
+- [x] Animations idle: OFF, STATIC, BREATHING (sin 3s), RAINBOW (HSV defilant)
+- [x] Themes LED: palettes 8 couleurs, modes globaux, activation dynamique
+- [x] Integration EventProcessor: push `LedEvent` sur NoteOn (lock-free)
+- [x] Lookup note MIDI → segments LED (rebuild depuis InstrumentManager)
+- [x] REST API complete: `/api/led/strips`, `/api/led/segments`, `/api/led/themes`, `/api/led/status`
+- [x] Persistance LittleFS: `/leds.json` (strips + segments), `/themes.json`
+- [x] UI web: onglet LEDs avec CRUD strips/segments/themes, color pickers, test live
+- [x] Config: `LED_MAX_STRIPS=4`, `LED_MAX_SEGMENTS=16`, `LED_MAX_THEMES=8`, `LED_FPS=60`
+- [x] GPIO par defaut: 4, 5, 16, 17 (SN74HCT125 level shifter recommande)
+
+## Phase 9 — Pipeline complet et editeur visuel
+**Statut: implementee**
+- [x] Aftertouch (channel pressure) → CC#125 virtuel, routage anti-flood
+- [x] Nouveaux blocs CONDITION: Random (probabilite), NoteRange (filtre valeur)
+- [x] Nouveaux blocs TRANSFORM: Invert (127-val), SetVar (ecriture variable globale)
+- [x] Nouveau bloc TIME: Gate (intervalle minimum entre events)
+- [x] Nouveau bloc OUTPUT: Off (commande arret actionneur)
+- [x] 19 sous-types de blocs pipeline (5 CONDITION, 5 TRANSFORM, 4 TIME, 4 OUTPUT)
+- [x] API schema blocs: `GET /api/pipeline/block-schema` (description dynamique pour UI)
+- [x] API pipeline CRUD: `GET/PUT /api/pipeline/blocks?instrumentId=<id>`
+- [x] API test pipeline: `POST /api/pipeline/test` (simule NoteOn)
+- [x] Pipeline Editor UI: onglet visuel avec blocs, actions, CC, reordonnancement
+- [x] Modal ajout bloc: picker par categorie avec description
+- [x] Modal edition bloc: formulaire dynamique genere depuis le schema
+- [x] CC virtuels documentes: CC#125 (aftertouch), CC#126 (pitch bend)
+- [x] Fix bug hideModal → closeModal dans les modals LED
+
+## Phase 10 — Audit, corrections et outils utilisateur
+**Statut: implementee**
+- [x] Fix COND_NOTE_RANGE: filtre par note MIDI (et non velocity) via parametre `midiNote` dans pipeline
+- [x] Poly aftertouch (MIDI_EVT_POLY_AFTERTOUCH) route via CC#125 comme channel aftertouch
+- [x] SOLENOID_MUTE: toggle PULSE, POSITION explicite (< 64 = mute, >= 64 = libre), pas de timeout safety
+- [x] API `POST /api/test/note` pour piano virtuel (NoteOn/NoteOff brut)
+- [x] Page Piano Virtuel: pads GM percussion (27-81) + mode full (0-127), velocity slider, test CC inline
+- [x] Page Calibration: test individuel actionneurs (slider + tester/stop), test instruments (velocity)
+- [x] Tab Pipeline renomme (Mappings → Pipeline)
+- [x] Block schema COND_NOTE_RANGE: description corrigee ("note MIDI source")
+
+## Phase 11 — Temps reel et UX
+**Statut: implementee**
+- [x] API `GET /api/notes/active` — notes MIDI actuellement actives (snapshot thread-safe)
+- [x] WebSocket broadcast des changements de notes MIDI (~30ms polling)
+- [x] Piano Virtuel: mode temps reel avec indicateurs visuels des notes actives (flash + glow)
+- [x] Settings modal: grid systeme (firmware, chip, CPU, RAM, flash, uptime, stockage)
+- [x] Status API enrichi: chip_model, cpu_freq_mhz, flash_size, min_free_heap, sdk_version, firmware_version
+- [x] Tabs scrollables pour mobile (overflow-x auto, 6 onglets)
+
+## Phase 12 — Outils et productivite
+**Statut: implementee**
+- [x] MIDI Monitor: log temps reel des notes via WebSocket dans les Reglages
+- [x] Journal systeme: lecture/effacement des logs moteur depuis l'UI
+- [x] Import/Export configuration: sauvegarde JSON complte (actionneurs + instruments)
+- [x] MIDI RX indicator: flash jaune dans l'en-tete a chaque note recue
+- [x] Emergency STOP ALL: arret immediat de tous les actionneurs (calibration)
+- [x] Duplication: cloner un actionneur ou un instrument en un clic
+- [x] Filtres de recherche: champs texte pour filtrer actionneurs et instruments
+- [x] Help contextuel: aide par type d'actionneur dans le formulaire de creation
+- [x] Validation formulaires: nom requis, bornes min/max, avertissement note MIDI dupliquee
+- [x] Piano clavier: raccourcis clavier (A-P, 1-8) pour jouer les notes
+- [x] Guide de demarrage: instructions pour les nouveaux utilisateurs
+- [x] Fix TIME_RAMP: protection division par zero quand la duree est 0
+
+## Phase 13 — Editeur boucles, routage MIDI et calibration avancee (52 features)
+**Statut: implementee**
+- [x] Loop editor: separateurs visuels mesures/temps (bordures accent, fonds alternes)
+- [x] Loop editor: visualisation velocity (opacite proportionnelle, tooltip)
+- [x] Loop editor: slider velocity pour nouvelles notes + clic droit cycle (40/70/100/127)
+- [x] Loop editor: playhead temps reel (polling status 100ms, colonne surlignee vert)
+- [x] Loop editor: bouton Effacer, compteur notes, grille max 64 pas
+- [x] MIDI channel routing: bitmask 16 canaux configurable (defaut: tous)
+- [x] MIDI channel routing: filtrage dans tous les callbacks (NoteOn/Off, CC, PitchBend, Aftertouch)
+- [x] MIDI channel routing: API `GET/PUT /api/midi/channels`, persistance `/midi.json`
+- [x] MIDI channel routing: grille 16 canaux dans Reglages + presets (Tous, Ch.10 Drums)
+- [x] Calibration: sweep velocity progressif (20→40→60→80→100→120→127)
+- [x] Calibration: affichage des actionneurs lies a chaque instrument
+- [x] LED segments: apercu couleurs temps reel dans l'editeur (hit/idle/luminosite)
+- [x] Status API enrichi: `loop_tick`, `loop_index`, `midi_channel_mask`
+- [x] MIDI Learn: assigner une note en jouant sur le controleur MIDI (via WebSocket)
+- [x] Carte MIDI Note Map: vue d'ensemble des 55 notes GM avec assignation couleur
+- [x] Affichage "utilise par" sur chaque actionneur (instrument reverse-lookup)
+- [x] Actions groupees instruments: activer/desactiver/tester tous
+- [x] Reordonnancement actions NoteOn/NoteOff (fleches haut/bas)
+- [x] Mobile responsive: taille tactile, modals scroll, header compact
+- [x] Derniere note MIDI recue dans l'en-tete (indicateur 2s)
+- [x] Storage generic: `saveJsonFile`/`loadJsonFile` pour configs simples
+- [x] Calibration: polling temps reel etat actionneurs (badge ACTIF + compteur, 500ms)
+- [x] API legere `/api/actuators/status` pour polling rapide (id + active seulement)
+- [x] Instruments: slider velocity inline + test direct depuis la liste
+- [x] Categorie couleur instruments: drums (rouge), cymbals (or), latin (vert), other (bleu)
+- [x] Loop editor: Tap Tempo (moyenne des 8 derniers taps, timeout 3s)
+- [x] Loop editor: presets rythmiques (Rock, Rock+Ride, Funk, Bossa Nova, HiHat)
+- [x] Loop editor: quantification triolets (1/8T, 1/16T)
+- [x] Loop list: bouton Dupliquer (clone boucle + events)
+- [x] Factory reset: `POST /api/factory-reset` (supprime config, redemarre)
+- [x] Factory reset: bouton dans Reglages avec double confirmation
+- [x] Export/Import config v3: inclut boucles + masque canaux MIDI
+- [x] Instruments: tri par nom, note MIDI, categorie
+- [x] Actionneurs: actions groupees (activer/desactiver/stop tous)
+- [x] Piano virtuel: overlay aide raccourcis clavier
+- [x] WiFi: indicateur qualite signal colore + affichage mDNS
+- [x] MIDI Panic: arret complet notes + actionneurs (calibration)
+- [x] Systeme: affichage version SDK dans la grille info
+- [x] Theme dark/light: toggle dans l'en-tete (persiste localStorage)
+- [x] MIDI Monitor: affichage velocity sur les NoteOn
+- [x] WebSocket: velocity incluse dans les messages midi_note
+- [x] Loop editor: renommage inline du titre (clic + edition)
+- [x] Note Map: creation rapide d'instrument depuis une note non assignee
+- [x] Note Map: detection automatique categorie (drums/cymbals/latin)
+- [x] Actionneurs: icones type (S/M/P/O) avec couleurs distinctes
+- [x] Loop grid: compteur notes par instrument dans les labels
+- [x] Indicateur modifications non sauvegardees (point orange dans l'en-tete)
+- [x] Raccourcis clavier globaux: Ctrl+S (sauvegarder), Escape (fermer modal)
+- [x] Clic sur backdrop pour fermer les modals
+- [x] Detection perte de connexion ESP32 + notification reconnexion
+- [x] API silencieuse pour polling (suppression toast spam)
+- [x] Servo quick positions: Min/Centre/Max dans calibration
+
+## Phase 14 — Enchainement, productivite et UX (22 features)
+**Statut: implementee**
+- [x] Enchainement boucles: lecture sequentielle de N boucles (avec repetition optionnelle)
+- [x] API `POST /api/loop/chain` (loopIds + repeat)
+- [x] UI enchainement: construction visuelle de la chaine + statut temps reel
+- [x] Copier/Coller actions entre instruments (NoteOn/NoteOff/CC)
+- [x] Filtre recherche page calibration (actionneurs + instruments)
+- [x] Diagnostics systeme: verification config (actionneurs inutilises, notes dupliquees, instruments incomplets)
+- [x] Indicateurs completude instrument (icone statut vert/orange/rouge)
+- [x] Kits rapides: creation en un clic de kits GM drums (Minimal/Standard/Complet)
+- [x] Tri actionneurs (nom/ID/type)
+- [x] Double-clic pour modifier actionneurs et instruments
+- [x] Avertissement perte de modifications non sauvegardees (beforeunload)
+- [x] Compteurs dans onglets (badges actionneurs/instruments)
+- [x] Compteur notes assignees dans la carte MIDI
+- [x] Pourcentage RAM utilise dans info systeme
+- [x] Detection conflits de pin actionneur (bus/adresse/pin)
+- [x] Flash MIDI temps reel sur les cartes instrument (via WebSocket)
+- [x] API validation config `GET /api/validate` (issues, warnings, pipeline/CC stats)
+- [x] Test sequentiel actionneurs en calibration (highlight visuel progressif)
+- [x] LED segments: apercu couleurs hit/idle avec swatches visuels + luminosite
+- [x] LED strips: compteur total LEDs dans le header
+- [x] Boucles: compteur notes dans la liste
+- [x] Piano: mode "Mes Instruments" (affiche uniquement les instruments configures)
+- [x] Note Map: creation batch de tous les instruments GM manquants en un clic
+- [x] Badge canal MIDI sur les cartes instrument (si different du canal 10)
+
+## Phase 15 — Robustesse, pause/resume et onboarding (17 features)
+**Statut: implementee**
+- [x] Fix loop chain deletion safety (stop chain si boucle referencee supprimee)
+- [x] Ajustement indices chain apres suppression de boucle
+- [x] API `POST /api/loop/pause` et `POST /api/loop/resume`
+- [x] Etat `loop_paused` expose dans `/api/status`
+- [x] Bouton Pause/Resume dans les controles transport boucle
+- [x] Synchronisation etat pause via polling status
+- [x] Affichage position boucle (mesure.temps) dans le transport
+- [x] Kits rapides actionneurs (basique 3 / standard 5 / complet 8)
+- [x] Detection chevauchement pixels LED segments (warning)
+- [x] Visualisation layout LED strip (barre couleurs segments)
+- [x] Filtre instruments incomplets (checkbox)
+- [x] Attribut `data-complete` sur les items instrument
+- [x] Export/Import config v4: inclut LED strips + segments + themes
+- [x] Courbes velocity exposees dans `/api/capabilities` (linear/expo/log)
+- [x] Test integration: chaine complete MIDI → instrument (calibration)
+- [x] Auto-scroll vers item cree apres ajout (actionneur/instrument)
+- [x] Persistence onglet actif (sessionStorage + restauration au chargement)
+
 ## Risques / dette technique
 - Couverture tests: script curl fonctionnel mais pas de CI automatise.
 - Dependance environnement outillage (`pio`) pour validation complete firmware.
-- Pipeline editor UI non implemente (vision long terme).
+- LED: FastLED non utilise (RMT natif via espShow), a evaluer si besoin de plus d'animations.

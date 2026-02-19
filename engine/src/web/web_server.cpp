@@ -5,12 +5,12 @@ WebServerManager::WebServerManager(InstrumentManager* instrMgr, ActuatorManager*
                                     ActuatorFactory* actFactory,
                                     LoopEngine* loopEngine, MidiEngine* midiEngine,
                                     Storage* storage, Scheduler* scheduler,
-                                    EventProcessor* eventProc)
+                                    EventProcessor* eventProc, LedEngine* ledEngine)
   : _server(WEB_PORT), _ws(WS_PATH),
     _instrMgr(instrMgr), _actMgr(actMgr), _actFactory(actFactory),
     _loopEngine(loopEngine),
     _midiEngine(midiEngine), _storage(storage), _scheduler(scheduler),
-    _eventProc(eventProc) {}
+    _eventProc(eventProc), _ledEngine(ledEngine) {}
 
 bool WebServerManager::begin() {
   // Initialize authentication (load or generate API token)
@@ -31,6 +31,33 @@ bool WebServerManager::begin() {
 
 void WebServerManager::update() {
   _ws.cleanupClients();
+  // Broadcast MIDI note changes via WebSocket (~every 30ms)
+  if (_ws.count() > 0) {
+    uint32_t now = micros();
+    if (now - _wsLastBroadcastUs >= 30000) {
+      _wsLastBroadcastUs = now;
+      _broadcastNoteChanges();
+    }
+  }
+}
+
+void WebServerManager::_broadcastNoteChanges() {
+  if (!_eventProc) return;
+  uint8_t current[128];
+  _eventProc->getNoteActive(current);
+
+  for (uint8_t i = 0; i < 128; i++) {
+    bool wasActive = _wsNoteCache[i] > 0;
+    bool isActive = current[i] > 0;
+    if (wasActive != isActive) {
+      // Send individual note change via WebSocket (includes velocity)
+      char buf[80];
+      snprintf(buf, sizeof(buf), "{\"type\":\"midi_note\",\"note\":%d,\"on\":%s,\"vel\":%d}",
+               i, isActive ? "true" : "false", current[i]);
+      _ws.textAll(buf);
+    }
+  }
+  memcpy(_wsNoteCache, current, 128);
 }
 
 void WebServerManager::_setupRoutes() {
@@ -84,6 +111,9 @@ void WebServerManager::_setupRoutes() {
   // --- Actuators API ---
   _server.on("/api/actuators", HTTP_GET,
     [this](AsyncWebServerRequest* req) { _handleGetActuators(req); });
+
+  _server.on("/api/actuators/status", HTTP_GET,
+    [this](AsyncWebServerRequest* req) { _handleGetActuatorStatus(req); });
 
   _server.on("/api/actuators", HTTP_POST,
     [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
@@ -153,6 +183,20 @@ void WebServerManager::_setupRoutes() {
       }
     });
 
+  _server.on("/api/test/note", HTTP_POST,
+    [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) {
+        if (!_auth.checkAuth(req)) return;
+        _handleTestNote(req, data, len);
+      }
+    });
+
+  // Active notes (for real-time piano display)
+  _server.on("/api/notes/active", HTTP_GET,
+    [this](AsyncWebServerRequest* req) { _handleGetActiveNotes(req); });
+
   // --- Loops API ---
   _server.on("/api/loops", HTTP_GET,
     [this](AsyncWebServerRequest* req) { _handleGetLoops(req); });
@@ -199,6 +243,37 @@ void WebServerManager::_setupRoutes() {
       if (!_rateLimiter.checkRate(req)) return;
       if (!_auth.checkAuth(req)) return;
       _handleStopLoop(req);
+    });
+
+  _server.on("/api/loop/pause", HTTP_POST,
+    [this](AsyncWebServerRequest* req) {
+      if (!_rateLimiter.checkRate(req)) return;
+      if (!_auth.checkAuth(req)) return;
+      _loopEngine->pause();
+      JsonDocument doc;
+      doc["message"] = "Paused";
+      doc["paused"] = _loopEngine->isPaused();
+      _sendJson(req, 200, doc);
+    });
+
+  _server.on("/api/loop/resume", HTTP_POST,
+    [this](AsyncWebServerRequest* req) {
+      if (!_rateLimiter.checkRate(req)) return;
+      if (!_auth.checkAuth(req)) return;
+      _loopEngine->resume();
+      JsonDocument doc;
+      doc["message"] = "Resumed";
+      doc["paused"] = _loopEngine->isPaused();
+      _sendJson(req, 200, doc);
+    });
+
+  _server.on("/api/loop/chain", HTTP_POST,
+    [this](AsyncWebServerRequest* req) {},
+    NULL,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (!_rateLimiter.checkRate(req)) return;
+      if (!_auth.checkAuth(req)) return;
+      _handlePlayChain(req, data, len);
     });
 
   // --- System API ---
@@ -251,6 +326,186 @@ void WebServerManager::_setupRoutes() {
   // --- Auth token API (local access only) ---
   _server.on("/api/auth-token", HTTP_GET,
     [this](AsyncWebServerRequest* req) { _handleGetAuthToken(req); });
+
+  // --- Validation ---
+  _server.on("/api/validate", HTTP_GET,
+    [this](AsyncWebServerRequest* req) { _handleValidateConfig(req); });
+
+  // --- Factory Reset ---
+  _server.on("/api/factory-reset", HTTP_POST,
+    [this](AsyncWebServerRequest* req) {
+      if (!_rateLimiter.checkRate(req)) return;
+      if (!_auth.checkAuth(req)) return;
+      _handleFactoryReset(req);
+    });
+
+  // --- MIDI Channel Config ---
+  _server.on("/api/midi/channels", HTTP_GET,
+    [this](AsyncWebServerRequest* req) { _handleGetMidiChannels(req); });
+
+  _server.on("/api/midi/channels", HTTP_PUT,
+    [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) {
+        if (!_auth.checkAuth(req)) return;
+        _handleSetMidiChannels(req, data, len);
+      }
+    });
+
+  // --- LED Strips API ---
+  _server.on("/api/led/strips", HTTP_GET,
+    [this](AsyncWebServerRequest* req) { _handleGetLedStrips(req); });
+
+  _server.on("/api/led/strips", HTTP_POST,
+    [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) {
+        if (!_auth.checkAuth(req)) return;
+        _handleConfigureLedStrip(req, data, len);
+      }
+    });
+
+  _server.on("/api/led/strip", HTTP_DELETE,
+    [this](AsyncWebServerRequest* req) {
+      if (!_rateLimiter.checkRate(req)) return;
+      if (!_auth.checkAuth(req)) return;
+      _handleDeleteLedStrip(req);
+    });
+
+  _server.on("/api/led/strip/test", HTTP_POST,
+    [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) {
+        if (!_auth.checkAuth(req)) return;
+        _handleTestLedStrip(req, data, len);
+      }
+    });
+
+  // --- LED Segments API ---
+  _server.on("/api/led/segments", HTTP_GET,
+    [this](AsyncWebServerRequest* req) { _handleGetLedSegments(req); });
+
+  _server.on("/api/led/segments", HTTP_POST,
+    [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) {
+        if (!_auth.checkAuth(req)) return;
+        _handleCreateLedSegment(req, data, len);
+      }
+    });
+
+  _server.on("/api/led/segment", HTTP_PUT,
+    [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) {
+        if (!_auth.checkAuth(req)) return;
+        _handleUpdateLedSegment(req, data, len);
+      }
+    });
+
+  _server.on("/api/led/segment", HTTP_DELETE,
+    [this](AsyncWebServerRequest* req) {
+      if (!_rateLimiter.checkRate(req)) return;
+      if (!_auth.checkAuth(req)) return;
+      _handleDeleteLedSegment(req);
+    });
+
+  _server.on("/api/led/segment/test", HTTP_POST,
+    [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) {
+        if (!_auth.checkAuth(req)) return;
+        _handleTestLedSegment(req, data, len);
+      }
+    });
+
+  // --- LED Themes API ---
+  _server.on("/api/led/themes", HTTP_GET,
+    [this](AsyncWebServerRequest* req) { _handleGetLedThemes(req); });
+
+  _server.on("/api/led/themes", HTTP_POST,
+    [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) {
+        if (!_auth.checkAuth(req)) return;
+        _handleCreateLedTheme(req, data, len);
+      }
+    });
+
+  _server.on("/api/led/theme", HTTP_PUT,
+    [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) {
+        if (!_auth.checkAuth(req)) return;
+        _handleUpdateLedTheme(req, data, len);
+      }
+    });
+
+  _server.on("/api/led/theme", HTTP_DELETE,
+    [this](AsyncWebServerRequest* req) {
+      if (!_rateLimiter.checkRate(req)) return;
+      if (!_auth.checkAuth(req)) return;
+      _handleDeleteLedTheme(req);
+    });
+
+  _server.on("/api/led/theme/active", HTTP_POST,
+    [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) {
+        if (!_auth.checkAuth(req)) return;
+        _handleSetActiveLedTheme(req, data, len);
+      }
+    });
+
+  // --- Pipeline Editor API ---
+  _server.on("/api/pipeline/block-schema", HTTP_GET,
+    [this](AsyncWebServerRequest* req) { _handleGetPipelineBlockSchema(req); });
+
+  _server.on("/api/pipeline/blocks", HTTP_GET,
+    [this](AsyncWebServerRequest* req) { _handleGetPipelineBlocks(req); });
+
+  _server.on("/api/pipeline/blocks", HTTP_PUT,
+    [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) {
+        if (!_auth.checkAuth(req)) return;
+        _handleSetPipelineBlocks(req, data, len);
+      }
+    });
+
+  _server.on("/api/pipeline/test", HTTP_POST,
+    [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) {
+        if (!_auth.checkAuth(req)) return;
+        _handleTestPipeline(req, data, len);
+      }
+    });
+
+  // --- LED Status / Brightness ---
+  _server.on("/api/led/status", HTTP_GET,
+    [this](AsyncWebServerRequest* req) { _handleGetLedStatus(req); });
+
+  _server.on("/api/led/brightness", HTTP_POST,
+    [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) {
+        if (!_auth.checkAuth(req)) return;
+        _handleSetLedBrightness(req, data, len);
+      }
+    });
 
   _server.onNotFound([](AsyncWebServerRequest* req) {
     req->send(404, "application/json", "{\"error\":\"Not found\"}");

@@ -46,6 +46,10 @@ enum class ActuatorBehavior : uint8_t {
   HIHAT_CONTROLLER,       // Servo hi-hat pedal controller (CC#4, splash detection)
   SERVO_MUTE,             // Servo mute (position fermee = mute, ouverte = libre)
   SOLENOID_MUTE,          // Solenoide mute (off = mute/contact, on = libre)
+  MOTOR_TIMED,            // Moteur active pour une duree puis arret auto
+  MOTOR_SPEED,            // Moteur vitesse continue (velocity → vitesse)
+  MOTOR_SWEEP,            // 1 end stop: aller puis arret / 2 end stops: aller-retour
+  MOTOR_ALTERNATE,        // Moteur alterne direction entre end stops
   BEHAVIOR_COUNT
 };
 
@@ -93,6 +97,11 @@ constexpr uint8_t MIDI_EVT_NOTE_OFF    = 1;
 constexpr uint8_t MIDI_EVT_CC         = 2;
 constexpr uint8_t MIDI_EVT_PITCH_BEND = 3;
 constexpr uint8_t MIDI_EVT_AFTERTOUCH = 4;
+constexpr uint8_t MIDI_EVT_POLY_AFTERTOUCH = 5;
+
+// Virtual CC numbers (reserved for internal routing)
+constexpr uint8_t VIRTUAL_CC_AFTERTOUCH = 125;  // Channel aftertouch → CC#125
+constexpr uint8_t VIRTUAL_CC_PITCH_BEND = 126;  // Pitch bend → CC#126
 
 // --- Commande Actuator (structure universelle) ---
 struct ActuatorCommand {
@@ -161,12 +170,18 @@ struct ActuatorConfig {
   uint8_t endStopPin2;     // End stop pin 2 GPIO (0xFF = disabled)
 
   // --- Behavior-specific param semantics ---
-  // SOLENOID_STRIKE: paramMin=durMin(ms), paramMax=durMax(ms), cooldownUs=cooldown/100
-  // SOLENOID_HOLD:   paramMin=pwmActivation(0-255), paramMax=pwmHold(0-255),
-  //                  paramDefault=transitionMs, cooldownUs=maxActiveTime*10
-  // SERVO_*:         paramMin=angleMin, paramMax=angleMax, paramDefault=angleDefault
-  // MOTOR:           paramMin=pwmMin%, paramMax=pwmMax%, paramDefault=driveSpeed,
-  //                  endStopPin1/2 for limit switches
+  // SOLENOID_STRIKE:   paramMin=durMin(ms), paramMax=durMax(ms), cooldownUs=cooldown/100
+  // SOLENOID_HOLD:     paramMin=pwmActivation(0-255), paramMax=pwmHold(0-255),
+  //                    paramDefault=transitionMs, cooldownUs=maxActiveTime*10
+  // SERVO_*:           paramMin=angleMin, paramMax=angleMax, paramDefault=angleDefault
+  // MOTOR_OPTICAL:     paramMin=edgesMin, paramMax=edgesMax, paramDefault=driveSpeed,
+  //                    hwAddress=sensorPin GPIO, endStopPin1/2 for limit switches
+  // MOTOR_TIMED:       paramMin=pwmMin%, paramMax=pwmMax%, duration from command
+  // MOTOR_SPEED:       paramMin=pwmMin%, paramMax=pwmMax% (PWM command → vitesse)
+  // MOTOR_SWEEP:       paramMin=pwmMin%, paramMax=pwmMax%, endStopPin1/2 requis
+  //                    1 end stop → aller simple / 2 end stops + hwAddress=dirPin → aller-retour
+  // MOTOR_ALTERNATE:   paramMin=pwmMin%, paramMax=pwmMax%, hwAddress=dirPin GPIO,
+  //                    endStopPin1/2 requis (alterne direction entre les 2 butees)
 
   ActuatorConfig()
     : id(0), type(ActuatorType::SOLENOID), behavior(ActuatorBehavior::SOLENOID_STRIKE),
@@ -225,24 +240,30 @@ struct CompiledBlock {
 };
 
 // Sous-types pour CONDITION
-constexpr uint8_t COND_THRESHOLD     = 0;  // Seuil
-constexpr uint8_t COND_ROUND_ROBIN   = 1;  // Alternance
-constexpr uint8_t COND_VELOCITY_SPLIT = 2; // Split velocite
+constexpr uint8_t COND_THRESHOLD     = 0;  // Seuil (variable vs valeur)
+constexpr uint8_t COND_ROUND_ROBIN   = 1;  // Alternance (round-robin groupes)
+constexpr uint8_t COND_VELOCITY_SPLIT = 2; // Split velocite (range gate)
+constexpr uint8_t COND_RANDOM        = 3;  // Probabilite (param2 = % chance, 0-100)
+constexpr uint8_t COND_NOTE_RANGE    = 4;  // Filtre note MIDI (param1=min, param2=max)
 
 // Sous-types pour TRANSFORM
-constexpr uint8_t TRANS_VELOCITY_CURVE = 0; // Courbe velocite
-constexpr uint8_t TRANS_GAIN          = 1;  // Gain/scale
-constexpr uint8_t TRANS_CLAMP         = 2;  // Limiteur
+constexpr uint8_t TRANS_VELOCITY_CURVE = 0; // Courbe velocite (LINEAR/EXPO/LOG)
+constexpr uint8_t TRANS_GAIN          = 1;  // Gain/scale (param2 = %, 100=1x)
+constexpr uint8_t TRANS_CLAMP         = 2;  // Limiteur (param1=min, param2=max)
+constexpr uint8_t TRANS_INVERT        = 3;  // Inverse (127 - value)
+constexpr uint8_t TRANS_SET_VAR       = 4;  // Stocke value dans variable (param1=varIdx)
 
 // Sous-types pour TIME
-constexpr uint8_t TIME_PULSE   = 0;  // Impulsion
-constexpr uint8_t TIME_DELAY   = 1;  // Delai
-constexpr uint8_t TIME_RAMP    = 2;  // Ramping
+constexpr uint8_t TIME_PULSE   = 0;  // Impulsion (velocity → duree)
+constexpr uint8_t TIME_DELAY   = 1;  // Delai fixe (param2=ms)
+constexpr uint8_t TIME_RAMP    = 2;  // Ramping (micro-steps progressifs)
+constexpr uint8_t TIME_GATE    = 3;  // Gate temporel (param2=ms minimum entre events)
 
 // Sous-types pour OUTPUT_BLOCK
 constexpr uint8_t OUT_PULSE    = 0;  // Sortie impulsion
 constexpr uint8_t OUT_POSITION = 1;  // Sortie position
 constexpr uint8_t OUT_PWM      = 2;  // Sortie PWM
+constexpr uint8_t OUT_OFF      = 3;  // Sortie arret
 
 // Courbes de velocite
 constexpr uint8_t CURVE_LINEAR = 0;
@@ -310,10 +331,12 @@ struct PipelineLookup {
 struct GlobalState {
   uint16_t variables[MAX_GLOBAL_VARS];
   uint8_t round_robin_counters[MAX_PIPELINES]; // Compteurs alternance
+  uint32_t gate_timestamps[MAX_PIPELINES];     // Derniere activation TIME_GATE par pipeline
 
   GlobalState() {
     memset(variables, 0, sizeof(variables));
     memset(round_robin_counters, 0, sizeof(round_robin_counters));
+    memset(gate_timestamps, 0, sizeof(gate_timestamps));
   }
 };
 
@@ -361,6 +384,10 @@ inline const char* actuatorBehaviorName(ActuatorBehavior b) {
     case ActuatorBehavior::HIHAT_CONTROLLER:    return "Hi-Hat Controller";
     case ActuatorBehavior::SERVO_MUTE:          return "Servo Mute";
     case ActuatorBehavior::SOLENOID_MUTE:       return "Solenoid Mute";
+    case ActuatorBehavior::MOTOR_TIMED:         return "Motor Timed";
+    case ActuatorBehavior::MOTOR_SPEED:         return "Motor Speed";
+    case ActuatorBehavior::MOTOR_SWEEP:         return "Motor Sweep";
+    case ActuatorBehavior::MOTOR_ALTERNATE:     return "Motor Alternate";
     default:                               return "Unknown";
   }
 }
@@ -402,5 +429,129 @@ const MidiNoteInfo GM_DRUM_NOTES[] = {
   {80, "Mute Triangle"}, {81, "Open Triangle"}
 };
 constexpr uint8_t GM_DRUM_NOTES_COUNT = sizeof(GM_DRUM_NOTES) / sizeof(GM_DRUM_NOTES[0]);
+
+// ============================================================================
+// LED Strip Types (WS2812B via ESP32 RMT)
+// ============================================================================
+
+// --- Couleur RGB compacte ---
+struct RgbColor {
+  uint8_t r, g, b;
+  RgbColor() : r(0), g(0), b(0) {}
+  RgbColor(uint8_t r_, uint8_t g_, uint8_t b_) : r(r_), g(g_), b(b_) {}
+};
+
+// --- Type de LED supportes ---
+enum class LedChipType : uint8_t {
+  WS2812B = 0,
+  SK6812,       // RGBW
+  WS2811
+};
+
+// --- Animations de hit (declenchees par MIDI) ---
+enum class LedHitAnimation : uint8_t {
+  FLASH = 0,    // Allumage instantane + fade out
+  PULSE,        // Montee + descente douce
+  RIPPLE        // Propagation depuis le centre du segment
+};
+
+// --- Animations idle (continues, ambiance) ---
+enum class LedIdleAnimation : uint8_t {
+  OFF = 0,
+  STATIC,       // Couleur fixe
+  BREATHING,    // Pulsation lente
+  RAINBOW       // Arc-en-ciel defilant
+};
+
+// --- Configuration physique d'un strip ---
+struct LedStripConfig {
+  uint8_t id;              // 0-3
+  uint8_t gpioPin;         // GPIO data pin
+  uint16_t ledCount;       // Nombre total de LEDs sur ce strip
+  uint8_t chipType;        // LedChipType
+  uint8_t colorOrder;      // 0=GRB (WS2812B default), 1=RGB, 2=BRG
+  uint8_t maxBrightness;   // Limite globale 0-255 (protection alimentation)
+  bool enabled;
+
+  LedStripConfig()
+    : id(0), gpioPin(LED_DEFAULT_PIN_0), ledCount(0),
+      chipType((uint8_t)LedChipType::WS2812B), colorOrder(0),
+      maxBrightness(128), enabled(false) {}
+};
+
+// --- Segment LED assigne a un instrument ---
+struct LedSegmentConfig {
+  uint8_t id;              // ID unique
+  char name[24];
+  uint8_t stripId;         // Quel strip physique (0-3)
+  uint16_t pixelStart;     // Premier pixel du segment
+  uint16_t pixelCount;     // Nombre de pixels
+
+  uint8_t instrumentId;    // ID instrument associe (0xFF = aucun)
+
+  // Hit (declenchement MIDI)
+  RgbColor hitColor;
+  uint8_t hitBrightness;   // 0-255
+  uint16_t hitFadeDurationMs;  // Duree fade out (50-2000ms)
+  uint8_t hitAnimation;    // LedHitAnimation
+
+  // Idle (ambiance continue)
+  RgbColor idleColor;
+  uint8_t idleBrightness;  // 0-255
+  uint8_t idleAnimation;   // LedIdleAnimation
+
+  bool velocityToBrightness;  // true = velocity controle luminosite hit
+  bool enabled;
+
+  LedSegmentConfig()
+    : id(0), stripId(0), pixelStart(0), pixelCount(0),
+      instrumentId(0xFF),
+      hitBrightness(255), hitFadeDurationMs(300),
+      hitAnimation((uint8_t)LedHitAnimation::FLASH),
+      idleBrightness(30),
+      idleAnimation((uint8_t)LedIdleAnimation::OFF),
+      velocityToBrightness(true), enabled(true) {
+    name[0] = '\0';
+    hitColor = RgbColor(255, 255, 255);
+    idleColor = RgbColor(20, 20, 40);
+  }
+};
+
+// --- Theme LED global ---
+struct LedThemeConfig {
+  uint8_t id;
+  char name[24];
+  uint8_t globalBrightness; // 0-255 master
+  uint8_t idleMode;         // LedIdleAnimation (applique a tous les segments)
+  uint8_t hitMode;          // LedHitAnimation (applique a tous les segments)
+  RgbColor palette[LED_THEME_PALETTE_SIZE];
+  uint8_t fadeSpeed;        // 1-10 (vitesse transitions)
+  bool enabled;
+
+  LedThemeConfig()
+    : id(0), globalBrightness(128),
+      idleMode((uint8_t)LedIdleAnimation::BREATHING),
+      hitMode((uint8_t)LedHitAnimation::FLASH),
+      fadeSpeed(5), enabled(true) {
+    name[0] = '\0';
+    // Default warm palette
+    palette[0] = RgbColor(233, 69, 96);   // Rouge accent
+    palette[1] = RgbColor(83, 52, 131);   // Violet
+    palette[2] = RgbColor(76, 175, 80);   // Vert
+    palette[3] = RgbColor(255, 152, 0);   // Orange
+    palette[4] = RgbColor(33, 150, 243);  // Bleu
+    palette[5] = RgbColor(255, 255, 255); // Blanc
+    palette[6] = RgbColor(0, 188, 212);   // Cyan
+    palette[7] = RgbColor(255, 235, 59);  // Jaune
+  }
+};
+
+// --- Evenement LED (Core 1 → Core 0 via ring buffer lock-free) ---
+struct LedEvent {
+  uint8_t segmentId;       // 0xFF = broadcast a tous les segments
+  uint8_t velocity;        // 0-127
+  uint8_t midiNote;        // Note source
+  bool noteOn;             // true = note on, false = note off
+};
 
 #endif // ENGINE_TYPES_H

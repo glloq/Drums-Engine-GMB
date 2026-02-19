@@ -7,19 +7,32 @@
 // ============================================================================
 // MotorActuator - Moteur DC via PWM
 // ============================================================================
+// Comportements :
+//   MOTOR_SPEED         : Vitesse continue (velocity → PWM)
+//   MOTOR_TIMED         : Tourne pendant une duree, puis arret auto
+//   MOTOR_SWEEP         : 1 end stop → arret, 2 end stops → aller-retour complet
+//   MOTOR_ALTERNATE     : Alterne direction entre end stops (hwAddress=dirPin)
+//   MOTOR_OPTICAL_TRACK : Suivi optique par comptage ISR
+//
+// Commandes acceptees :
+//   PWM      → vitesse directe (tous behaviors)
+//   PULSE    → declenchement (TIMED/SWEEP/ALTERNATE)
+//   POSITION → suivi optique (OPTICAL_TRACK uniquement)
+//   OFF      → arret immediat
+//
 // Securite :
-//   - Limite duty-cycle continu (MOTOR_MAX_CONTINUOUS_US)
-//   - Arret force apres timeout
-//   - End stop detection (micro-switches on endStopPin1/endStopPin2)
-// Optical tracking :
-//   - Uses hardware interrupt (ISR) on rising edge for edge counting
-//   - ESP32 portMUX spinlock for atomic ISR/main-thread access
+//   - MOTOR_MAX_CONTINUOUS_US timeout sur tous les behaviors
+//   - End stop detection (micro-switches sur endStopPin1/endStopPin2)
+//   - Arret force par watchdog
 // ============================================================================
 
 class MotorActuator : public Actuator {
 public:
-  MotorActuator() : _driver(nullptr), _currentSpeed(0), _sensorPin(0),
+  MotorActuator() : _driver(nullptr), _currentSpeed(0),
+                    _sensorPin(0xFF), _dirPin(0xFF), _forward(true),
                     _targetEdges(0), _positionTracking(false),
+                    _timedDurationUs(0), _alternateRunning(false),
+                    _sweepPhase(0),
                     _homing(false), _endStopReached(false) {}
   MotorActuator(HalDriver* driver);
 
@@ -31,11 +44,26 @@ public:
 private:
   HalDriver* _driver;
   uint16_t _currentSpeed;
-  uint8_t _sensorPin;               // GPIO pin for optical sensor (from _config.hwAddress)
+
+  // --- Pin secondaire (selon behavior) ---
+  uint8_t _sensorPin;               // OPTICAL: GPIO capteur (from hwAddress)
+  uint8_t _dirPin;                  // ALTERNATE/SWEEP: GPIO direction (from hwAddress)
+  bool _forward;                    // Direction courante (true = avant)
+
+  // --- Suivi optique ---
   uint32_t _targetEdges;
   bool _positionTracking;
-  bool _homing;                      // True during homing sequence (move to end stop)
-  bool _endStopReached;              // Last end stop state
+
+  // --- Etats modes moteur ---
+  uint32_t _timedDurationUs;        // Duree pour MOTOR_TIMED (us)
+  bool _alternateRunning;           // MOTOR_ALTERNATE en cours
+  uint8_t _sweepPhase;              // MOTOR_SWEEP: 0=aller, 1=retour (2 end stops)
+
+  bool _homing;
+  bool _endStopReached;
+
+  // --- Direction (H-bridge DIR pin) ---
+  void _setDirection(bool forward);
 
   // --- ISR infrastructure (per-instance via pin table) ---
   static constexpr uint8_t MAX_OPTICAL_MOTORS = 4;

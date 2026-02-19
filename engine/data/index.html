@@ -11,6 +11,18 @@
   --accent2: #533483; --success: #4caf50; --warn: #ff9800;
   --radius: 8px; --shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
+[data-theme="light"] {
+  --bg: #f0f2f5; --bg2: #ffffff; --bg3: #e3e8ef;
+  --fg: #1a1a2e; --fg2: #555570; --accent: #d63050;
+  --accent2: #8e6caf; --success: #388e3c; --warn: #f57c00;
+  --shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+[data-theme="light"] .tabs { border-bottom-color: #ccc; }
+[data-theme="light"] input, [data-theme="light"] select { border-color: #ccc; }
+[data-theme="light"] .btn-gear { border-color: #bbb; }
+[data-theme="light"] .btn-secondary { background: #e3e8ef; }
+[data-theme="light"] .btn-secondary:hover { background: #d0d8e4; }
+[data-theme="light"] .modal-overlay { background: rgba(0,0,0,0.3); }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--fg); min-height: 100vh; }
 
@@ -20,13 +32,17 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .header .status { display: flex; gap: 10px; font-size: 0.8em; color: var(--fg2); }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 3px; }
 .dot.on { background: var(--success); } .dot.off { background: var(--accent); }
+.midi-rx { width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-left: 3px; background: transparent; transition: background 0.05s; }
+.midi-rx.flash { background: #ffeb3b; }
 .btn-gear { background: none; border: 1px solid #555; border-radius: 50%; width: 34px; height: 34px; font-size: 1.2em; color: var(--fg2); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
 .btn-gear:hover { color: var(--fg); border-color: var(--accent); background: rgba(233,69,96,0.1); }
 
-.tabs { display: flex; background: var(--bg2); border-bottom: 1px solid #333; }
-.tab { padding: 10px 20px; cursor: pointer; color: var(--fg2); border-bottom: 2px solid transparent; transition: all 0.2s; font-size: 0.95em; }
+.tabs { display: flex; background: var(--bg2); border-bottom: 1px solid #333; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab { padding: 10px 20px; cursor: pointer; color: var(--fg2); border-bottom: 2px solid transparent; transition: all 0.2s; font-size: 0.95em; white-space: nowrap; flex-shrink: 0; }
 .tab:hover { color: var(--fg); background: rgba(255,255,255,0.05); }
 .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-badge { font-size: 0.7em; background: var(--accent2); color: #fff; border-radius: 8px; padding: 1px 5px; margin-left: 2px; vertical-align: top; }
 
 .content { padding: 16px; }
 .panel { display: none; } .panel.active { display: block; }
@@ -102,14 +118,22 @@ input[type=checkbox] { width: auto; }
 .small-select, .small-input { font-size:0.82em; padding:6px 8px; }
 
 /* Loop Grid */
-.loop-grid { display: grid; gap: 2px; margin-top: 12px; }
-.loop-cell { width: 100%; aspect-ratio: 1; background: var(--bg); border-radius: 3px; cursor: pointer; transition: background 0.1s; border: 1px solid #333; }
-.loop-cell:hover { border-color: var(--accent); }
-.loop-cell.active { background: var(--accent); border-color: var(--accent); }
+.loop-grid { display: grid; gap: 1px; margin-top: 12px; }
+.loop-cell { width: 100%; aspect-ratio: 1; background: var(--bg); border-radius: 2px; cursor: pointer; transition: background 0.1s, opacity 0.1s; border: 1px solid #333; position: relative; min-height: 18px; }
+.loop-cell:hover { border-color: var(--accent); z-index: 1; }
+.loop-cell.active { border-color: var(--accent); }
+.loop-cell.beat-start { border-left: 2px solid #555; }
+.loop-cell.bar-start { border-left: 3px solid var(--accent); }
+.loop-cell.bar-odd { background: rgba(255,255,255,0.02); }
 .loop-label { font-size: 0.7em; color: var(--fg2); display: flex; align-items: center; justify-content: flex-end; padding-right: 4px; white-space: nowrap; overflow: hidden; }
 .beat-marker { font-size: 0.65em; color: var(--fg2); text-align: center; }
-.transport { display: flex; align-items: center; gap: 12px; padding: 12px 0; }
-.transport .bpm-display { font-size: 1.4em; font-weight: bold; min-width: 80px; text-align: center; }
+.beat-marker.bar-first { color: var(--accent); font-weight: bold; }
+.transport { display: flex; align-items: center; gap: 8px; padding: 10px 0; flex-wrap: wrap; }
+.transport .bpm-display { font-size: 1.4em; font-weight: bold; min-width: 70px; text-align: center; }
+.loop-toolbar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 4px; padding-bottom: 4px; border-bottom: 1px solid #333; }
+.loop-vel-label { font-size: 0.75em; color: var(--fg2); min-width: 32px; text-align: center; }
+.loop-cell.loop-playhead { box-shadow: inset 0 0 0 2px var(--success); }
+.loop-cell.loop-playhead:not(.active) { background: rgba(76,175,80,0.15); }
 
 .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 100; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .modal-overlay.show { display: flex; align-items: flex-start; justify-content: center; }
@@ -121,6 +145,7 @@ input[type=checkbox] { width: auto; }
 .toast.show { transform: translateY(0); opacity: 1; }
 .toast.error { border-left: 3px solid var(--accent); }
 .toast.success { border-left: 3px solid var(--success); }
+.toast.warn { border-left: 3px solid var(--warn); }
 
 .empty-state { text-align: center; padding: 40px; color: var(--fg2); }
 
@@ -139,22 +164,84 @@ input[type=checkbox] { width: auto; }
 .monitor-item .mv { font-size: 1.05em; font-weight: bold; color: var(--accent); }
 .monitor-item .ml { font-size: 0.7em; color: var(--fg2); }
 
+/* Pipeline Editor */
+.pe-block-list { display: flex; flex-direction: column; gap: 4px; }
+.pe-block { display: flex; align-items: center; gap: 8px; background: var(--bg); border-radius: var(--radius); padding: 8px 10px; border-left: 4px solid #555; }
+.pe-block.condition { border-left-color: #e94560; }
+.pe-block.transform { border-left-color: #533483; }
+.pe-block.time { border-left-color: #4CAF50; }
+.pe-block.output { border-left-color: #FF9800; }
+.pe-block-icon { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.85em; font-weight: bold; color: #fff; flex-shrink: 0; }
+.pe-block-icon.condition { background: #e94560; }
+.pe-block-icon.transform { background: #533483; }
+.pe-block-icon.time { background: #4CAF50; }
+.pe-block-icon.output { background: #FF9800; }
+.pe-block-info { flex: 1; min-width: 0; }
+.pe-block-info .pe-label { font-size: 0.9em; font-weight: 600; }
+.pe-block-info .pe-params { font-size: 0.78em; color: var(--fg2); }
+.pe-block-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.pe-arrow { text-align: center; color: var(--fg2); font-size: 0.85em; padding: 2px 0; }
+.pe-add-block { border: 2px dashed #444; border-radius: var(--radius); padding: 8px; text-align: center; color: var(--fg2); cursor: pointer; transition: all 0.2s; font-size: 0.85em; }
+.pe-add-block:hover { border-color: var(--accent); color: var(--accent); background: rgba(233,69,96,0.05); }
+.pe-section { margin-bottom: 12px; }
+.pe-section h4 { font-size: 0.9em; margin-bottom: 6px; color: var(--fg2); display: flex; align-items: center; gap: 6px; }
+.pe-section h4 .pe-dot { width: 10px; height: 10px; border-radius: 50%; }
+.pe-flow { display: flex; align-items: center; gap: 4px; padding: 4px 8px; background: rgba(255,255,255,0.03); border-radius: 4px; font-size: 0.78em; color: var(--fg2); margin-bottom: 8px; }
+.pe-flow span { padding: 2px 8px; border-radius: 3px; font-weight: 600; }
+.pe-flow .pe-vel { background: rgba(156,39,176,0.2); color: #ce93d8; }
+.pe-flow .pe-blocks { background: rgba(76,175,80,0.2); color: #81c784; }
+.pe-flow .pe-out { background: rgba(255,152,0,0.2); color: #ffb74d; }
+
+/* Virtual Piano */
+.piano-pad { min-width: 60px; min-height: 52px; border-radius: 6px; border: 2px solid #444; background: var(--bg); color: var(--fg2); cursor: pointer; font-size: 0.7em; text-align: center; padding: 4px 2px; transition: all 0.1s; display: flex; flex-direction: column; align-items: center; justify-content: center; user-select: none; }
+.piano-pad:hover { border-color: var(--accent); background: rgba(233,69,96,0.1); }
+.piano-pad:active, .piano-pad.active { background: var(--accent); color: #fff; border-color: var(--accent); transform: scale(0.95); }
+.piano-pad.configured { border-color: var(--success); }
+.piano-pad.configured:hover { background: rgba(76,175,80,0.15); }
+.piano-pad.configured:active, .piano-pad.configured.active { background: var(--success); color: #fff; }
+.piano-pad .pad-note { font-size: 1.1em; font-weight: 700; }
+.piano-pad .pad-name { font-size: 0.85em; line-height: 1.1; overflow: hidden; text-overflow: ellipsis; max-width: 58px; }
+.piano-pad.ext-active { box-shadow: 0 0 8px 2px var(--accent); border-color: var(--accent); }
+.piano-pad.configured.ext-active { box-shadow: 0 0 8px 2px var(--success); }
+@keyframes pad-flash { 0% { opacity: 1; } 100% { opacity: 0; } }
+.piano-pad .pad-flash { position: absolute; inset: 0; border-radius: 4px; background: rgba(233,69,96,0.3); animation: pad-flash 0.3s ease-out forwards; pointer-events: none; }
+.piano-pad.configured .pad-flash { background: rgba(76,175,80,0.3); }
+.piano-pad { position: relative; overflow: hidden; }
+
+/* Calibration */
+.calib-item { background: var(--bg); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 8px; border-left: 3px solid var(--accent2); }
+.calib-item h4 { font-size: 0.9em; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+.calib-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.calib-slider { flex: 2; min-width: 100px; }
+.calib-val { min-width: 32px; text-align: center; font-weight: 600; font-size: 0.9em; }
+
 @media (max-width: 600px) {
   .content { padding: 8px; }
   .header { padding: 6px 10px; }
   .header h1 { font-size: 1em; }
   .tab { padding: 8px 10px; font-size: 0.82em; }
   .card { padding: 10px; }
-  .modal { padding: 16px; margin: 10px; width: calc(100% - 20px); }
+  .modal { padding: 14px; margin: 8px; width: calc(100% - 16px); max-height: 90vh; overflow-y: auto; }
   .form-row { gap: 8px; }
-  .transport { flex-wrap: wrap; gap: 8px; }
+  .form-row .form-group { min-width: 100px; }
+  .transport { flex-wrap: wrap; gap: 6px; }
+  .list-item .item-actions { gap: 4px; }
+  .list-item .item-actions .btn { padding: 5px 8px; font-size: 0.75em; }
+  .loop-grid { gap: 0; }
+  .loop-cell { min-height: 14px; border-radius: 1px; }
+  .loop-label { font-size: 0.6em; }
+  .beat-marker { font-size: 0.55em; }
+  .calib-controls { gap: 4px; }
+  .monitor-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
+  .btn-sm { padding: 5px 8px; font-size: 0.78em; }
+  .header-right .status { display: none; }
 }
 </style>
 </head>
 <body>
 
 <div class="header">
-  <h1>Drums Engine</h1>
+  <h1>Drums Engine <span id="saveDot" style="display:none;width:8px;height:8px;border-radius:50%;background:var(--warn);display:none;vertical-align:middle;" title="Modifications non sauvegardees"></span></h1>
   <div style="display:flex;align-items:center;gap:4px;">
     <span id="loopBpmLeft" style="font-size:0.7em;color:var(--fg2);min-width:12px;text-align:right;">b</span>
     <button class="btn-loop" id="btnLoop" onclick="showModal('modalLoopEditor')" title="Boucles">&#8734;</button>
@@ -163,51 +250,219 @@ input[type=checkbox] { width: auto; }
   <div class="header-right">
     <div class="status">
       <span><span class="dot" id="wifiDot"></span><span id="wifiStatus">--</span></span>
-      <span><span class="dot" id="midiDot"></span><span id="midiStatus">--</span></span>
+      <span><span class="dot" id="midiDot"></span><span id="midiStatus">--</span><span class="midi-rx" id="midiRxDot" title="MIDI RX"></span><span id="lastNoteDisplay" style="font-size:0.85em;color:var(--accent);margin-left:4px;min-width:20px;"></span></span>
     </div>
+    <button class="btn-gear" onclick="toggleTheme()" title="Changer de theme" id="themeBtn" style="font-size:1em;">&#9790;</button>
     <button class="btn-gear" onclick="showModal('modalSettings')" title="Reglages">&#9881;</button>
   </div>
 </div>
 
 <div class="tabs">
-  <div class="tab active" data-tab="actuators">Actionneurs</div>
-  <div class="tab" data-tab="instruments">Instruments</div>
-  <div class="tab" data-tab="mappings">Mappings</div>
+  <div class="tab active" data-tab="actuators">Actionneurs <span id="tabBadgeAct" class="tab-badge"></span></div>
+  <div class="tab" data-tab="instruments">Instruments <span id="tabBadgeInstr" class="tab-badge"></span></div>
+  <div class="tab" data-tab="leds">LEDs</div>
+  <div class="tab" data-tab="mappings">Pipeline</div>
+  <div class="tab" data-tab="piano">Piano</div>
+  <div class="tab" data-tab="calibration">Calibration</div>
 </div>
 
 <div class="content">
 
   <!-- ====== ACTUATORS TAB ====== -->
   <div class="panel active" id="tab-actuators">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
       <h2>Actionneurs (<span id="actCount">0</span>)</h2>
-      <button class="btn btn-primary" onclick="showAddActuator()">+ Ajouter</button>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <input type="text" id="actSearch" placeholder="Filtrer..." oninput="filterList('actuatorList',this.value)" style="width:120px;padding:6px 10px;font-size:0.85em;">
+        <select id="actSort" style="padding:6px;font-size:0.85em;" onchange="sortActuators(this.value)">
+          <option value="">Trier...</option>
+          <option value="name">Nom</option>
+          <option value="id">ID</option>
+          <option value="type">Type</option>
+        </select>
+        <select style="padding:6px;font-size:0.85em;" onchange="actBulkOp(this.value);this.value='';">
+          <option value="">Actions...</option>
+          <option value="enableAll">Activer tous</option>
+          <option value="disableAll">Desactiver tous</option>
+          <option value="stopAll">Stop tous</option>
+        </select>
+        <button class="btn btn-primary" onclick="showAddActuator()">+ Ajouter</button>
+      </div>
     </div>
     <div id="actuatorList"></div>
   </div>
 
   <!-- ====== INSTRUMENTS TAB ====== -->
   <div class="panel" id="tab-instruments">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:8px;flex-wrap:wrap;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px;flex-wrap:wrap;">
       <h2>Instruments (<span id="instrCount">0</span>)</h2>
-      <div style="display:flex;gap:8px;">
-        <button class="btn btn-secondary" onclick="showCreateInstrumentFromTemplate()">Depuis template</button>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="text" id="instrSearch" placeholder="Filtrer..." oninput="filterList('instrumentList',this.value)" style="width:120px;padding:6px 10px;font-size:0.85em;">
+        <label style="font-size:0.75em;display:flex;align-items:center;gap:3px;cursor:pointer;" title="Afficher uniquement les instruments incomplets"><input type="checkbox" id="instrFilterIncomplete" onchange="filterIncompleteInstruments(this.checked)">Incomplets</label>
+        <select id="instrSort" style="padding:6px;font-size:0.85em;" onchange="sortInstruments(this.value)">
+          <option value="">Tri...</option>
+          <option value="name">Nom</option>
+          <option value="note">Note MIDI</option>
+          <option value="category">Categorie</option>
+        </select>
+        <select id="instrBulkAction" style="padding:6px;font-size:0.85em;" onchange="instrBulkOp(this.value);this.value='';">
+          <option value="">Actions...</option>
+          <option value="enableAll">Activer tous</option>
+          <option value="disableAll">Desactiver tous</option>
+          <option value="testAll">Tester tous</option>
+        </select>
+        <button class="btn btn-secondary btn-sm" onclick="toggleNoteMap()" title="Carte des notes MIDI">Note Map</button>
+        <button class="btn btn-secondary" onclick="showCreateInstrumentFromTemplate()">Template</button>
         <button class="btn btn-primary" onclick="showAddInstrument()">+ Ajouter</button>
       </div>
     </div>
+    <div id="noteMapContainer" style="display:none;margin-bottom:12px;"></div>
     <div id="instrumentList"></div>
   </div>
 
-  <!-- ====== MAPPINGS TAB ====== -->
+  <!-- ====== LEDS TAB ====== -->
+  <div class="panel" id="tab-leds">
+
+    <!-- LED Master Controls -->
+    <div class="card">
+      <h3>Controle LED <span class="badge" id="ledStripCountBadge">0 strips</span></h3>
+      <div class="form-row">
+        <div class="form-group" style="flex:2;">
+          <label>Luminosite master</label>
+          <input type="range" id="ledMasterBrightness" min="0" max="255" value="128" oninput="setLedBrightness(this.value)">
+        </div>
+        <div class="form-group">
+          <label>Theme actif</label>
+          <select id="ledActiveTheme" onchange="setActiveTheme(this.value)">
+            <option value="255">Aucun</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- LED Strips Configuration -->
+    <div class="card">
+      <h3>Strips physiques
+        <button class="btn btn-primary btn-sm" onclick="showAddStrip()">+ Strip</button>
+      </h3>
+      <div id="ledStripList"></div>
+    </div>
+
+    <!-- LED Segments -->
+    <div class="card">
+      <h3>Segments (<span id="ledSegCount">0</span>)
+        <button class="btn btn-primary btn-sm" onclick="showAddSegment()">+ Segment</button>
+      </h3>
+      <p class="hint" style="margin-bottom:10px;">Chaque segment = une portion de strip assignee a un instrument.</p>
+      <div id="ledSegmentList"></div>
+    </div>
+
+    <!-- LED Themes -->
+    <div class="card">
+      <h3>Themes (<span id="ledThemeCount">0</span>)
+        <button class="btn btn-primary btn-sm" onclick="showAddTheme()">+ Theme</button>
+      </h3>
+      <div id="ledThemeList"></div>
+    </div>
+  </div>
+
+  <!-- ====== PIPELINE EDITOR TAB ====== -->
   <div class="panel" id="tab-mappings">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-      <h2>Pipelines MIDI</h2>
-      <button class="btn btn-secondary" onclick="refreshMappings()">Actualiser</button>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+      <h2>Pipeline Editor</h2>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-secondary" onclick="refreshMappings()">Actualiser</button>
+      </div>
     </div>
     <p style="font-size:0.85em;color:var(--fg2);margin-bottom:16px;">
-      Pipelines compiles automatiquement depuis les instruments. Chaque note MIDI est mappee vers un pipeline de traitement.
+      Chaque instrument est lie a un pipeline de traitement MIDI. Cliquez sur un instrument pour editer son pipeline visuellement.
     </p>
     <div id="mappingList"></div>
+  </div>
+
+  <!-- ====== VIRTUAL PIANO TAB ====== -->
+  <div class="panel" id="tab-piano">
+    <div class="card">
+      <h3>Piano Virtuel MIDI <span class="badge" id="pianoNoteBadge">GM Percussion</span>
+        <span class="badge badge-green" id="pianoLiveBadge" style="display:none;">LIVE</span></h3>
+      <p class="hint" style="margin-bottom:12px;">Cliquez ou jouez sur le clavier. Les pads verts = instruments configures.
+        <label style="margin-left:12px;cursor:pointer;"><input type="checkbox" id="pianoLiveToggle" onchange="togglePianoLive(this.checked)"> Temps reel</label>
+        <button class="btn btn-sm btn-secondary" style="margin-left:8px;padding:2px 8px;font-size:0.75em;" onclick="document.getElementById('pianoHelp').style.display=document.getElementById('pianoHelp').style.display==='none'?'block':'none'">?</button></p>
+      <div id="pianoHelp" style="display:none;background:var(--bg);border-radius:var(--radius);padding:10px;margin-bottom:12px;font-size:0.8em;color:var(--fg2);line-height:1.8;">
+        <strong>Raccourcis clavier:</strong><br>
+        <code>A Z E R T Y U I O P</code> → BD, Snare, E.Snare, Lo Tom, Closed HH, Hi Tom, Lo Tom, Lo-Mid Tom, Hi-Mid Tom, Crash 1<br>
+        <code>Q S D F G H J K L</code> → Acoustic BD, Side Stick, Hand Clap, Pedal HH, Open HH, High Tom, Ride 1, Chinese Cym, Ride Bell<br>
+        <code>1 2 3 4 5 6 7 8</code> → High Q, Slap, Scratch Push/Pull, Sticks, Square Click, Metro Click, Metro Bell
+      </div>
+      <div class="form-row" style="margin-bottom:12px;">
+        <div class="form-group" style="max-width:120px;">
+          <label>Velocity</label>
+          <input type="range" id="pianoVelocity" min="1" max="127" value="80" oninput="document.getElementById('pianoVelVal').textContent=this.value">
+          <div style="text-align:center;font-size:0.8em;color:var(--fg2);"><span id="pianoVelVal">80</span></div>
+        </div>
+        <div class="form-group" style="max-width:120px;">
+          <label>Canal MIDI</label>
+          <select id="pianoChannel">
+            <option value="10" selected>10 (Percussion)</option>
+            <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+            <option value="4">4</option><option value="5">5</option>
+          </select>
+        </div>
+        <div class="form-group" style="max-width:160px;">
+          <label>Affichage</label>
+          <select id="pianoLayout" onchange="renderPianoPads()">
+            <option value="gm">GM Percussion (27-81)</option>
+            <option value="my">Mes Instruments</option>
+            <option value="all">Toutes notes (0-127)</option>
+          </select>
+        </div>
+      </div>
+      <div id="pianoPadGrid" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
+    </div>
+    <div class="card" style="margin-top:16px;">
+      <h3>Test CC / Controles</h3>
+      <div class="form-row">
+        <div class="form-group" style="max-width:100px;">
+          <label>CC #</label>
+          <input type="number" id="testCcNumber" min="0" max="127" value="4">
+        </div>
+        <div class="form-group" style="flex:2;">
+          <label>Valeur: <span id="testCcValDisp">64</span></label>
+          <input type="range" id="testCcValue" min="0" max="127" value="64" oninput="document.getElementById('testCcValDisp').textContent=this.value">
+        </div>
+        <div class="form-group" style="max-width:100px;display:flex;align-items:flex-end;">
+          <button class="btn btn-primary" onclick="sendTestCC()">Envoyer CC</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== CALIBRATION TAB ====== -->
+  <div class="panel" id="tab-calibration">
+    <div class="card">
+      <h3 style="display:flex;justify-content:space-between;align-items:center;">
+        <span>Calibration Actionneurs <span class="badge" id="calibActCount">0</span> <span class="badge badge-green" id="calibActiveCount" style="font-size:0.75em;">0</span> actifs</span>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-danger btn-sm" onclick="emergencyStopAll()" style="font-weight:700;">STOP ALL</button>
+          <button class="btn btn-secondary btn-sm" onclick="midiPanic()" title="Envoie NoteOff sur toutes les notes">MIDI Panic</button>
+        </div>
+      </h3>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+        <p class="hint" style="margin:0;">Testez chaque actionneur individuellement.</p>
+        <button class="btn btn-sm btn-success" onclick="testAllSequential()" title="Teste chaque actionneur un par un">Test Sequence</button>
+        <button class="btn btn-sm btn-secondary" onclick="testIntegration()" title="Teste la chaine MIDI complete pour chaque instrument">Test Integration</button>
+        <input type="text" placeholder="Filtrer..." oninput="filterList('calibActuatorList',this.value)" style="width:120px;padding:5px 8px;font-size:0.85em;">
+      </div>
+      <div id="calibActuatorList"></div>
+    </div>
+    <div class="card" style="margin-top:16px;">
+      <h3>Test Rapide Instruments</h3>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+        <p class="hint" style="margin:0;">Declenchez un instrument complet avec une velocity choisie.</p>
+        <input type="text" placeholder="Filtrer..." oninput="filterList('calibInstrumentList',this.value)" style="width:120px;padding:5px 8px;font-size:0.85em;">
+      </div>
+      <div id="calibInstrumentList"></div>
+    </div>
   </div>
 
 
@@ -220,6 +475,8 @@ input[type=checkbox] { width: auto; }
     <input type="hidden" id="editActId" value="">
     <input type="hidden" id="actId" value="">
     <input type="hidden" id="actInverted" value="false">
+
+    <div id="actHelpBox" class="help-box" style="margin-bottom:12px;display:none;"></div>
 
     <div class="quick-actions" style="margin-bottom:12px;">
       <div class="form-group" style="min-width:220px; margin-bottom:0;">
@@ -461,7 +718,10 @@ input[type=checkbox] { width: auto; }
       </div>
       <div class="form-group">
         <label>Note MIDI</label>
-        <select id="instrMidiNote" onchange="onMidiNoteChange()"></select>
+        <div style="display:flex;gap:4px;">
+          <select id="instrMidiNote" onchange="onMidiNoteChange()" style="flex:1;"></select>
+          <button class="btn btn-sm btn-secondary" id="btnMidiLearn" onclick="toggleMidiLearn()" title="Jouer une note MIDI pour l'assigner automatiquement" style="white-space:nowrap;">Learn</button>
+        </div>
       </div>
       <div class="form-group" style="display:flex;align-items:flex-end;">
         <label><input type="checkbox" id="instrEnabled" checked> Actif</label>
@@ -624,6 +884,26 @@ input[type=checkbox] { width: auto; }
       <button class="btn btn-secondary btn-sm" onclick="closeModal('modalLoopEditor')">Fermer</button>
     </h2>
     <div id="loopList" style="margin-top:8px;"></div>
+    <!-- Chain playback -->
+    <div class="card" style="margin-top:10px;" id="loopChainCard">
+      <h3 style="display:flex;justify-content:space-between;align-items:center;">
+        Enchainement
+        <span id="chainStatus" style="font-size:0.75em;color:var(--fg2);"></span>
+      </h3>
+      <div id="chainBuilder" style="margin-top:6px;">
+        <div id="chainList" style="display:flex;flex-wrap:wrap;gap:4px;min-height:28px;padding:6px;background:var(--bg);border-radius:var(--radius);border:1px dashed var(--accent2);margin-bottom:8px;">
+          <span style="color:var(--fg2);font-size:0.8em;" id="chainPlaceholder">Cliquez les boucles ci-dessus pour les ajouter</span>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          <button class="btn btn-success btn-sm" onclick="playChain()">&#9654; Enchainer</button>
+          <button class="btn btn-danger btn-sm" onclick="stopLoop()">&#9632; Stop</button>
+          <button class="btn btn-secondary btn-sm" onclick="clearChain()">Vider</button>
+          <label style="font-size:0.8em;display:flex;align-items:center;gap:4px;margin-left:auto;">
+            <input type="checkbox" id="chainRepeat" checked> Boucler
+          </label>
+        </div>
+      </div>
+    </div>
     <!-- Inline new loop form -->
     <div class="card" style="margin-top:10px;">
       <h3>Nouvelle boucle</h3>
@@ -655,20 +935,41 @@ input[type=checkbox] { width: auto; }
     <div id="loopEditor" style="display:none;margin-top:12px;">
       <div class="card">
         <h3>
-          <span id="loopEditorTitle">Editeur</span>
+          <input type="text" id="loopEditorTitle" value="Editeur" style="background:transparent;border:1px solid transparent;color:var(--fg);font-weight:600;font-size:1em;padding:2px 6px;border-radius:4px;width:auto;max-width:200px;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='transparent';renameCurrentLoop(this.value)">
           <button class="btn btn-sm btn-secondary" onclick="closeLoopEditor()">Fermer editeur</button>
         </h3>
         <div class="transport">
           <button class="btn btn-success btn-sm" onclick="playCurrentLoop()">&#9654; Play</button>
+          <button class="btn btn-sm" id="btnPauseLoop" onclick="togglePauseLoop()" style="background:#f0ad4e;color:#fff;display:none;">&#10074;&#10074; Pause</button>
           <button class="btn btn-danger btn-sm" onclick="stopLoop()">&#9632; Stop</button>
+          <button class="btn btn-secondary btn-sm" onclick="tapTempo()" title="Cliquez en rythme pour definir le BPM">Tap</button>
           <div class="bpm-display"><span id="loopBpmDisplay">120</span> BPM</div>
+          <div id="loopPositionDisplay" style="font-size:0.85em;color:var(--fg2);min-width:60px;text-align:center;display:none;"></div>
           <input type="range" id="loopBpmSlider" min="40" max="300" value="120"
                  oninput="updateLoopBpm(this.value)" style="flex:1;">
-          <select id="loopQuantize" onchange="renderCurrentLoopGrid()" style="width:80px;">
+        </div>
+        <div class="loop-toolbar">
+          <select id="loopQuantize" onchange="renderCurrentLoopGrid()" style="width:70px;" title="Resolution grille">
             <option value="4">1/4</option>
             <option value="8" selected>1/8</option>
+            <option value="12">1/8T</option>
             <option value="16">1/16</option>
+            <option value="24">1/16T</option>
           </select>
+          <span style="color:var(--fg2);font-size:0.8em;">Vel:</span>
+          <input type="range" id="loopVelocity" min="1" max="127" value="100" style="width:80px;"
+                 oninput="document.getElementById('loopVelVal').textContent=this.value">
+          <span class="loop-vel-label" id="loopVelVal">100</span>
+          <button class="btn btn-sm btn-secondary" onclick="clearCurrentLoopEvents()" title="Effacer toutes les notes">Effacer</button>
+          <select id="loopPreset" onchange="applyLoopPreset(this.value);this.value=''" style="width:auto;font-size:0.8em;">
+            <option value="">Presets...</option>
+            <option value="rock_basic">Rock basique</option>
+            <option value="rock_ride">Rock + Ride</option>
+            <option value="funk">Funk</option>
+            <option value="bossa">Bossa Nova</option>
+            <option value="hats_8th">Hi-Hat 1/8</option>
+          </select>
+          <span id="loopEventCount" style="font-size:0.75em;color:var(--fg2);margin-left:auto;"></span>
         </div>
         <div class="loop-grid" id="loopGrid"></div>
       </div>
@@ -716,20 +1017,32 @@ input[type=checkbox] { width: auto; }
       <div class="hint" style="margin-top:6px;">Reduit la velocite max et ferme les servos mute proportionnellement</div>
     </div>
 
-    <!-- MIDI Info -->
+    <!-- MIDI Info + Channel Config -->
     <div class="card" style="margin-top:12px;">
       <h3>MIDI</h3>
       <div id="midiInfo" style="font-size:0.85em;color:var(--fg2);line-height:1.8;"></div>
+      <div style="margin-top:10px;">
+        <label style="font-size:0.85em;color:var(--fg2);display:block;margin-bottom:6px;">Canaux MIDI actifs</label>
+        <div id="midiChannelGrid" style="display:grid;grid-template-columns:repeat(8,1fr);gap:4px;"></div>
+        <div style="display:flex;gap:6px;margin-top:8px;">
+          <button class="btn btn-sm btn-secondary" onclick="setMidiChannels('all')">Tous</button>
+          <button class="btn btn-sm btn-secondary" onclick="setMidiChannels('drums')">Ch.10 (Drums)</button>
+          <button class="btn btn-sm btn-primary" onclick="saveMidiChannels()">Appliquer</button>
+        </div>
+      </div>
     </div>
 
-    <!-- System Actions -->
+    <!-- System Info -->
     <div class="card" style="margin-top:12px;">
       <h3>Systeme</h3>
-      <div id="systemInfo" style="font-size:0.85em;color:var(--fg2);line-height:1.8;margin-bottom:10px;"></div>
+      <div class="monitor-grid" id="sysInfoGrid" style="margin-bottom:10px;"></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn btn-primary btn-sm" onclick="saveAll()">Sauvegarder config</button>
         <button class="btn btn-secondary btn-sm" onclick="scanI2C()">Scanner I2C</button>
+        <button class="btn btn-sm" style="background:var(--accent2);color:#fff;" onclick="runDiagnostics()">Diagnostics</button>
+        <button class="btn btn-danger btn-sm" onclick="confirmFactoryReset()" title="Supprime toute la configuration et redemarre">Reset usine</button>
       </div>
+      <div id="diagResults" style="display:none;margin-top:10px;font-size:0.85em;background:var(--bg);border-radius:var(--radius);padding:10px;max-height:300px;overflow-y:auto;"></div>
       <div id="i2cInfo" style="margin-top:8px;font-size:0.85em;color:var(--fg2);"></div>
     </div>
 
@@ -743,6 +1056,19 @@ input[type=checkbox] { width: auto; }
       <div class="monitor-grid" id="monitorGrid"></div>
     </div>
 
+    <!-- MIDI Monitor -->
+    <div class="card" style="margin-top:12px;">
+      <h3 style="display:flex;justify-content:space-between;align-items:center;">
+        <span>MIDI Monitor</span>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-secondary btn-sm" id="btnMidiMonitor" onclick="toggleMidiMonitor()">Demarrer</button>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('midiMonitorLog').innerHTML=''">Vider</button>
+        </div>
+      </h3>
+      <div id="midiMonitorLog" style="max-height:180px;overflow-y:auto;font-family:monospace;font-size:0.78em;color:var(--fg2);background:var(--bg);border-radius:var(--radius);padding:8px;line-height:1.6;"></div>
+      <div class="hint" style="margin-top:4px;">Affiche les notes MIDI recues en temps reel via WebSocket</div>
+    </div>
+
     <!-- Preferences -->
     <div class="card" style="margin-top:12px;">
       <h3>Preferences</h3>
@@ -750,6 +1076,310 @@ input[type=checkbox] { width: auto; }
         <input type="checkbox" id="settHideUsedActuators" checked onchange="hideUsedActuators=this.checked;localStorage.setItem('hideUsedAct',this.checked?'1':'0');">
         Masquer les actionneurs deja utilises dans les listes d'instruments
       </label>
+    </div>
+
+    <!-- Import/Export -->
+    <div class="card" style="margin-top:12px;">
+      <h3>Sauvegarde / Restauration</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+        <button class="btn btn-primary btn-sm" onclick="exportConfig()">Exporter config (JSON)</button>
+        <label class="btn btn-secondary btn-sm" style="cursor:pointer;">
+          Importer config
+          <input type="file" accept=".json" style="display:none;" onchange="importConfig(this.files[0])">
+        </label>
+      </div>
+      <div class="hint" style="margin-top:6px;">Exporte tous les actionneurs et instruments en un fichier JSON.</div>
+      <div id="importStatus" style="margin-top:6px;font-size:0.85em;"></div>
+    </div>
+
+    <!-- System Logs -->
+    <div class="card" style="margin-top:12px;">
+      <h3 style="display:flex;justify-content:space-between;align-items:center;">
+        <span>Journal systeme</span>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-secondary btn-sm" onclick="loadSystemLogs()">Charger</button>
+          <button class="btn btn-danger btn-sm" onclick="clearSystemLogs()">Vider</button>
+        </div>
+      </h3>
+      <div id="systemLogList" style="max-height:200px;overflow-y:auto;font-family:monospace;font-size:0.78em;color:var(--fg2);background:var(--bg);border-radius:var(--radius);padding:8px;line-height:1.6;">
+        <em>Cliquez "Charger" pour voir les logs</em>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== MODAL: LED Strip ====== -->
+<div class="modal-overlay" id="modalLedStrip">
+  <div class="modal">
+    <h2>Configurer Strip LED</h2>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Strip #</label>
+        <select id="ledStripId">
+          <option value="0">Strip 0</option>
+          <option value="1">Strip 1</option>
+          <option value="2">Strip 2</option>
+          <option value="3">Strip 3</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>GPIO Pin</label>
+        <select id="ledStripPin">
+          <option value="4">GPIO 4</option>
+          <option value="5">GPIO 5</option>
+          <option value="16">GPIO 16</option>
+          <option value="17">GPIO 17</option>
+          <option value="18">GPIO 18</option>
+          <option value="19">GPIO 19</option>
+          <option value="23">GPIO 23</option>
+          <option value="25">GPIO 25</option>
+          <option value="26">GPIO 26</option>
+          <option value="27">GPIO 27</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Nombre de LEDs</label>
+        <input type="number" id="ledStripCount" min="1" max="256" value="30">
+      </div>
+      <div class="form-group">
+        <label>Luminosite max</label>
+        <input type="range" id="ledStripBrightness" min="1" max="255" value="128">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('modalLedStrip')">Annuler</button>
+      <button class="btn btn-primary" onclick="saveLedStrip()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ====== MODAL: LED Segment ====== -->
+<div class="modal-overlay" id="modalLedSegment">
+  <div class="modal">
+    <h2 id="modalLedSegTitle">Nouveau Segment LED</h2>
+    <input type="hidden" id="editLedSegId" value="">
+    <div class="form-group">
+      <label>Nom</label>
+      <input type="text" id="ledSegName" placeholder="ex: Kick Ring, Snare Glow...">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Strip</label>
+        <select id="ledSegStrip"></select>
+      </div>
+      <div class="form-group">
+        <label>Instrument</label>
+        <select id="ledSegInstrument">
+          <option value="255">Aucun</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Pixel debut</label>
+        <input type="number" id="ledSegStart" min="0" max="255" value="0">
+      </div>
+      <div class="form-group">
+        <label>Nombre pixels</label>
+        <input type="number" id="ledSegCount" min="1" max="256" value="8" oninput="updateLedSegPreview()">
+      </div>
+    </div>
+    <h4 style="margin:12px 0 8px;font-size:0.9em;color:var(--accent);">Hit (declenchement)</h4>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Couleur hit</label>
+        <input type="color" id="ledSegHitColor" value="#ffffff" oninput="updateLedSegPreview()">
+      </div>
+      <div class="form-group">
+        <label>Animation</label>
+        <select id="ledSegHitAnim">
+          <option value="0">Flash</option>
+          <option value="1">Pulse</option>
+          <option value="2">Ripple</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Fade (ms)</label>
+        <input type="number" id="ledSegFade" min="50" max="2000" value="300">
+      </div>
+    </div>
+    <div class="form-group">
+      <label><input type="checkbox" id="ledSegVelBri" checked> Velocity → luminosite</label>
+    </div>
+    <h4 style="margin:12px 0 8px;font-size:0.9em;color:var(--accent2);">Idle (ambiance)</h4>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Couleur idle</label>
+        <input type="color" id="ledSegIdleColor" value="#141428" oninput="updateLedSegPreview()">
+      </div>
+      <div class="form-group">
+        <label>Animation</label>
+        <select id="ledSegIdleAnim">
+          <option value="0">Off</option>
+          <option value="1">Static</option>
+          <option value="2">Breathing</option>
+          <option value="3">Rainbow</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Luminosite idle</label>
+        <input type="range" id="ledSegIdleBri" min="0" max="255" value="30" oninput="updateLedSegPreview()">
+      </div>
+    </div>
+    <!-- Color preview -->
+    <div style="margin:12px 0;">
+      <label style="font-size:0.85em;color:var(--fg2);display:block;margin-bottom:4px;">Apercu</label>
+      <div id="ledSegPreview" style="display:flex;gap:2px;height:20px;border-radius:4px;overflow:hidden;"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('modalLedSegment')">Annuler</button>
+      <button class="btn btn-primary" onclick="saveLedSegment()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ====== MODAL: LED Theme ====== -->
+<div class="modal-overlay" id="modalLedTheme">
+  <div class="modal">
+    <h2 id="modalLedThemeTitle">Nouveau Theme LED</h2>
+    <input type="hidden" id="editLedThemeId" value="">
+    <div class="form-group">
+      <label>Nom</label>
+      <input type="text" id="ledThemeName" placeholder="ex: Concert, Studio, Nuit...">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Mode idle</label>
+        <select id="ledThemeIdle">
+          <option value="0">Off</option>
+          <option value="1">Static</option>
+          <option value="2">Breathing</option>
+          <option value="3">Rainbow</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Mode hit</label>
+        <select id="ledThemeHit">
+          <option value="0">Flash</option>
+          <option value="1">Pulse</option>
+          <option value="2">Ripple</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Luminosite</label>
+        <input type="range" id="ledThemeBri" min="0" max="255" value="128">
+      </div>
+      <div class="form-group">
+        <label>Vitesse fade</label>
+        <input type="range" id="ledThemeSpeed" min="1" max="10" value="5">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Palette (8 couleurs)</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <input type="color" class="led-palette-color" value="#e94560">
+        <input type="color" class="led-palette-color" value="#533483">
+        <input type="color" class="led-palette-color" value="#4caf50">
+        <input type="color" class="led-palette-color" value="#ff9800">
+        <input type="color" class="led-palette-color" value="#2196f3">
+        <input type="color" class="led-palette-color" value="#ffffff">
+        <input type="color" class="led-palette-color" value="#00bcd4">
+        <input type="color" class="led-palette-color" value="#ffeb3b">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('modalLedTheme')">Annuler</button>
+      <button class="btn btn-primary" onclick="saveLedTheme()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ====== MODAL: Pipeline Block Editor ====== -->
+<div class="modal-overlay" id="modalPipelineEditor">
+  <div class="modal" style="max-width:650px;">
+    <h2 id="pipeEditorTitle">Pipeline Editor</h2>
+    <input type="hidden" id="pipeEditInstrId" value="">
+
+    <!-- Flow overview -->
+    <div class="pe-flow">
+      MIDI In &rarr; <span class="pe-vel">Velocity</span> &rarr; <span class="pe-blocks">Blocks</span> &rarr; <span class="pe-out">Actuateur</span>
+    </div>
+
+    <!-- Pipeline Blocks -->
+    <div class="pe-section">
+      <h4><span class="pe-dot" style="background:#4CAF50;"></span> Blocs Pipeline <span class="badge" id="peBlockCount">0</span></h4>
+      <div id="peBlockList" class="pe-block-list"></div>
+      <div class="pe-add-block" onclick="peAddBlock()" style="margin-top:6px;">+ Ajouter un bloc</div>
+    </div>
+
+    <!-- Output Actuator -->
+    <div class="pe-section">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Actionneur de sortie par defaut</label>
+          <select id="peOutputActuator"></select>
+        </div>
+        <div class="form-group">
+          <label>Retrigger Mode</label>
+          <select id="peRetriggerMode">
+            <option value="0">Ignore</option>
+            <option value="1">Reset</option>
+            <option value="2">Stack</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- NoteOn Actions -->
+    <div class="pe-section">
+      <h4><span class="pe-dot" style="background:#9C27B0;"></span> NoteOn Actions <button class="btn btn-sm btn-secondary" onclick="peAddAction('on')">+ Action</button></h4>
+      <div id="peNoteOnActions"></div>
+    </div>
+
+    <!-- NoteOff Actions -->
+    <div class="pe-section">
+      <h4><span class="pe-dot" style="background:#FF9800;"></span> NoteOff Actions <button class="btn btn-sm btn-secondary" onclick="peAddAction('off')">+ Action</button></h4>
+      <div id="peNoteOffActions"></div>
+    </div>
+
+    <!-- CC Bindings -->
+    <div class="pe-section">
+      <h4><span class="pe-dot" style="background:#2196F3;"></span> CC Bindings <button class="btn btn-sm btn-secondary" onclick="peAddCcBinding()">+ CC</button></h4>
+      <div id="peCcBindings"></div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-success btn-sm" onclick="peTestPipeline()" style="margin-right:auto;">Test</button>
+      <button class="btn btn-secondary" onclick="closeModal('modalPipelineEditor')">Annuler</button>
+      <button class="btn btn-primary" onclick="peSavePipeline()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ====== MODAL: Add Pipeline Block ====== -->
+<div class="modal-overlay" id="modalAddBlock">
+  <div class="modal" style="max-width:420px;">
+    <h2>Ajouter un bloc</h2>
+    <div id="blockTypePicker" style="display:flex;flex-direction:column;gap:8px;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('modalAddBlock')">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- ====== MODAL: Edit Pipeline Block ====== -->
+<div class="modal-overlay" id="modalEditBlock">
+  <div class="modal" style="max-width:420px;">
+    <h2 id="editBlockTitle">Configurer le bloc</h2>
+    <input type="hidden" id="editBlockIdx" value="">
+    <div id="editBlockForm"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('modalEditBlock')">Annuler</button>
+      <button class="btn btn-primary" onclick="peApplyBlockEdit()">OK</button>
     </div>
   </div>
 </div>
@@ -769,11 +1399,16 @@ let currentLoopIdx = -1;
 let capabilities = null;
 let apiToken = '';
 let hideUsedActuators = localStorage.getItem('hideUsedAct') !== '0';
+let configDirty = false;
+let ledStrips = [];
+let ledSegments = [];
+let ledThemes = [];
+let ledStatus = {};
 
 // ====================================================================
 // API helper
 // ====================================================================
-async function api(path, method='GET', body=null) {
+async function api(path, method='GET', body=null, silent=false) {
   const opts = {method, headers: {'Content-Type':'application/json'}};
   if (apiToken && method !== 'GET') {
     opts.headers['Authorization'] = 'Bearer ' + apiToken;
@@ -783,13 +1418,15 @@ async function api(path, method='GET', body=null) {
     const r = await fetch('/api/' + path, opts);
     const payload = await r.json();
     if (!r.ok) {
-      const msg = payload && (payload.message || payload.error) ? (payload.message || payload.error) : ('HTTP ' + r.status);
-      toast('Erreur API: ' + msg, 'error');
+      if (!silent) {
+        const msg = payload && (payload.message || payload.error) ? (payload.message || payload.error) : ('HTTP ' + r.status);
+        toast('Erreur API: ' + msg, 'error');
+      }
       return null;
     }
     return payload;
   } catch(e) {
-    toast('Erreur reseau: ' + e.message, 'error');
+    if (!silent) toast('Erreur reseau: ' + e.message, 'error');
     return null;
   }
 }
@@ -803,9 +1440,25 @@ async function init() {
   if (authData && authData.token) apiToken = authData.token;
 
   populateMidiSelects();
-  await Promise.all([loadMidiNotes(), loadCapabilities(), loadActuators(), loadInstruments(), loadLoops()]);
+  await Promise.all([loadMidiNotes(), loadCapabilities(), loadActuators(), loadInstruments(), loadLoops(), loadLedData()]);
   refreshStatus();
   setInterval(refreshStatus, 5000);
+  // Auto-connect WebSocket for MIDI RX indicator
+  connectWebSocket();
+
+  // Click overlay backdrop to close modals
+  document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) overlay.classList.remove('show');
+    });
+  });
+
+  // Restore last active tab from sessionStorage
+  const lastTab = sessionStorage.getItem('lastTab');
+  if (lastTab) {
+    const tab = document.querySelector('.tab[data-tab="' + lastTab + '"]');
+    if (tab) tab.click();
+  }
 }
 
 async function loadMidiNotes() {
@@ -887,6 +1540,15 @@ function onActTypeChange() {
   else document.getElementById('actBus').value = '3';
   onActBusChange();
   onActBehaviorChange();
+  // Update help box
+  const helpBox = document.getElementById('actHelpBox');
+  const helps = {
+    0: 'Servo moteur: controle un bras en position angulaire. Utilisez PCA9685 pour le bus. Comportements: position (mute), frappe (aller-retour rapide), pitch bend, hi-hat.',
+    1: 'Solenoide: electro-aimant pour frappes percussives. Bus MCP23017 ou GPIO. Strike = frappe simple, Hold = maintien PWM, Mute = toggle on/off.',
+    2: 'Moteur DC: rotation continue ou oscillation. Utilisez LEDC PWM. Ideal pour shakers, brosses, roues a billes.'
+  };
+  helpBox.textContent = helps[type] || '';
+  helpBox.style.display = helps[type] ? '' : 'none';
 }
 
 function onActBusChange() {
@@ -1035,15 +1697,41 @@ function applyActuatorPreset() {
 async function loadActuators() {
   const data = await api('actuators');
   if (data) { actuators = data; renderActuators(); }
+  const b = document.getElementById('tabBadgeAct');
+  if (b) b.textContent = actuators.length || '';
 }
 
 function renderActuators() {
   const el = document.getElementById('actuatorList');
   document.getElementById('actCount').textContent = actuators.length;
   if (actuators.length === 0) {
-    el.innerHTML = '<div class="empty-state"><p>Aucun actionneur configure</p><p>Cliquez "+ Ajouter" pour commencer</p></div>';
+    el.innerHTML = '<div class="empty-state">' +
+      '<p style="font-size:1.1em;margin-bottom:12px;">Bienvenue dans Drums Engine !</p>' +
+      '<div class="help-box" style="text-align:left;max-width:450px;margin:0 auto;">' +
+      '<p style="margin-bottom:8px;"><strong>Pour commencer:</strong></p>' +
+      '<p>1. Cliquez <strong>+ Ajouter</strong> pour creer un actionneur</p>' +
+      '<p>2. Choisissez un <strong>preset rapide</strong> ou configurez manuellement</p>' +
+      '<p>3. Passez a l\'onglet <strong>Instruments</strong> pour lier l\'actionneur a une note MIDI</p>' +
+      '<p>4. Connectez-vous en <strong>rtpMIDI</strong> (port 5004) et jouez !</p>' +
+      '</div>' +
+      '<div style="margin-top:16px;"><p style="font-size:0.9em;color:var(--fg2);margin-bottom:8px;">Kits rapides d\'actionneurs:</p>' +
+      '<button class="btn btn-sm btn-primary" onclick="quickActuatorKit(\'basic\')" style="margin:4px;">Basique (3)</button> ' +
+      '<button class="btn btn-sm btn-primary" onclick="quickActuatorKit(\'standard\')" style="margin:4px;">Standard (5)</button> ' +
+      '<button class="btn btn-sm btn-primary" onclick="quickActuatorKit(\'full\')" style="margin:4px;">Complet (8)</button>' +
+      '</div></div>';
     return;
   }
+  // Build reverse lookup: actuator ID → instrument names
+  const actUsedBy = {};
+  instruments.forEach(inst => {
+    (inst.actuatorIds || []).forEach(aid => {
+      if (!actUsedBy[aid]) actUsedBy[aid] = [];
+      actUsedBy[aid].push(inst.name || 'Instrument #' + inst.id);
+    });
+  });
+
+  const typeIcons = ['S','M','P','O']; // Servo, Magnet(solenoid), PWM, Optical
+  const typeColors = ['#4fc3f7','#ff7043','#66bb6a','#ffca28'];
   el.innerHTML = actuators.map(a => {
     let details = a.busName + ' pin ' + a.hwPin;
     if (a.type===1 && a.behavior===0) details += ' · Temps: '+a.paramMin+'-'+a.paramMax+'ms';
@@ -1052,9 +1740,14 @@ function renderActuators() {
     if (a.type===2) details += ' · PWM: '+a.paramMin+'%-'+a.paramMax+'%' + (a.hwAddress>0 ? ' Capteur:GPIO'+a.hwAddress : '') + (a.inverted ? ' [INV]' : '');
     if (a.type===1 && a.cooldownUs > 0 && a.behavior===0) details += ' · Cooldown: '+Math.round(a.cooldownUs*0.1)+'ms';
     if (a.type===1 && a.behavior===1) details += ' · Actif max: '+Math.round(a.cooldownUs*0.1)+'ms';
+    const usedBy = actUsedBy[a.id];
+    const usedByHtml = usedBy ? ' · <span style="color:var(--accent);">\u266a ' + usedBy.join(', ') + '</span>' : ' · <span style="color:var(--fg2);opacity:0.6;">non assigne</span>';
+    const tIcon = typeIcons[a.type] || '?';
+    const tColor = typeColors[a.type] || 'var(--fg2)';
     return `
-    <div class="list-item" style="border-left-color:${a.active?'var(--success)':'var(--accent2)'}">
+    <div class="list-item" style="border-left-color:${a.active?'var(--success)':'var(--accent2)'}" ondblclick="editActuator(${a.id})" title="Double-clic pour modifier">
       <div class="item-title">
+        <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:${tColor};color:#000;font-weight:700;font-size:0.65em;margin-right:4px;">${tIcon}</span>
         <strong>${a.name}</strong>
         <span class="badge">${a.typeName}</span>
         <span class="badge">${a.behaviorName}</span>
@@ -1064,9 +1757,10 @@ function renderActuators() {
       <div class="item-actions">
         <button class="btn btn-sm btn-success" onclick="testActuator(${a.id})">Test</button>
         <button class="btn btn-sm btn-secondary" onclick="editActuator(${a.id})">Modifier</button>
+        <button class="btn btn-sm btn-secondary" onclick="duplicateActuator(${a.id})">Dupliquer</button>
         <button class="btn btn-sm btn-danger" onclick="confirmDelete(this, () => deleteActuator(${a.id}))">Suppr</button>
       </div>
-      <div class="item-detail">${details}</div>
+      <div class="item-detail">${details}${usedByHtml}</div>
     </div>`;
   }).join('');
 }
@@ -1119,6 +1813,7 @@ function showAddActuator() {
   document.getElementById('actEnabled').checked = true;
   onActTypeChange();
   showModal('modalActuator');
+  setTimeout(() => document.getElementById('actName').focus(), 100);
 }
 
 function editActuator(id) {
@@ -1232,10 +1927,36 @@ async function saveActuator() {
     endStopPin2: (type === 2) ? parseInt(document.getElementById('actMotorEndStop2').value) : 255
   };
 
+  // Validations
+  if (!data.name || data.name.trim() === '' || data.name === 'Actuator') {
+    toast('Donnez un nom descriptif a l\'actionneur', 'error');
+    return;
+  }
   if (data.type === 0 && data.bus !== 1) {
     toast('Servo: le bus PCA9685 est requis', 'error');
     return;
   }
+  if (data.type === 1 && data.behavior === 0 && data.paramMin >= data.paramMax) {
+    toast('Temps min doit etre inferieur au max', 'error');
+    return;
+  }
+  if (data.type === 0 && data.paramMin >= data.paramMax) {
+    toast('Angle min doit etre inferieur au max', 'error');
+    return;
+  }
+
+  // Pin conflict detection
+  const editIdNum = editId !== '' ? parseInt(editId) : -1;
+  const conflict = actuators.find(a =>
+    a.id !== editIdNum &&
+    a.bus === data.bus &&
+    a.hwAddress === data.hwAddress &&
+    a.hwPin === data.hwPin
+  );
+  if (conflict) {
+    if (!confirm('Conflit de pin: "' + conflict.name + '" utilise deja ce bus/adresse/pin.\nContinuer quand meme ?')) return;
+  }
+
   let result;
   if (editId !== '') {
     result = await api('actuator?id=' + editId, 'PUT', data);
@@ -1245,19 +1966,110 @@ async function saveActuator() {
   // Fix #19: Verify API response before closing modal
   if (result === null || result === undefined) return;
   closeModal('modalActuator');
+  const newId = (editId === '' && result && result.id) ? result.id : null;
   await loadActuators();
+  markConfigDirty();
   toast('Actionneur enregistre', 'success');
+  // Auto-scroll to newly created item
+  if (newId !== null) {
+    const el = document.querySelector('.list-item[onclick*="editActuator(' + newId + ')"]');
+    if (el) el.scrollIntoView({behavior: 'smooth', block: 'center'});
+  }
 }
 
 async function deleteActuator(id) {
   await api('actuator?id=' + id, 'DELETE');
   await loadActuators();
+  markConfigDirty();
   toast('Actionneur supprime', 'success');
+}
+
+async function duplicateActuator(id) {
+  const act = actuators.find(a => a.id === id);
+  if (!act) return;
+  const copy = JSON.parse(JSON.stringify(act));
+  delete copy.id;
+  copy.name = act.name + ' (copie)';
+  // Auto-assign next pin
+  copy.hwPin = (act.hwPin + 1) % 16;
+
+  const result = await api('actuators', 'POST', copy);
+  if (result !== null && result !== undefined) {
+    await loadActuators();
+    toast('Actionneur duplique', 'success');
+  }
 }
 
 async function testActuator(id) {
   await api('test/actuator', 'POST', {id: id, value: 80});
   toast('Test envoye', 'success');
+}
+
+function sortActuators(key) {
+  if (!key) return;
+  const cmp = {
+    name: (a,b) => (a.name||'').localeCompare(b.name||''),
+    id: (a,b) => (a.id||0) - (b.id||0),
+    type: (a,b) => (a.type||0) - (b.type||0)
+  };
+  if (cmp[key]) { actuators.sort(cmp[key]); renderActuators(); }
+}
+
+const quickActuatorKits = {
+  basic: [
+    {name:'Kick Solenoid', type:1, behavior:0, bus:0, hwAddress:0x20, hwPin:0, paramMin:8, paramMax:25, paramDefault:15, cooldownUs:1000, enabled:true},
+    {name:'Snare Solenoid', type:1, behavior:0, bus:0, hwAddress:0x20, hwPin:1, paramMin:8, paramMax:22, paramDefault:14, cooldownUs:800, enabled:true},
+    {name:'HH Servo', type:0, behavior:2, bus:1, hwAddress:0x40, hwPin:0, paramMin:30, paramMax:150, paramDefault:90, cooldownUs:50, enabled:true}
+  ],
+  standard: [
+    {name:'Kick Solenoid', type:1, behavior:0, bus:0, hwAddress:0x20, hwPin:0, paramMin:8, paramMax:25, paramDefault:15, cooldownUs:1000, enabled:true},
+    {name:'Snare Solenoid', type:1, behavior:0, bus:0, hwAddress:0x20, hwPin:1, paramMin:8, paramMax:22, paramDefault:14, cooldownUs:800, enabled:true},
+    {name:'Tom Hi Solenoid', type:1, behavior:0, bus:0, hwAddress:0x20, hwPin:2, paramMin:8, paramMax:22, paramDefault:14, cooldownUs:800, enabled:true},
+    {name:'HH Servo', type:0, behavior:2, bus:1, hwAddress:0x40, hwPin:0, paramMin:30, paramMax:150, paramDefault:90, cooldownUs:50, enabled:true},
+    {name:'Crash Solenoid', type:1, behavior:0, bus:0, hwAddress:0x20, hwPin:3, paramMin:10, paramMax:28, paramDefault:18, cooldownUs:1200, enabled:true}
+  ],
+  full: [
+    {name:'Kick Solenoid', type:1, behavior:0, bus:0, hwAddress:0x20, hwPin:0, paramMin:8, paramMax:25, paramDefault:15, cooldownUs:1000, enabled:true},
+    {name:'Snare Solenoid', type:1, behavior:0, bus:0, hwAddress:0x20, hwPin:1, paramMin:8, paramMax:22, paramDefault:14, cooldownUs:800, enabled:true},
+    {name:'Tom Hi Solenoid', type:1, behavior:0, bus:0, hwAddress:0x20, hwPin:2, paramMin:8, paramMax:22, paramDefault:14, cooldownUs:800, enabled:true},
+    {name:'Tom Mid Solenoid', type:1, behavior:0, bus:0, hwAddress:0x20, hwPin:3, paramMin:8, paramMax:22, paramDefault:14, cooldownUs:800, enabled:true},
+    {name:'Tom Lo Solenoid', type:1, behavior:0, bus:0, hwAddress:0x20, hwPin:4, paramMin:8, paramMax:22, paramDefault:14, cooldownUs:800, enabled:true},
+    {name:'HH Servo', type:0, behavior:2, bus:1, hwAddress:0x40, hwPin:0, paramMin:30, paramMax:150, paramDefault:90, cooldownUs:50, enabled:true},
+    {name:'Crash Solenoid', type:1, behavior:0, bus:0, hwAddress:0x20, hwPin:5, paramMin:10, paramMax:28, paramDefault:18, cooldownUs:1200, enabled:true},
+    {name:'Ride Solenoid', type:1, behavior:0, bus:0, hwAddress:0x20, hwPin:6, paramMin:8, paramMax:20, paramDefault:14, cooldownUs:800, enabled:true}
+  ]
+};
+
+async function quickActuatorKit(kitId) {
+  const kit = quickActuatorKits[kitId];
+  if (!kit) return;
+  if (!confirm('Creer ' + kit.length + ' actionneurs preconfigures ?')) return;
+  for (const cfg of kit) {
+    await api('actuators', 'POST', cfg);
+  }
+  await loadActuators();
+  markConfigDirty();
+  toast(kit.length + ' actionneurs crees', 'success');
+}
+
+async function actBulkOp(action) {
+  if (!action) return;
+  if (action === 'stopAll') {
+    for (const a of actuators) {
+      api('test/actuator', 'POST', {id: a.id, value: 0});
+    }
+    toast('STOP ALL - Tous arretes', 'warn');
+    return;
+  }
+  const enabled = action === 'enableAll';
+  let ok = 0;
+  for (const a of actuators) {
+    const cfg = Object.assign({}, a, {enabled});
+    const r = await api('actuator?id=' + a.id, 'PUT', cfg);
+    if (r) ok++;
+  }
+  toast((enabled ? 'Actives' : 'Desactives') + ': ' + ok + '/' + actuators.length, 'success');
+  await loadActuators();
 }
 
 // ====================================================================
@@ -1430,15 +2242,155 @@ function populateHiHatNoteSelects() {
 async function loadInstruments() {
   const data = await api('instruments');
   if (data) { instruments = data; renderInstruments(); }
+  const b = document.getElementById('tabBadgeInstr');
+  if (b) b.textContent = instruments.length || '';
+}
+
+function quickCreateInstrument(note, gmName) {
+  // Detect category from GM note
+  const cymbals = [42,44,46,49,51,52,53,55,57,59,80,81]; // HH, crashes, rides, triangles
+  const latin = [54,56,60,61,62,63,64,65,66,67,68,69,70,75,76,77,78,79]; // Bongo, conga, timbale, etc.
+  let cat = 'drums';
+  if (cymbals.includes(note)) cat = 'cymbals';
+  else if (latin.includes(note)) cat = 'latin';
+  showAddInstrument({name: gmName, midiNote: note, category: cat});
+  // Set category and channel after modal opens
+  setTimeout(() => {
+    const catSel = document.getElementById('instrCategory');
+    if (catSel) catSel.value = cat;
+    document.getElementById('instrMidiChannel').value = '10';
+  }, 50);
+}
+
+function toggleNoteMap() {
+  const container = document.getElementById('noteMapContainer');
+  if (container.style.display === 'none') {
+    container.style.display = 'block';
+    renderNoteMap();
+  } else {
+    container.style.display = 'none';
+  }
+}
+
+function renderNoteMap() {
+  const container = document.getElementById('noteMapContainer');
+  // Build note → instrument map
+  const noteMap = {};
+  instruments.forEach(inst => { noteMap[inst.midiNote] = inst; });
+  // GM drum range: 27-81
+  const assignedCount = Object.keys(noteMap).length;
+  const unassignedGm = [];
+  for (let n = 27; n <= 81; n++) {
+    if (!noteMap[n] && GM_DRUMS[n]) unassignedGm.push(n);
+  }
+  let html = '<div class="card"><h3 style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;"><span>Carte MIDI Notes (27-81)</span><div style="display:flex;gap:6px;align-items:center;"><span style="font-size:0.75em;font-weight:400;color:var(--fg2);">' + assignedCount + '/' + instruments.length + ' notes assignees</span>' +
+    (unassignedGm.length > 0 ? '<button class="btn btn-sm" style="background:var(--accent2);color:#fff;font-size:0.7em;" onclick="batchCreateFromNoteMap()">Creer ' + unassignedGm.length + ' manquants</button>' : '') + '</div></h3>';
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:3px;">';
+  for (let n = 27; n <= 81; n++) {
+    const inst = noteMap[n];
+    const gm = GM_DRUMS[n] || '';
+    if (inst) {
+      html += `<div style="padding:4px 6px;border-radius:4px;font-size:0.72em;background:var(--accent);color:#fff;cursor:pointer;line-height:1.3;" onclick="editInstrument(${inst.id})" title="${gm}">
+        <strong>${n}</strong> ${inst.name.substring(0,10)}${!inst.enabled ? ' [OFF]' : ''}</div>`;
+    } else if (gm) {
+      html += `<div style="padding:4px 6px;border-radius:4px;font-size:0.72em;background:var(--bg);color:var(--fg2);line-height:1.3;opacity:0.6;cursor:pointer;" title="${gm} - Cliquer pour creer" onclick="quickCreateInstrument(${n},'${gm.replace(/'/g, "\\'")}')">
+        <strong>${n}</strong> ${gm.substring(0,10)} <span style="color:var(--accent);">+</span></div>`;
+    } else {
+      html += `<div style="padding:4px 6px;border-radius:4px;font-size:0.72em;background:var(--bg);color:var(--fg2);line-height:1.3;opacity:0.3;">
+        <strong>${n}</strong></div>`;
+    }
+  }
+  html += '</div></div>';
+  container.innerHTML = html;
+}
+
+async function batchCreateFromNoteMap() {
+  const noteMap = {};
+  instruments.forEach(inst => { noteMap[inst.midiNote] = true; });
+  const missing = [];
+  for (let n = 27; n <= 81; n++) {
+    if (!noteMap[n] && GM_DRUMS[n]) missing.push({note: n, name: GM_DRUMS[n]});
+  }
+  if (missing.length === 0) { toast('Toutes les notes GM sont deja assignees', 'success'); return; }
+  if (!confirm('Creer ' + missing.length + ' instruments GM manquants ?\n(Notes ' + missing[0].note + '-' + missing[missing.length-1].note + ')')) return;
+
+  const cymbals = [42,44,46,49,51,52,53,55,57,59,80,81];
+  const latin = [54,56,60,61,62,63,64,65,66,67,68,69,70,75,76,77,78,79];
+  let created = 0;
+  for (const m of missing) {
+    let cat = 'drums';
+    if (cymbals.includes(m.note)) cat = 'cymbals';
+    else if (latin.includes(m.note)) cat = 'latin';
+    const payload = {
+      name: m.name, midiNote: m.note, midiChannel: 10, category: cat,
+      enabled: true, retriggerMode: 0, actuatorIds: [255],
+      noteOnActions: [{actuatorId:255, commandType:0, valueSource:0, delayMs:0, durationMinMs:8, durationMaxMs:25, velocityCurve:0}],
+      noteOffActions: [], ccBindings: []
+    };
+    const res = await api('instruments', 'POST', payload);
+    if (res) created++;
+  }
+  await loadInstruments();
+  renderNoteMap();
+  toast(created + ' instruments GM crees', 'success');
+  markConfigDirty();
+}
+
+async function instrBulkOp(action) {
+  if (!action || instruments.length === 0) return;
+  if (action === 'enableAll' || action === 'disableAll') {
+    const enabled = action === 'enableAll';
+    for (const inst of instruments) {
+      inst.enabled = enabled;
+      await api('instrument?id=' + inst.id, 'PUT', inst);
+    }
+    toast(enabled ? 'Tous actives' : 'Tous desactives', 'success');
+    await loadInstruments();
+  } else if (action === 'testAll') {
+    for (const inst of instruments) {
+      if (inst.enabled) {
+        api('test/instrument', 'POST', {id: inst.id, velocity: 80});
+        await new Promise(r => setTimeout(r, 200));
+      }
+    }
+    toast('Test de tous les instruments termine', 'success');
+  }
+}
+
+function sortInstruments(key) {
+  if (!key) return;
+  const cmp = {
+    name: (a,b) => (a.name||'').localeCompare(b.name||''),
+    note: (a,b) => (a.midiNote||0) - (b.midiNote||0),
+    category: (a,b) => (a.category||'other').localeCompare(b.category||'other')
+  };
+  if (cmp[key]) { instruments.sort(cmp[key]); renderInstruments(); }
+}
+
+function filterIncompleteInstruments(showOnlyIncomplete) {
+  const items = document.querySelectorAll('#instrumentList .list-item');
+  items.forEach(item => {
+    if (showOnlyIncomplete) {
+      item.style.display = item.dataset.complete === '1' ? 'none' : '';
+    } else {
+      item.style.display = '';
+    }
+  });
 }
 
 function renderInstruments() {
   const el = document.getElementById('instrumentList');
   document.getElementById('instrCount').textContent = instruments.length;
   if (instruments.length === 0) {
-    el.innerHTML = '<div class="empty-state"><p>Aucun instrument configure</p><p>Cliquez "+ Ajouter" pour commencer</p></div>';
+    el.innerHTML = '<div class="empty-state"><p>Aucun instrument configure</p><p>Cliquez "+ Ajouter" ou utilisez un kit rapide:</p>' +
+      '<div style="display:flex;gap:6px;justify-content:center;margin-top:8px;flex-wrap:wrap;">' +
+      '<button class="btn btn-sm btn-primary" onclick="quickStartKit(\'minimal\')">Kit Minimal (3)</button>' +
+      '<button class="btn btn-sm btn-primary" onclick="quickStartKit(\'standard\')">Kit Standard (6)</button>' +
+      '<button class="btn btn-sm btn-primary" onclick="quickStartKit(\'full\')">Kit Complet (10)</button>' +
+      '</div></div>';
     return;
   }
+  const catColors = {drums:'#e94560', cymbals:'#ffd700', latin:'#4caf50', other:'#64b5f6'};
   el.innerHTML = instruments.map(inst => {
     const mNote = parseInt(inst.midiNote);
     const noteInfo = midiNotes.find(n => parseInt(n.note) === mNote);
@@ -1449,22 +2401,33 @@ function renderInstruments() {
     const onCount = (inst.noteOnActions || []).length;
     const offCount = (inst.noteOffActions || []).length;
     const ccCount = (inst.ccBindings || []).length;
+    const hasActuator = (inst.actuatorIds || []).filter(id => id !== 255).length > 0;
+    const isComplete = inst.enabled && onCount > 0 && hasActuator;
+    const statusIcon = !inst.enabled ? '&#9940;' : (!hasActuator ? '&#9888;' : (onCount === 0 ? '&#9888;' : '&#10003;'));
+    const statusColor = !inst.enabled ? 'var(--fg2)' : (!hasActuator || onCount === 0) ? 'var(--warn)' : 'var(--success)';
+    const catColor = catColors[inst.category] || 'var(--accent2)';
     return `
-    <div class="list-item">
+    <div class="list-item" data-midinote="${mNote}" data-complete="${isComplete?1:0}" style="border-left-color:${catColor};transition:box-shadow 0.15s;" ondblclick="editInstrument(${inst.id})" title="Double-clic pour modifier">
       <div class="item-title">
+        <span style="color:${statusColor};font-size:0.9em;" title="${isComplete ? 'Complet' : !inst.enabled ? 'Desactive' : !hasActuator ? 'Sans actionneur' : 'Sans actions NoteOn'}">${statusIcon}</span>
         <strong>${inst.name}</strong>
-        <span class="badge">${inst.category}</span>
+        <span class="badge" style="background:${catColor};color:#000;">${inst.category}</span>
         <span class="badge">${mNote}${noteName ? ' · ' + noteName : ''}</span>
+        ${(inst.midiChannel && inst.midiChannel !== 10) ? '<span class="badge" style="background:#607d8b;color:#fff;">Ch.' + inst.midiChannel + '</span>' : ''}
         <span class="badge badge-green">On:${onCount}</span>
         <span class="badge badge-warn">Off:${offCount}</span>
         <span class="badge">CC:${ccCount}</span>
         ${!inst.enabled ? '<span class="badge badge-warn">OFF</span>' : ''}
       </div>
       <div class="item-actions">
-        <button class="btn btn-sm btn-success" onclick="testInstrument(${inst.id})">Test</button>
+        <input type="range" min="1" max="127" value="80" id="instrVel${inst.id}" style="width:60px;vertical-align:middle;" title="Velocity"
+          oninput="document.getElementById('instrVelD${inst.id}').textContent=this.value">
+        <span id="instrVelD${inst.id}" style="font-size:0.75em;min-width:22px;display:inline-block;text-align:center;">80</span>
+        <button class="btn btn-sm btn-success" onclick="testInstrumentVel(${inst.id})">Test</button>
         <button class="btn btn-sm btn-secondary" onclick="testInstrumentAction(${inst.id}, 'on', 0)">On#1</button>
         <button class="btn btn-sm btn-secondary" onclick="testInstrumentAction(${inst.id}, 'off', 0)">Off#1</button>
         <button class="btn btn-sm btn-secondary" onclick="editInstrument(${inst.id})">Modifier</button>
+        <button class="btn btn-sm btn-secondary" onclick="duplicateInstrument(${inst.id})">Dupliquer</button>
         <button class="btn btn-sm btn-danger" onclick="confirmDelete(this, () => deleteInstrument(${inst.id}))">Suppr</button>
       </div>
       <div class="item-detail">
@@ -1586,6 +2549,61 @@ async function showCreateInstrumentFromTemplate() {
   toast('Instrument créé depuis template', 'success');
 }
 
+const quickKits = {
+  minimal: [
+    {name:'Kick', midiNote:36, category:'drums'},
+    {name:'Snare', midiNote:38, category:'drums'},
+    {name:'Hi-Hat Closed', midiNote:42, category:'cymbals'}
+  ],
+  standard: [
+    {name:'Kick', midiNote:36, category:'drums'},
+    {name:'Snare', midiNote:38, category:'drums'},
+    {name:'Hi-Hat Closed', midiNote:42, category:'cymbals'},
+    {name:'Hi-Hat Open', midiNote:46, category:'cymbals'},
+    {name:'Tom High', midiNote:48, category:'drums'},
+    {name:'Crash', midiNote:49, category:'cymbals'}
+  ],
+  full: [
+    {name:'Kick', midiNote:36, category:'drums'},
+    {name:'Snare', midiNote:38, category:'drums'},
+    {name:'Side Stick', midiNote:37, category:'drums'},
+    {name:'Hi-Hat Closed', midiNote:42, category:'cymbals'},
+    {name:'Hi-Hat Open', midiNote:46, category:'cymbals'},
+    {name:'Tom High', midiNote:48, category:'drums'},
+    {name:'Tom Mid', midiNote:47, category:'drums'},
+    {name:'Tom Low', midiNote:45, category:'drums'},
+    {name:'Crash', midiNote:49, category:'cymbals'},
+    {name:'Ride', midiNote:51, category:'cymbals'}
+  ]
+};
+
+async function quickStartKit(kitId) {
+  const kit = quickKits[kitId];
+  if (!kit) return;
+  if (!confirm('Creer ' + kit.length + ' instruments GM drums ?\nVous pourrez ensuite assigner les actionneurs.')) return;
+
+  let created = 0;
+  for (const def of kit) {
+    const payload = {
+      name: def.name,
+      midiNote: def.midiNote,
+      midiChannel: 10,
+      category: def.category,
+      enabled: true,
+      retriggerMode: 0,
+      actuatorIds: [255],
+      noteOnActions: [{actuatorId:255, commandType:0, valueSource:0, delayMs:0, durationMinMs:8, durationMaxMs:25, velocityCurve:0}],
+      noteOffActions: [],
+      ccBindings: []
+    };
+    const res = await api('instruments', 'POST', payload);
+    if (res) created++;
+  }
+  await loadInstruments();
+  toast(created + ' instruments crees. Assignez les actionneurs.', 'success');
+  markConfigDirty();
+}
+
 function showAddInstrument(template=null) {
   document.getElementById('modalInstrTitle').textContent = 'Nouvel Instrument';
   document.getElementById('editInstrId').value = '';
@@ -1610,6 +2628,7 @@ function showAddInstrument(template=null) {
   onInstrTypeChange();
   if (!template) onMidiNoteChange();
   showModal('modalInstrument');
+  setTimeout(() => document.getElementById('instrName').focus(), 100);
 }
 
 function _detectInstrumentType(inst) {
@@ -1679,9 +2698,14 @@ function actuatorOptions(selected) {
 function actionEditorRow(step, idx, type) {
   const act = actuators.find(a => a.id === step.actuatorId);
   const isSolenoid = act && act.type === 1;
+  const list = type === 'on' ? editNoteOnActions : editNoteOffActions;
   return `<div class="action-editor">
     <h4>Action ${idx+1}
-      <button class="btn btn-sm btn-danger" onclick="removeActionStep('${type}', ${idx})">X</button>
+      <span>
+        ${idx > 0 ? `<button class="btn btn-sm btn-secondary" onclick="moveActionStep('${type}',${idx},-1)" title="Monter">&uarr;</button>` : ''}
+        ${idx < list.length - 1 ? `<button class="btn btn-sm btn-secondary" onclick="moveActionStep('${type}',${idx},1)" title="Descendre">&darr;</button>` : ''}
+        <button class="btn btn-sm btn-danger" onclick="removeActionStep('${type}', ${idx})">X</button>
+      </span>
     </h4>
     <div class="editor-grid">
       <div><label>Actuateur</label><select class="small-select" onchange="updateActionField('${type}',${idx},'actuatorId',this.value);renderActionEditors()">${actuatorOptions(step.actuatorId)}</select></div>
@@ -1732,6 +2756,13 @@ function addActionStep(type) {
 function removeActionStep(type, idx) {
   if (type === 'on') editNoteOnActions.splice(idx, 1);
   else editNoteOffActions.splice(idx, 1);
+  renderActionEditors();
+}
+function moveActionStep(type, idx, dir) {
+  const list = type === 'on' ? editNoteOnActions : editNoteOffActions;
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= list.length) return;
+  [list[idx], list[newIdx]] = [list[newIdx], list[idx]];
   renderActionEditors();
 }
 function updateActionField(type, idx, field, value) {
@@ -1855,6 +2886,25 @@ async function saveInstrument() {
     ccBinds = editCcBindings;
   }
 
+  // Validations
+  if (!baseName || baseName.trim() === '' || baseName === 'Instrument') {
+    toast('Donnez un nom descriptif a l\'instrument', 'error');
+    return;
+  }
+  if (midiNote < 0 || midiNote > 127) {
+    toast('Note MIDI invalide (0-127)', 'error');
+    return;
+  }
+  if (actIds.length === 0 && instrType !== 'custom') {
+    toast('Selectionnez au moins un actionneur', 'error');
+    return;
+  }
+  // Check for duplicate MIDI note (except when editing same instrument)
+  const duplicate = instruments.find(i => i.midiNote === midiNote && (editId === '' || String(i.id) !== editId));
+  if (duplicate) {
+    toast('Note ' + midiNote + ' deja utilisee par "' + duplicate.name + '"', 'warn');
+  }
+
   const data = {
     name: baseName,
     category: 'drums',
@@ -1877,8 +2927,15 @@ async function saveInstrument() {
   // Fix #19: Verify API response before closing modal
   if (result === null || result === undefined) return;
   closeModal('modalInstrument');
+  const newInstrId = (editId === '' && result && result.id) ? result.id : null;
   await loadInstruments();
+  markConfigDirty();
   toast('Instrument enregistre', 'success');
+  // Auto-scroll to newly created item
+  if (newInstrId !== null) {
+    const el = document.querySelector('.list-item[ondblclick*="editInstrument(' + newInstrId + ')"]');
+    if (el) el.scrollIntoView({behavior: 'smooth', block: 'center'});
+  }
 }
 
 async function saveHiHatInstruments(baseName, retrigger, enabled, editId) {
@@ -1965,12 +3022,40 @@ async function saveHiHatInstruments(baseName, retrigger, enabled, editId) {
 async function deleteInstrument(id) {
   await api('instrument?id=' + id, 'DELETE');
   await loadInstruments();
+  markConfigDirty();
   toast('Instrument supprime', 'success');
+}
+
+async function duplicateInstrument(id) {
+  const inst = instruments.find(i => i.id === id);
+  if (!inst) return;
+  // Find next free MIDI note
+  const usedNotes = new Set(instruments.map(i => i.midiNote));
+  let newNote = inst.midiNote + 1;
+  while (usedNotes.has(newNote) && newNote <= 127) newNote++;
+  if (newNote > 127) { toast('Pas de note MIDI libre', 'error'); return; }
+
+  const copy = JSON.parse(JSON.stringify(inst));
+  delete copy.id;
+  copy.name = inst.name + ' (copie)';
+  copy.midiNote = newNote;
+
+  const result = await api('instruments', 'POST', copy);
+  if (result !== null && result !== undefined) {
+    await loadInstruments();
+    toast('Instrument duplique (note ' + newNote + ')', 'success');
+  }
 }
 
 async function testInstrument(id) {
   await api('test/instrument', 'POST', {id: id, velocity: 80});
   toast('Test envoye', 'success');
+}
+
+async function testInstrumentVel(id) {
+  const vel = parseInt(document.getElementById('instrVel' + id).value) || 80;
+  await api('test/instrument', 'POST', {id: id, velocity: vel});
+  toast('Test vel=' + vel, 'success');
 }
 
 async function testInstrumentAction(id, eventType='on', index=0) {
@@ -2137,7 +3222,45 @@ function renderPipelineCard(inst) {
 
   if (!rows) rows = '<div class="hint">Aucune action configuree</div>';
 
-  return `<div class="card pipe-card"><h3><span>${inst.name} ${badges}</span></h3>${rows}</div>`;
+  const pasteBtn = pipelineClipboard ? `<button class="btn btn-sm" style="background:var(--warn);color:#000;" onclick="pasteActions(${inst.id})" title="Coller les actions copiees">Coller</button>` : '';
+  return `<div class="card pipe-card"><h3><span>${inst.name} ${badges}</span><div style="display:flex;gap:4px;">${pasteBtn}<button class="btn btn-sm btn-secondary" onclick="copyActions(${inst.id})" title="Copier les actions">Copier</button><button class="btn btn-sm btn-secondary" onclick="peOpenEditor(${inst.id})">Edit Pipeline</button></div></h3>${rows}</div>`;
+}
+
+let pipelineClipboard = null;
+
+function copyActions(instrId) {
+  const inst = instruments.find(i => i.id === instrId);
+  if (!inst) return;
+  pipelineClipboard = {
+    noteOnActions: JSON.parse(JSON.stringify(inst.noteOnActions || [])),
+    noteOffActions: JSON.parse(JSON.stringify(inst.noteOffActions || [])),
+    ccBindings: JSON.parse(JSON.stringify(inst.ccBindings || [])),
+    retriggerMode: inst.retriggerMode || 0,
+    sourceName: inst.name
+  };
+  toast('Actions copiees depuis ' + inst.name, 'success');
+  renderMappings();
+}
+
+async function pasteActions(instrId) {
+  if (!pipelineClipboard) return;
+  const inst = instruments.find(i => i.id === instrId);
+  if (!inst) return;
+  if (!confirm('Remplacer les actions de "' + inst.name + '" par celles de "' + pipelineClipboard.sourceName + '" ?')) return;
+
+  const payload = {
+    blocks: [],
+    outputActuatorId: (inst.actuatorIds && inst.actuatorIds[0] !== 255) ? inst.actuatorIds[0] : 255,
+    retriggerMode: pipelineClipboard.retriggerMode,
+    noteOnActions: pipelineClipboard.noteOnActions,
+    noteOffActions: pipelineClipboard.noteOffActions,
+    ccBindings: pipelineClipboard.ccBindings
+  };
+  await api('pipeline/blocks?instrumentId=' + instrId, 'PUT', payload);
+  await loadInstruments();
+  renderMappings();
+  toast('Actions collees sur ' + inst.name, 'success');
+  markConfigDirty();
 }
 
 async function refreshMappings() {
@@ -2181,6 +3304,8 @@ async function loadLoops() {
   if (data) { loops = data; renderLoops(); }
 }
 
+let loopChain = [];
+
 function renderLoops() {
   const el = document.getElementById('loopList');
   document.getElementById('loopCount').textContent = loops.length;
@@ -2195,13 +3320,54 @@ function renderLoops() {
         <span class="badge">${loop.bpm} BPM</span>
         <span class="badge">${loop.beatsPerBar||4}/${loop.beatValue||4}</span>
         <span class="badge">${loop.bars||1} mes.</span>
+        <span class="badge">${(loop.events||[]).length} notes</span>
       </div>
       <div class="item-actions">
+        <button class="btn btn-sm" style="background:var(--accent2);color:#fff;" onclick="addToChain(${i})" title="Ajouter a l'enchainement">+Chain</button>
         <button class="btn btn-sm btn-success" onclick="openLoopEditor(${i})">Editer</button>
+        <button class="btn btn-sm btn-secondary" onclick="duplicateLoop(${i})">Dupliquer</button>
         <button class="btn btn-sm btn-danger" onclick="confirmDelete(this, () => deleteLoopItem(${i}))">Suppr</button>
       </div>
     </div>
   `).join('');
+}
+
+function addToChain(idx) {
+  if (idx < 0 || idx >= loops.length) return;
+  loopChain.push(idx);
+  renderChain();
+}
+
+function removeFromChain(pos) {
+  loopChain.splice(pos, 1);
+  renderChain();
+}
+
+function clearChain() {
+  loopChain = [];
+  renderChain();
+}
+
+function renderChain() {
+  const el = document.getElementById('chainList');
+  const ph = document.getElementById('chainPlaceholder');
+  if (loopChain.length === 0) {
+    el.innerHTML = '<span style="color:var(--fg2);font-size:0.8em;" id="chainPlaceholder">Cliquez +Chain pour ajouter des boucles</span>';
+    return;
+  }
+  el.innerHTML = loopChain.map((idx, pos) => {
+    const name = (loops[idx] && loops[idx].name) || ('Loop ' + idx);
+    return '<span class="badge" style="cursor:pointer;padding:4px 8px;" onclick="removeFromChain(' + pos + ')" title="Cliquer pour retirer">' +
+      (pos + 1) + '. ' + name + ' &times;</span>';
+  }).join('');
+}
+
+async function playChain() {
+  if (loopChain.length === 0) { toast('Ajoutez des boucles a l\'enchainement', 'warn'); return; }
+  const repeat = document.getElementById('chainRepeat').checked;
+  await api('loop/chain', 'POST', { loopIds: loopChain, repeat: repeat });
+  toast('Enchainement demarre (' + loopChain.length + ' boucles)', 'success');
+  startLoopPlayhead();
 }
 
 async function createLoop() {
@@ -2224,11 +3390,22 @@ async function deleteLoopItem(idx) {
   await loadLoops();
 }
 
+async function duplicateLoop(idx) {
+  const loop = loops[idx];
+  if (!loop) return;
+  const copy = JSON.parse(JSON.stringify(loop));
+  copy.name = (copy.name || 'Loop') + ' (copie)';
+  delete copy.id;
+  await api('loops', 'POST', copy);
+  await loadLoops();
+  toast('Boucle dupliquee', 'success');
+}
+
 function openLoopEditor(idx) {
   currentLoopIdx = idx;
   const loop = loops[idx];
   if (!loop) return;
-  document.getElementById('loopEditorTitle').textContent = 'Editeur: ' + loop.name;
+  document.getElementById('loopEditorTitle').value = loop.name;
   document.getElementById('loopBpmDisplay').textContent = loop.bpm;
   document.getElementById('loopBpmSlider').value = loop.bpm;
   document.getElementById('loopEditor').style.display = 'block';
@@ -2238,6 +3415,15 @@ function openLoopEditor(idx) {
 function closeLoopEditor() {
   document.getElementById('loopEditor').style.display = 'none';
   currentLoopIdx = -1;
+  stopLoopPlayhead();
+}
+
+function renameCurrentLoop(name) {
+  if (currentLoopIdx < 0 || !loops[currentLoopIdx] || !name.trim()) return;
+  if (loops[currentLoopIdx].name === name.trim()) return;
+  loops[currentLoopIdx].name = name.trim();
+  api('loop?id=' + currentLoopIdx, 'PUT', loops[currentLoopIdx]);
+  renderLoops();
 }
 
 function renderCurrentLoopGrid() {
@@ -2250,29 +3436,73 @@ function renderCurrentLoopGrid() {
   const totalBeats = beatsPerBar * bars;
   const subdivision = parseInt(document.getElementById('loopQuantize').value) || 8;
   const stepsPerBeat = subdivision / (loop.beatValue || 4);
-  const totalSteps = Math.min(totalBeats * stepsPerBeat, 32);
+  const totalSteps = Math.min(totalBeats * stepsPerBeat, 64);
   const ticksPerStep = (ppq * 4) / subdivision;
+  const stepsPerBar = beatsPerBar * stepsPerBeat;
 
   const rows = instruments.length > 0 ? instruments : [{id:0, name:'(aucun)', midiNote:36}];
+  const events = loop.events || [];
+
+  // Update event count
+  const cntEl = document.getElementById('loopEventCount');
+  if (cntEl) cntEl.textContent = events.length + ' notes';
+
+  // Header row: beat markers
   let html = '<div></div>';
   for (let s = 0; s < totalSteps; s++) {
-    const beat = Math.floor(s / stepsPerBeat) + 1;
-    const sub = (s % stepsPerBeat) + 1;
-    html += `<div class="beat-marker">${sub === 1 ? beat : '.'}</div>`;
+    const globalBeat = Math.floor(s / stepsPerBeat);
+    const beatInBar = globalBeat % beatsPerBar;
+    const sub = (s % stepsPerBeat);
+    const isBarStart = s > 0 && (s % stepsPerBar) === 0;
+    const isBeatStart = sub === 0 && !isBarStart;
+    const cls = isBarStart ? 'beat-marker bar-first' : 'beat-marker';
+    const label = sub === 0 ? (beatInBar + 1) : '\u00b7';
+    html += `<div class="${cls}">${label}</div>`;
   }
+
+  // Instrument rows
   rows.forEach(inst => {
-    html += `<div class="loop-label" title="${inst.name}">${inst.name.substring(0, 8)}</div>`;
+    const instEvtCount = events.filter(e => e[1] === inst.midiNote && e[2] > 0).length;
+    const countBadge = instEvtCount > 0 ? `<span style="font-size:0.7em;color:var(--accent);margin-left:2px;">${instEvtCount}</span>` : '';
+    const gmName = GM_DRUMS[inst.midiNote] || '';
+    const labelNote = `(${inst.midiNote})`;
+    const fullTitle = inst.name + (gmName ? ' - ' + gmName : '') + ' ' + labelNote;
+    html += `<div class="loop-label" title="${fullTitle}">${inst.name.substring(0, 7)}${countBadge}</div>`;
     for (let s = 0; s < totalSteps; s++) {
       const tick = Math.round(s * ticksPerStep);
-      const events = loop.events || [];
-      const isActive = events.some(e =>
+      const barIdx = Math.floor(s / stepsPerBar);
+      const isBarStart = s > 0 && (s % stepsPerBar) === 0;
+      const isBeatStart = (s % stepsPerBeat) === 0 && !isBarStart;
+
+      // Find matching event
+      const evt = events.find(e =>
         e[1] === inst.midiNote && Math.abs(e[0] - tick) < ticksPerStep/2 && e[2] > 0
       );
-      html += `<div class="loop-cell ${isActive ? 'active' : ''}"
-                    onclick="toggleLoopCell(${currentLoopIdx}, ${inst.midiNote}, ${tick}, ${ticksPerStep}, this)"></div>`;
+      const isActive = !!evt;
+      const vel = evt ? evt[2] : 0;
+
+      let cls = 'loop-cell';
+      if (isActive) cls += ' active';
+      if (isBarStart) cls += ' bar-start';
+      else if (isBeatStart) cls += ' beat-start';
+      if (barIdx % 2 === 1) cls += ' bar-odd';
+
+      // Velocity-based color: opacity 0.4 (ppp) to 1.0 (fff)
+      let style = '';
+      if (isActive) {
+        const opacity = 0.4 + (vel / 127) * 0.6;
+        style = `background:rgba(233,69,96,${opacity.toFixed(2)})`;
+      }
+
+      const title = isActive ? `vel: ${vel}` : '';
+      html += `<div class="${cls}" style="${style}" title="${title}" data-step="${s}"
+                    onclick="toggleLoopCell(${currentLoopIdx}, ${inst.midiNote}, ${tick}, ${ticksPerStep}, this)"
+                    oncontextmenu="cycleLoopVelocity(event, ${currentLoopIdx}, ${inst.midiNote}, ${tick}, ${ticksPerStep})"></div>`;
     }
   });
   grid.style.gridTemplateColumns = `60px repeat(${totalSteps}, 1fr)`;
+  grid.dataset.totalSteps = totalSteps;
+  grid.dataset.ticksPerStep = ticksPerStep;
   grid.innerHTML = html;
 }
 
@@ -2285,13 +3515,108 @@ async function toggleLoopCell(loopIdx, note, tick, ticksPerStep, el) {
   );
   if (existingIdx >= 0) {
     events.splice(existingIdx, 1);
-    el.classList.remove('active');
   } else {
-    events.push([tick, note, 80, 10]);
-    el.classList.add('active');
+    const vel = parseInt(document.getElementById('loopVelocity').value) || 100;
+    events.push([tick, note, vel, 10]);
   }
   loop.events = events;
   await api('loop?id=' + loopIdx, 'PUT', loop);
+  renderCurrentLoopGrid();
+}
+
+function cycleLoopVelocity(e, loopIdx, note, tick, ticksPerStep) {
+  e.preventDefault();
+  if (loopIdx < 0 || loopIdx >= loops.length) return;
+  const loop = loops[loopIdx];
+  const events = loop.events || [];
+  const existingIdx = events.findIndex(ev =>
+    ev[1] === note && Math.abs(ev[0] - tick) < ticksPerStep/2 && ev[2] > 0
+  );
+  if (existingIdx < 0) return; // nothing to cycle
+  // Cycle through velocity levels: 40 → 70 → 100 → 127 → 40
+  const levels = [40, 70, 100, 127];
+  const cur = events[existingIdx][2];
+  let nextIdx = 0;
+  for (let i = 0; i < levels.length; i++) {
+    if (cur <= levels[i]) { nextIdx = (i + 1) % levels.length; break; }
+  }
+  events[existingIdx][2] = levels[nextIdx];
+  api('loop?id=' + loopIdx, 'PUT', loop);
+  renderCurrentLoopGrid();
+}
+
+async function clearCurrentLoopEvents() {
+  if (currentLoopIdx < 0 || !loops[currentLoopIdx]) return;
+  const loop = loops[currentLoopIdx];
+  loop.events = [];
+  await api('loop?id=' + currentLoopIdx, 'PUT', loop);
+  renderCurrentLoopGrid();
+  toast('Notes effacees', 'success');
+}
+
+// Loop pattern presets — events defined in beats (0-indexed), auto-mapped to ticks
+// GM Percussion: 36=Kick, 38=Snare, 42=HiHat Closed, 46=HiHat Open, 51=Ride
+const loopPresets = {
+  rock_basic: {
+    // Kick on 1,3 / Snare on 2,4 / HiHat 8ths
+    events: function(ppq) {
+      const e = [];
+      for (let b = 0; b < 4; b++) { e.push([b * ppq, 42, 90, 10]); e.push([b * ppq + ppq/2, 42, 70, 10]); }
+      e.push([0, 36, 110, 10]); e.push([2 * ppq, 36, 100, 10]);
+      e.push([1 * ppq, 38, 100, 10]); e.push([3 * ppq, 38, 100, 10]);
+      return e;
+    }
+  },
+  rock_ride: {
+    events: function(ppq) {
+      const e = [];
+      for (let b = 0; b < 4; b++) { e.push([b * ppq, 51, 85, 10]); e.push([b * ppq + ppq/2, 51, 65, 10]); }
+      e.push([0, 36, 110, 10]); e.push([2 * ppq, 36, 100, 10]);
+      e.push([1 * ppq, 38, 100, 10]); e.push([3 * ppq, 38, 100, 10]);
+      return e;
+    }
+  },
+  funk: {
+    events: function(ppq) {
+      const e = [];
+      for (let b = 0; b < 4; b++) { e.push([b * ppq, 42, 90, 10]); e.push([b * ppq + ppq/2, 42, 70, 10]); }
+      e.push([0, 36, 110, 10]); e.push([ppq + ppq/2, 36, 90, 10]); e.push([2 * ppq + ppq/2, 36, 85, 10]);
+      e.push([1 * ppq, 38, 100, 10]); e.push([3 * ppq, 38, 100, 10]);
+      e.push([3 * ppq + ppq/2, 46, 80, 10]); // open hat before beat 1
+      return e;
+    }
+  },
+  bossa: {
+    events: function(ppq) {
+      const e = [];
+      // Cross-stick pattern
+      e.push([0, 36, 90, 10]); e.push([ppq + ppq/2, 36, 80, 10]); e.push([3 * ppq, 36, 85, 10]);
+      e.push([ppq, 38, 70, 10]); e.push([2 * ppq + ppq/2, 38, 65, 10]);
+      for (let b = 0; b < 4; b++) { e.push([b * ppq, 42, 75, 10]); e.push([b * ppq + ppq/2, 42, 55, 10]); }
+      return e;
+    }
+  },
+  hats_8th: {
+    events: function(ppq) {
+      const e = [];
+      for (let b = 0; b < 4; b++) { e.push([b * ppq, 42, 100, 10]); e.push([b * ppq + ppq/2, 42, 70, 10]); }
+      return e;
+    }
+  }
+};
+
+async function applyLoopPreset(presetId) {
+  if (!presetId || currentLoopIdx < 0 || !loops[currentLoopIdx]) return;
+  const preset = loopPresets[presetId];
+  if (!preset) return;
+  const loop = loops[currentLoopIdx];
+  const ppq = loop.ppq || 96;
+  const newEvents = preset.events(ppq);
+  // Merge with existing events (don't overwrite)
+  loop.events = (loop.events || []).concat(newEvents);
+  await api('loop?id=' + currentLoopIdx, 'PUT', loop);
+  renderCurrentLoopGrid();
+  toast('Preset applique (' + newEvents.length + ' notes)', 'success');
 }
 
 function updateLoopBpm(val) {
@@ -2302,22 +3627,149 @@ function updateLoopBpm(val) {
   }
 }
 
+// Tap Tempo
+let tapTempoTimes = [];
+function tapTempo() {
+  const now = performance.now();
+  tapTempoTimes.push(now);
+  // Keep only last 8 taps, discard taps older than 3s
+  tapTempoTimes = tapTempoTimes.filter(t => now - t < 3000);
+  if (tapTempoTimes.length < 2) return;
+  // Only use last 8
+  if (tapTempoTimes.length > 8) tapTempoTimes = tapTempoTimes.slice(-8);
+  let totalInterval = 0;
+  for (let i = 1; i < tapTempoTimes.length; i++) {
+    totalInterval += tapTempoTimes[i] - tapTempoTimes[i - 1];
+  }
+  const avgMs = totalInterval / (tapTempoTimes.length - 1);
+  const bpm = Math.round(60000 / avgMs);
+  if (bpm >= 40 && bpm <= 300) {
+    document.getElementById('loopBpmSlider').value = bpm;
+    updateLoopBpm(bpm);
+  }
+}
+
+let loopPlayheadTimer = null;
+
 async function playCurrentLoop() {
   if (currentLoopIdx < 0) return;
   await api('loop/play?id=' + currentLoopIdx, 'POST');
   toast('Lecture...', 'success');
+  startLoopPlayhead();
+  const pauseBtn = document.getElementById('btnPauseLoop');
+  if (pauseBtn) { pauseBtn.style.display = ''; pauseBtn.innerHTML = '&#10074;&#10074; Pause'; }
+}
+
+async function togglePauseLoop() {
+  const btn = document.getElementById('btnPauseLoop');
+  const data = await api('status', 'GET', null, true);
+  if (data && data.loop_paused) {
+    await api('loop/resume', 'POST');
+    if (btn) btn.innerHTML = '&#10074;&#10074; Pause';
+    startLoopPlayhead();
+  } else {
+    await api('loop/pause', 'POST');
+    if (btn) btn.innerHTML = '&#9654; Resume';
+    stopLoopPlayhead();
+  }
 }
 
 async function stopLoop() {
   await api('loop/stop', 'POST');
+  stopLoopPlayhead();
+  clearPlayhead();
+  const pauseBtn = document.getElementById('btnPauseLoop');
+  if (pauseBtn) pauseBtn.style.display = 'none';
+}
+
+function startLoopPlayhead() {
+  stopLoopPlayhead();
+  loopPlayheadTimer = setInterval(updateLoopPlayhead, 100);
+}
+
+function stopLoopPlayhead() {
+  if (loopPlayheadTimer) { clearInterval(loopPlayheadTimer); loopPlayheadTimer = null; }
+}
+
+function clearPlayhead() {
+  document.querySelectorAll('#loopGrid .loop-playhead').forEach(el => el.classList.remove('loop-playhead'));
+  document.querySelectorAll('#loopGrid .beat-marker').forEach(el => el.style.color = '');
+}
+
+async function updateLoopPlayhead() {
+  const grid = document.getElementById('loopGrid');
+  const data = await api('status', 'GET', null, true);
+  if (!data || !data.loop_playing) {
+    stopLoopPlayhead(); clearPlayhead();
+    const cs = document.getElementById('chainStatus');
+    if (cs) cs.textContent = '';
+    const pauseBtn = document.getElementById('btnPauseLoop');
+    if (pauseBtn) pauseBtn.style.display = 'none';
+    const posDisp = document.getElementById('loopPositionDisplay');
+    if (posDisp) posDisp.style.display = 'none';
+    return;
+  }
+
+  // Show loop position
+  const posDisp = document.getElementById('loopPositionDisplay');
+  if (posDisp && data.loop_bar !== undefined) {
+    posDisp.style.display = '';
+    posDisp.textContent = (data.loop_bar + 1) + '.' + (data.loop_beat + 1);
+  }
+
+  // Sync pause button state
+  const pauseBtn = document.getElementById('btnPauseLoop');
+  if (pauseBtn) {
+    pauseBtn.style.display = '';
+    pauseBtn.innerHTML = data.loop_paused ? '&#9654; Resume' : '&#10074;&#10074; Pause';
+  }
+
+  // Update chain status display
+  const cs = document.getElementById('chainStatus');
+  if (cs) {
+    if (data.loop_chain_active) {
+      cs.textContent = 'Boucle ' + (data.loop_chain_index + 1) + '/' + data.loop_chain_length;
+    } else {
+      cs.textContent = '';
+    }
+  }
+
+  // If chain is playing, track the currently-playing loop in the editor
+  if (data.loop_chain_active && data.loop_index !== currentLoopIdx && currentLoopIdx >= 0) {
+    // Chain moved to a different loop; update editor if open
+  }
+
+  if (!grid || currentLoopIdx < 0) return;
+  if (data.loop_index !== currentLoopIdx) { clearPlayhead(); return; }
+
+  const totalSteps = parseInt(grid.dataset.totalSteps) || 16;
+  const ticksPerStep = parseFloat(grid.dataset.ticksPerStep) || 48;
+  const currentTick = data.loop_tick || 0;
+  const currentStep = Math.floor(currentTick / ticksPerStep);
+
+  clearPlayhead();
+
+  if (currentStep >= 0 && currentStep < totalSteps) {
+    grid.querySelectorAll(`[data-step="${currentStep}"]`).forEach(el => el.classList.add('loop-playhead'));
+  }
 }
 
 // ====================================================================
 // SYSTEM
 // ====================================================================
+let connLost = false;
 async function refreshStatus() {
-  const data = await api('status');
-  if (!data) return;
+  const data = await api('status', 'GET', null, true);
+  if (!data) {
+    if (!connLost) {
+      connLost = true;
+      document.getElementById('wifiDot').className = 'dot off';
+      document.getElementById('wifiStatus').textContent = 'Deconnecte';
+      toast('Connexion perdue avec l\'ESP32', 'error');
+    }
+    return;
+  }
+  if (connLost) { connLost = false; toast('Connexion retablie', 'success'); }
   statusData = data;
 
   // Header status dots
@@ -2391,13 +3843,23 @@ function updateSettingsInfo(data) {
       '<br>Port rtpMIDI: 5004' +
       '<br>Session: MidiPercussion';
   }
-  const sys = document.getElementById('systemInfo');
-  if (sys) {
-    sys.innerHTML =
-      'Uptime: ' + Math.floor((data.uptime_s||0)/3600) + 'h' + Math.floor(((data.uptime_s||0)%3600)/60) + 'm' +
-      '<br>Memoire libre: ' + ((data.free_heap||0)/1024).toFixed(1) + ' KB' +
-      '<br>Stockage: ' + (data.storage || '--') +
-      '<br>Actionneurs: ' + (data.actuator_configs||0) + ' / Instruments: ' + (data.instrument_count||0);
+  const sg = document.getElementById('sysInfoGrid');
+  if (sg) {
+    const m = (v,l) => `<div class="monitor-item"><div class="mv">${v}</div><div class="ml">${l}</div></div>`;
+    const uptimeH = Math.floor((data.uptime_s||0)/3600);
+    const uptimeM = Math.floor(((data.uptime_s||0)%3600)/60);
+    sg.innerHTML =
+      m(data.firmware_version||'--', 'Firmware') +
+      m(data.chip_model||'ESP32', 'Chip') +
+      m((data.cpu_freq_mhz||240)+' MHz', 'CPU') +
+      m(((data.free_heap||0)/1024).toFixed(0)+' KB', 'RAM libre (' + Math.round((data.free_heap||0)/3200) + '%)') +
+      m(((data.min_free_heap||0)/1024).toFixed(0)+' KB', 'RAM min') +
+      m(((data.flash_size||0)/1048576).toFixed(1)+' MB', 'Flash') +
+      m(uptimeH+'h'+uptimeM+'m', 'Uptime') +
+      m(data.storage||'--', 'Stockage') +
+      m(data.sdk_version||'--', 'SDK') +
+      m((data.actuator_configs||0)+' / '+(data.instrument_count||0), 'Act. / Instr.') +
+      m(data.pipeline_count||0, 'Pipelines');
   }
 }
 
@@ -2406,11 +3868,15 @@ async function loadWifiSettings() {
   if (!data) return;
   const info = document.getElementById('wifiInfo');
   if (data.mode === 'ap') {
-    info.innerHTML = 'Mode: <strong>Point d\'acces</strong> (AP) - SSID: ' + data.ap_ssid + '<br>IP: ' + data.ip;
+    info.innerHTML = 'Mode: <strong>Point d\'acces</strong> (AP) - SSID: ' + data.ap_ssid + '<br>IP: <strong>' + data.ip + '</strong>';
   } else {
+    const rssi = data.rssi || 0;
+    const sigQual = rssi >= -50 ? 'Excellent' : rssi >= -60 ? 'Bon' : rssi >= -70 ? 'Moyen' : 'Faible';
+    const sigColor = rssi >= -50 ? 'var(--success)' : rssi >= -60 ? 'var(--accent)' : rssi >= -70 ? 'var(--warn)' : 'var(--accent)';
     info.innerHTML = 'Mode: <strong>Station</strong> - ' + (data.connected ? 'Connecte' : 'Deconnecte') +
-      '<br>SSID: ' + (data.ssid||'--') + ' / IP: ' + (data.ip||'--') +
-      (data.rssi ? ' / Signal: ' + data.rssi + ' dBm' : '');
+      '<br>SSID: ' + (data.ssid||'--') + ' &middot; IP: <strong>' + (data.ip||'--') + '</strong>' +
+      (data.rssi ? ' &middot; Signal: <span style="color:' + sigColor + ';font-weight:600;">' + rssi + ' dBm (' + sigQual + ')</span>' : '') +
+      (data.hostname ? '<br>mDNS: <strong>' + data.hostname + '.local</strong>' : '');
   }
   document.getElementById('settWifiSsid').value = data.ssid || '';
   document.getElementById('settWifiHostname').value = data.hostname || 'midipercussion';
@@ -2425,6 +3891,44 @@ async function saveWifiSettings() {
   if (result) toast('WiFi enregistre. Redemarrage...', 'success');
 }
 
+// MIDI Channel configuration
+function renderMidiChannelGrid(mask) {
+  const grid = document.getElementById('midiChannelGrid');
+  if (!grid) return;
+  let html = '';
+  for (let ch = 1; ch <= 16; ch++) {
+    const active = (mask >> (ch - 1)) & 1;
+    const label = ch === 10 ? '10*' : ch;
+    html += `<div onclick="toggleMidiChannel(${ch})" style="padding:4px;text-align:center;border-radius:4px;cursor:pointer;font-size:0.8em;font-weight:bold;
+      background:${active ? 'var(--accent)' : 'var(--bg)'};color:${active ? '#fff' : 'var(--fg2)'};
+      border:1px solid ${active ? 'var(--accent)' : '#444'};user-select:none;" data-ch="${ch}">${label}</div>`;
+  }
+  grid.innerHTML = html;
+  grid.dataset.mask = mask;
+}
+function toggleMidiChannel(ch) {
+  const grid = document.getElementById('midiChannelGrid');
+  let mask = parseInt(grid.dataset.mask) || 0xFFFF;
+  mask ^= (1 << (ch - 1));
+  if (mask === 0) mask = 1 << (ch - 1); // Prevent disabling all
+  renderMidiChannelGrid(mask);
+}
+function setMidiChannels(preset) {
+  if (preset === 'all') renderMidiChannelGrid(0xFFFF);
+  else if (preset === 'drums') renderMidiChannelGrid(1 << 9); // ch 10
+}
+async function saveMidiChannels() {
+  const grid = document.getElementById('midiChannelGrid');
+  const mask = parseInt(grid.dataset.mask) || 0xFFFF;
+  const res = await api('midi/channels', 'PUT', {channelMask: mask});
+  if (res) toast('Canaux MIDI mis a jour', 'success');
+}
+async function loadMidiChannels() {
+  const data = await api('midi/channels');
+  if (data) renderMidiChannelGrid(data.channelMask);
+  else renderMidiChannelGrid(0xFFFF);
+}
+
 async function scanI2C() {
   const data = await api('scan-i2c');
   if (data) {
@@ -2432,9 +3936,116 @@ async function scanI2C() {
   }
 }
 
+function markConfigDirty() {
+  configDirty = true;
+  const dot = document.getElementById('saveDot');
+  if (dot) dot.style.display = 'inline-block';
+}
+function markConfigClean() {
+  configDirty = false;
+  const dot = document.getElementById('saveDot');
+  if (dot) dot.style.display = 'none';
+}
+
+window.addEventListener('beforeunload', (e) => {
+  if (configDirty) { e.preventDefault(); e.returnValue = ''; }
+});
+
 async function saveAll() {
   await api('save', 'POST');
+  markConfigClean();
   toast('Configuration sauvegardee', 'success');
+}
+
+function confirmFactoryReset() {
+  if (!confirm('ATTENTION: Ceci va supprimer TOUTE la configuration (actionneurs, instruments, LEDs, boucles, MIDI) et redemarrer l\'ESP32.\n\nExportez votre config d\'abord si necessaire.\n\nContinuer ?')) return;
+  if (!confirm('Confirmer le reset usine ? Cette action est irreversible.')) return;
+  api('factory-reset', 'POST').then(() => {
+    toast('Reset usine en cours... L\'appareil redemarre.', 'warn');
+    setTimeout(() => location.reload(), 5000);
+  });
+}
+
+async function runDiagnostics() {
+  const issues = [];
+  const warns = [];
+  const ok = [];
+
+  // Server-side validation
+  const serverDiag = await api('validate', 'GET', null, true);
+  if (serverDiag) {
+    if (serverDiag.pipeline_count !== undefined)
+      ok.push(serverDiag.pipeline_count + ' pipeline(s) compile(s), ' + (serverDiag.cc_route_count || 0) + ' route(s) CC');
+  }
+
+  // Check actuators
+  if (actuators.length === 0) {
+    issues.push('Aucun actionneur configure');
+  } else {
+    const disabled = actuators.filter(a => !a.enabled);
+    if (disabled.length > 0) warns.push(disabled.length + ' actionneur(s) desactive(s): ' + disabled.map(a => a.name).join(', '));
+
+    const usedIds = new Set();
+    instruments.forEach(inst => {
+      (inst.actuatorIds || []).filter(id => id !== 255).forEach(id => usedIds.add(id));
+      (inst.noteOnActions || []).forEach(a => { if (a.actuatorId !== undefined) usedIds.add(a.actuatorId); });
+      (inst.noteOffActions || []).forEach(a => { if (a.actuatorId !== undefined) usedIds.add(a.actuatorId); });
+      (inst.ccBindings || []).forEach(b => { if (b.actuatorId !== undefined) usedIds.add(b.actuatorId); });
+    });
+    const unused = actuators.filter(a => !usedIds.has(a.id));
+    if (unused.length > 0) warns.push(unused.length + ' actionneur(s) inutilise(s): ' + unused.map(a => a.name).join(', '));
+    ok.push(actuators.length + ' actionneur(s) configure(s)');
+  }
+
+  // Check instruments
+  if (instruments.length === 0) {
+    issues.push('Aucun instrument configure');
+  } else {
+    const noActions = instruments.filter(i => (i.noteOnActions || []).length === 0);
+    if (noActions.length > 0) warns.push(noActions.length + ' instrument(s) sans actions NoteOn: ' + noActions.map(i => i.name).join(', '));
+
+    const noActuator = instruments.filter(i => {
+      const ids = (i.actuatorIds || []).filter(id => id !== 255);
+      return ids.length === 0;
+    });
+    if (noActuator.length > 0) warns.push(noActuator.length + ' instrument(s) sans actionneur: ' + noActuator.map(i => i.name).join(', '));
+
+    // Duplicate MIDI notes
+    const noteMap = {};
+    instruments.forEach(i => {
+      const k = i.midiNote + '-' + (i.midiChannel || 10);
+      (noteMap[k] = noteMap[k] || []).push(i.name);
+    });
+    const dupes = Object.entries(noteMap).filter(([,v]) => v.length > 1);
+    if (dupes.length > 0) {
+      dupes.forEach(([k, names]) => {
+        warns.push('Note MIDI ' + k.split('-')[0] + ' (ch.' + k.split('-')[1] + ') partagee: ' + names.join(', '));
+      });
+    }
+
+    const offInstr = instruments.filter(i => !i.enabled);
+    if (offInstr.length > 0) warns.push(offInstr.length + ' instrument(s) desactive(s)');
+    ok.push(instruments.length + ' instrument(s) configure(s)');
+  }
+
+  // Check loops
+  if (loops.length > 0) {
+    const emptyLoops = loops.filter(l => !l.events || l.events.length === 0);
+    if (emptyLoops.length > 0) warns.push(emptyLoops.length + ' boucle(s) vide(s)');
+    ok.push(loops.length + ' boucle(s) configuree(s)');
+  }
+
+  // Render results
+  const el = document.getElementById('diagResults');
+  let html = '<strong>Diagnostics</strong><br>';
+  if (issues.length === 0 && warns.length === 0) {
+    html += '<div style="color:var(--success);margin-top:6px;">&#10003; Aucun probleme detecte</div>';
+  }
+  issues.forEach(i => { html += '<div style="color:var(--accent);margin-top:4px;">&#10007; ' + i + '</div>'; });
+  warns.forEach(w => { html += '<div style="color:var(--warn);margin-top:4px;">&#9888; ' + w + '</div>'; });
+  ok.forEach(o => { html += '<div style="color:var(--success);margin-top:4px;">&#10003; ' + o + '</div>'; });
+  el.innerHTML = html;
+  el.style.display = 'block';
 }
 
 async function updateGlobalVolume(val) {
@@ -2442,12 +4053,156 @@ async function updateGlobalVolume(val) {
   await api('test/cc', 'POST', {cc: 7, value: parseInt(val)});
 }
 
+async function loadSystemLogs() {
+  const data = await api('logs');
+  if (!data) return;
+  const log = document.getElementById('systemLogList');
+  const entries = data.recent || [];
+  if (entries.length === 0) {
+    log.innerHTML = '<em>Aucun log enregistre</em>';
+    return;
+  }
+  const levelColors = {'E':'var(--accent)','W':'var(--warn)','I':'var(--fg2)'};
+  const levelNames = {'E':'ERR','W':'WRN','I':'INF'};
+  log.innerHTML = entries.map(e => {
+    const c = levelColors[e.level] || 'var(--fg2)';
+    const l = levelNames[e.level] || e.level;
+    const t = Math.floor(e.uptimeS/3600)+'h'+Math.floor((e.uptimeS%3600)/60)+'m'+Math.floor(e.uptimeS%60)+'s';
+    return '<div><span style="color:var(--fg2);">['+t+']</span> <span style="color:'+c+';font-weight:600;">'+l+'</span> '+e.message+'</div>';
+  }).join('');
+  log.scrollTop = log.scrollHeight;
+}
+
+async function clearSystemLogs() {
+  await api('logs', 'DELETE');
+  document.getElementById('systemLogList').innerHTML = '<em>Logs vides</em>';
+  toast('Logs effaces', 'success');
+}
+
+async function exportConfig() {
+  const [actData, instrData, loopsData, midiData, ledStripsData, ledSegsData, ledThemesData] = await Promise.all([
+    api('actuators'), api('instruments'), api('loops'), api('midi/channels'),
+    api('led/strips'), api('led/segments'), api('led/themes')
+  ]);
+  if (!actData || !instrData) { toast('Erreur lors de l\'export', 'error'); return; }
+  const config = {
+    version: 4,
+    exportDate: new Date().toISOString(),
+    actuators: actData.actuators || actData,
+    instruments: instrData.instruments || instrData,
+    loops: (loopsData && loopsData.loops) ? loopsData.loops : (Array.isArray(loopsData) ? loopsData : []),
+    midiChannelMask: midiData ? midiData.channelMask : 0xFFFF,
+    ledStrips: (ledStripsData && ledStripsData.strips) ? ledStripsData.strips : (Array.isArray(ledStripsData) ? ledStripsData : []),
+    ledSegments: (ledSegsData && ledSegsData.segments) ? ledSegsData.segments : (Array.isArray(ledSegsData) ? ledSegsData : []),
+    ledThemes: (ledThemesData && ledThemesData.themes) ? ledThemesData.themes : (Array.isArray(ledThemesData) ? ledThemesData : [])
+  };
+  const blob = new Blob([JSON.stringify(config, null, 2)], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'drums-engine-config-' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  let exportSummary = config.actuators.length + ' act, ' + config.instruments.length + ' instr';
+  if (config.loops.length > 0) exportSummary += ', ' + config.loops.length + ' loops';
+  if (config.ledStrips.length > 0) exportSummary += ', ' + config.ledStrips.length + ' LED strips';
+  toast('Configuration exportee (' + exportSummary + ')', 'success');
+}
+
+async function importConfig(file) {
+  if (!file) return;
+  const status = document.getElementById('importStatus');
+  status.innerHTML = '<span style="color:var(--warn);">Lecture du fichier...</span>';
+  try {
+    const text = await file.text();
+    const config = JSON.parse(text);
+    if (!config.actuators || !config.instruments) {
+      status.innerHTML = '<span style="color:var(--accent);">Format invalide: actuators et instruments requis</span>';
+      return;
+    }
+    const actCount = config.actuators.length;
+    const instrCount = config.instruments.length;
+    status.innerHTML = '<span style="color:var(--warn);">Import: ' + actCount + ' actionneurs, ' + instrCount + ' instruments...</span>';
+
+    // Import actuators first
+    let actOk = 0, actErr = 0;
+    for (const act of config.actuators) {
+      const existing = actuators.find(a => a.id === act.id);
+      let result;
+      if (existing) {
+        result = await api('actuator?id=' + act.id, 'PUT', act);
+      } else {
+        result = await api('actuators', 'POST', act);
+      }
+      if (result !== null && result !== undefined) actOk++; else actErr++;
+    }
+
+    // Import instruments
+    let instrOk = 0, instrErr = 0;
+    for (const inst of config.instruments) {
+      const existing = instruments.find(i => i.id === inst.id);
+      let result;
+      if (existing) {
+        result = await api('instrument?id=' + inst.id, 'PUT', inst);
+      } else {
+        result = await api('instruments', 'POST', inst);
+      }
+      if (result !== null && result !== undefined) instrOk++; else instrErr++;
+    }
+
+    // Import loops (v3+)
+    let loopsOk = 0;
+    if (config.loops && config.loops.length > 0) {
+      for (const loop of config.loops) {
+        const r = await api('loops', 'POST', loop);
+        if (r) loopsOk++;
+      }
+    }
+
+    // Import MIDI channel mask (v3+)
+    if (config.midiChannelMask !== undefined) {
+      await api('midi/channels', 'PUT', {channelMask: config.midiChannelMask});
+    }
+
+    // Import LED config (v4+)
+    let ledOk = 0;
+    if (config.ledStrips && config.ledStrips.length > 0) {
+      for (const strip of config.ledStrips) { const r = await api('led/strips', 'POST', strip); if (r) ledOk++; }
+    }
+    if (config.ledSegments && config.ledSegments.length > 0) {
+      for (const seg of config.ledSegments) { const r = await api('led/segments', 'POST', seg); if (r) ledOk++; }
+    }
+    if (config.ledThemes && config.ledThemes.length > 0) {
+      for (const theme of config.ledThemes) { const r = await api('led/themes', 'POST', theme); if (r) ledOk++; }
+    }
+
+    // Save and reload
+    await api('save', 'POST');
+    await Promise.all([loadActuators(), loadInstruments(), loadLedData()]);
+
+    const errTotal = actErr + instrErr;
+    let summary = actOk + ' actionneurs, ' + instrOk + ' instruments';
+    if (loopsOk > 0) summary += ', ' + loopsOk + ' boucles';
+    if (ledOk > 0) summary += ', ' + ledOk + ' LED configs';
+    if (errTotal === 0) {
+      status.innerHTML = '<span style="color:var(--success);">Import reussi: ' + summary + '</span>';
+      toast('Configuration importee avec succes', 'success');
+    } else {
+      status.innerHTML = '<span style="color:var(--warn);">Import partiel: ' + summary + ' (' + errTotal + ' erreurs)</span>';
+      toast('Import partiel - verifiez les erreurs', 'warn');
+    }
+  } catch (e) {
+    status.innerHTML = '<span style="color:var(--accent);">Erreur: ' + e.message + '</span>';
+    toast('Erreur d\'import', 'error');
+  }
+}
+
 // ====================================================================
 // UI Helpers
 // ====================================================================
 function showModal(id) {
   document.getElementById(id).classList.add('show');
-  if (id === 'modalSettings') { loadWifiSettings(); refreshStatus(); document.getElementById('settHideUsedActuators').checked = hideUsedActuators; }
+  if (id === 'modalSettings') { loadWifiSettings(); loadMidiChannels(); refreshStatus(); document.getElementById('settHideUsedActuators').checked = hideUsedActuators; }
   if (id === 'modalLoopEditor') { renderLoops(); }
 }
 function closeModal(id) {
@@ -2457,6 +4212,7 @@ function closeModal(id) {
     editNoteOnActions = [];
     editNoteOffActions = [];
     editCcBindings = [];
+    if (midiLearnActive) { midiLearnActive = false; const btn = document.getElementById('btnMidiLearn'); if (btn) { btn.textContent = 'Learn'; btn.classList.remove('btn-danger'); btn.classList.add('btn-secondary'); } }
   }
 }
 
@@ -2466,10 +4222,28 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
     tab.classList.add('active');
     document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
-    // Refresh mappings when switching to that tab
+    sessionStorage.setItem('lastTab', tab.dataset.tab);
     if (tab.dataset.tab === 'mappings') refreshMappings();
+    if (tab.dataset.tab === 'leds') loadLedData();
+    if (tab.dataset.tab === 'piano') renderPianoPads();
+    if (tab.dataset.tab === 'calibration') { loadCalibrationData(); startCalibPolling(); } else { stopCalibPolling(); }
+    // Stop piano live polling when leaving piano tab
+    if (tab.dataset.tab !== 'piano' && pianoLiveActive) {
+      document.getElementById('pianoLiveToggle').checked = false;
+      togglePianoLive(false);
+    }
   });
 });
+
+function filterList(listId, query) {
+  const el = document.getElementById(listId);
+  if (!el) return;
+  const items = el.querySelectorAll('.list-item, .calib-item');
+  const q = query.toLowerCase().trim();
+  items.forEach(item => {
+    item.style.display = (!q || item.textContent.toLowerCase().includes(q)) ? '' : 'none';
+  });
+}
 
 function confirmDelete(btn, callback) {
   if (btn.dataset.confirming) { callback(); return; }
@@ -2501,6 +4275,1283 @@ function toast(msg, type='success') {
 }
 
 // Event listeners are now inline (onchange) on the HTML elements
+
+// ====================================================================
+// LED Management
+// ====================================================================
+const hitAnimNames = ['Flash', 'Pulse', 'Ripple'];
+const idleAnimNames = ['Off', 'Static', 'Breathing', 'Rainbow'];
+
+async function loadLedData() {
+  const [stripsData, segData, themeData, statusData] = await Promise.all([
+    api('led/strips'), api('led/segments'), api('led/themes'), api('led/status')
+  ]);
+  if (stripsData) ledStrips = stripsData.strips || [];
+  if (segData) ledSegments = segData.segments || [];
+  if (themeData) { ledThemes = themeData.themes || []; }
+  if (statusData) ledStatus = statusData;
+
+  renderLedStrips();
+  renderLedSegments();
+  renderLedThemes();
+  updateLedStatus();
+}
+
+function updateLedStatus() {
+  document.getElementById('ledStripCountBadge').textContent = (ledStatus.stripCount||0) + ' strips';
+  document.getElementById('ledSegCount').textContent = ledSegments.length;
+  document.getElementById('ledThemeCount').textContent = ledThemes.length;
+  if (ledStatus.masterBrightness !== undefined) {
+    document.getElementById('ledMasterBrightness').value = ledStatus.masterBrightness;
+  }
+  // Populate theme selector
+  const sel = document.getElementById('ledActiveTheme');
+  sel.innerHTML = '<option value="255">Aucun</option>';
+  ledThemes.forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t.id;
+    opt.textContent = t.name || ('Theme #' + t.id);
+    if (t.id === (ledStatus.activeThemeId || 255)) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+function renderLedStrips() {
+  const el = document.getElementById('ledStripList');
+  const totalLeds = ledStrips.reduce((sum, s) => sum + (s.ledCount || 0), 0);
+  const badge = document.getElementById('ledStripCountBadge');
+  if (badge) badge.textContent = ledStrips.length + ' strips · ' + totalLeds + ' LEDs';
+  if (ledStrips.length === 0) {
+    el.innerHTML = '<div class="empty-state">Aucun strip configure. Ajoutez un strip WS2812B.</div>';
+    return;
+  }
+  el.innerHTML = ledStrips.map(s => {
+    // Build strip pixel layout visualization
+    const stripSegs = ledSegments.filter(seg => seg.stripId === s.id);
+    let layoutHtml = '';
+    if (s.ledCount > 0 && stripSegs.length > 0) {
+      const pixels = new Array(s.ledCount).fill(null);
+      stripSegs.forEach(seg => {
+        for (let p = seg.pixelStart; p < seg.pixelStart + seg.pixelCount && p < s.ledCount; p++) {
+          pixels[p] = seg;
+        }
+      });
+      // Render compact layout bar
+      layoutHtml = '<div style="display:flex;height:12px;border-radius:3px;overflow:hidden;margin:4px 0;border:1px solid rgba(255,255,255,0.1);">';
+      let i = 0;
+      while (i < s.ledCount) {
+        const seg = pixels[i];
+        let count = 1;
+        while (i + count < s.ledCount && pixels[i + count] === seg) count++;
+        const pct = (count / s.ledCount * 100).toFixed(1);
+        if (seg) {
+          const hc = seg.hitColor || {r:255,g:255,b:255};
+          layoutHtml += `<div style="width:${pct}%;background:rgb(${hc.r},${hc.g},${hc.b});opacity:0.7;" title="${seg.name||'Segment'} (${seg.pixelStart}-${seg.pixelStart+seg.pixelCount-1})"></div>`;
+        } else {
+          layoutHtml += `<div style="width:${pct}%;background:rgba(128,128,128,0.15);" title="Non assigne (${i}-${i+count-1})"></div>`;
+        }
+        i += count;
+      }
+      layoutHtml += '</div>';
+    }
+    return `<div class="list-item">
+      <div class="item-title"><strong>Strip #${s.id}</strong> <span class="badge">${s.ledCount} LEDs</span> <span class="badge">GPIO ${s.gpioPin}</span> ${s.enabled?'<span class="badge badge-green">ON</span>':''}</div>
+      ${layoutHtml}
+      <div class="item-actions">
+        <button class="btn btn-sm btn-secondary" onclick="testLedStrip(${s.id})">Test</button>
+        <button class="btn btn-sm btn-danger" onclick="confirmDelete(this,()=>deleteLedStrip(${s.id}))">Supprimer</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderLedSegments() {
+  const el = document.getElementById('ledSegmentList');
+  if (ledSegments.length === 0) {
+    el.innerHTML = '<div class="empty-state">Aucun segment. Creez des segments et assignez-les a des instruments.</div>';
+    return;
+  }
+  el.innerHTML = ledSegments.map(s => {
+    const inst = instruments.find(i => i.id === s.instrumentId);
+    const instName = inst ? inst.name : (s.instrumentId === 255 ? 'Aucun' : '?');
+    const hc = s.hitColor || {r:255,g:255,b:255};
+    const ic = s.idleColor || {r:40,g:40,b:40};
+    return `<div class="list-item" style="border-left-color:rgb(${hc.r},${hc.g},${hc.b});">
+      <div class="item-title"><strong>${s.name||'Segment'}</strong> <span class="badge">Strip #${s.stripId}</span> <span class="badge">${s.pixelStart}-${s.pixelStart+s.pixelCount-1}</span> <span class="badge">${s.pixelCount} LEDs</span></div>
+      <div style="display:flex;gap:4px;align-items:center;margin:4px 0;">
+        <span style="display:inline-block;width:18px;height:18px;border-radius:3px;background:rgb(${hc.r},${hc.g},${hc.b});border:1px solid rgba(255,255,255,0.2);" title="Hit: rgb(${hc.r},${hc.g},${hc.b})"></span>
+        <span style="font-size:0.75em;color:var(--fg2);">Hit</span>
+        <span style="display:inline-block;width:18px;height:18px;border-radius:3px;background:rgb(${ic.r},${ic.g},${ic.b});border:1px solid rgba(255,255,255,0.2);" title="Idle: rgb(${ic.r},${ic.g},${ic.b})"></span>
+        <span style="font-size:0.75em;color:var(--fg2);">Idle</span>
+        <span style="flex:1;"></span>
+        <span style="font-size:0.75em;color:var(--fg2);">Instrument: <b>${instName}</b></span>
+      </div>
+      <div class="item-detail">Hit: ${hitAnimNames[s.hitAnimation]||'?'} (${s.hitFadeDurationMs}ms) | Idle: ${idleAnimNames[s.idleAnimation]||'?'} | Luminosite: ${s.brightness !== undefined ? s.brightness : 255}</div>
+      <div class="item-actions">
+        <button class="btn btn-sm btn-secondary" onclick="testLedSegment(${s.id})">Test</button>
+        <button class="btn btn-sm btn-secondary" onclick="editLedSegment(${s.id})">Editer</button>
+        <button class="btn btn-sm btn-danger" onclick="confirmDelete(this,()=>deleteLedSegment(${s.id}))">Supprimer</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderLedThemes() {
+  const el = document.getElementById('ledThemeList');
+  if (ledThemes.length === 0) {
+    el.innerHTML = '<div class="empty-state">Aucun theme. Creez un theme pour gerer les couleurs globalement.</div>';
+    return;
+  }
+  el.innerHTML = ledThemes.map(t => {
+    const isActive = t.id === (ledStatus.activeThemeId || 255);
+    const paletteHtml = (t.palette||[]).map(c => `<span style="display:inline-block;width:16px;height:16px;border-radius:3px;background:rgb(${c.r},${c.g},${c.b});"></span>`).join('');
+    return `<div class="list-item" ${isActive?'style="border-left-color:var(--success);"':''}>
+      <div class="item-title"><strong>${t.name||'Theme'}</strong> ${isActive?'<span class="badge badge-green">Actif</span>':''} <span class="badge">${idleAnimNames[t.idleMode]||'?'}</span></div>
+      <div class="item-detail" style="display:flex;gap:3px;align-items:center;margin-bottom:4px;">${paletteHtml}</div>
+      <div class="item-actions">
+        ${!isActive?`<button class="btn btn-sm btn-success" onclick="setActiveTheme(${t.id})">Activer</button>`:''}
+        <button class="btn btn-sm btn-secondary" onclick="editLedTheme(${t.id})">Editer</button>
+        <button class="btn btn-sm btn-danger" onclick="confirmDelete(this,()=>deleteLedTheme(${t.id}))">Supprimer</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// --- Strip actions ---
+function showAddStrip() { showModal('modalLedStrip'); }
+
+async function saveLedStrip() {
+  const data = {
+    id: parseInt(document.getElementById('ledStripId').value),
+    gpioPin: parseInt(document.getElementById('ledStripPin').value),
+    ledCount: parseInt(document.getElementById('ledStripCount').value),
+    maxBrightness: parseInt(document.getElementById('ledStripBrightness').value),
+    chipType: 0, colorOrder: 0, enabled: true
+  };
+  const r = await api('led/strips', 'POST', data);
+  if (r) { toast('Strip configure'); closeModal('modalLedStrip'); await loadLedData(); }
+}
+
+async function deleteLedStrip(id) {
+  const r = await api('led/strip?id='+id, 'DELETE');
+  if (r) { toast('Strip supprime'); await loadLedData(); }
+}
+
+async function testLedStrip(id) {
+  await api('led/strip/test', 'POST', {id});
+  toast('Test strip '+id);
+}
+
+// --- Segment actions ---
+function showAddSegment() {
+  document.getElementById('modalLedSegTitle').textContent = 'Nouveau Segment LED';
+  document.getElementById('editLedSegId').value = '';
+  document.getElementById('ledSegName').value = '';
+  document.getElementById('ledSegStart').value = '0';
+  document.getElementById('ledSegCount').value = '8';
+  document.getElementById('ledSegHitColor').value = '#ffffff';
+  document.getElementById('ledSegHitAnim').value = '0';
+  document.getElementById('ledSegFade').value = '300';
+  document.getElementById('ledSegVelBri').checked = true;
+  document.getElementById('ledSegIdleColor').value = '#141428';
+  document.getElementById('ledSegIdleAnim').value = '0';
+  document.getElementById('ledSegIdleBri').value = '30';
+  // Populate strip select
+  const stripSel = document.getElementById('ledSegStrip');
+  stripSel.innerHTML = ledStrips.map(s => `<option value="${s.id}">Strip #${s.id} (${s.ledCount} LEDs)</option>`).join('');
+  // Populate instrument select
+  const instSel = document.getElementById('ledSegInstrument');
+  instSel.innerHTML = '<option value="255">Aucun</option>';
+  instruments.forEach(i => { instSel.innerHTML += `<option value="${i.id}">${i.name} (note ${i.midiNote})</option>`; });
+  showModal('modalLedSegment');
+  updateLedSegPreview();
+}
+
+function updateLedSegPreview() {
+  const preview = document.getElementById('ledSegPreview');
+  if (!preview) return;
+  const count = parseInt(document.getElementById('ledSegCount').value) || 8;
+  const hitColor = document.getElementById('ledSegHitColor').value;
+  const idleColor = document.getElementById('ledSegIdleColor').value;
+  const idleBri = parseInt(document.getElementById('ledSegIdleBri').value) || 30;
+  const idleOpacity = (idleBri / 255).toFixed(2);
+  const displayCount = Math.min(count, 32);
+  let html = '';
+  // Show first half as idle, second half as hit (simulating a note trigger)
+  for (let i = 0; i < displayCount; i++) {
+    const isHit = i >= displayCount / 2;
+    const color = isHit ? hitColor : idleColor;
+    const opacity = isHit ? '1' : idleOpacity;
+    html += `<div style="flex:1;background:${color};opacity:${opacity};min-width:4px;"></div>`;
+  }
+  preview.innerHTML = html;
+}
+
+function editLedSegment(id) {
+  const seg = ledSegments.find(s => s.id === id);
+  if (!seg) return;
+  showAddSegment();
+  document.getElementById('modalLedSegTitle').textContent = 'Editer Segment LED';
+  document.getElementById('editLedSegId').value = id;
+  document.getElementById('ledSegName').value = seg.name || '';
+  document.getElementById('ledSegStrip').value = seg.stripId;
+  document.getElementById('ledSegInstrument').value = seg.instrumentId;
+  document.getElementById('ledSegStart').value = seg.pixelStart;
+  document.getElementById('ledSegCount').value = seg.pixelCount;
+  if (seg.hitColor) document.getElementById('ledSegHitColor').value = rgbToHex(seg.hitColor);
+  document.getElementById('ledSegHitAnim').value = seg.hitAnimation;
+  document.getElementById('ledSegFade').value = seg.hitFadeDurationMs;
+  document.getElementById('ledSegVelBri').checked = seg.velocityToBrightness;
+  if (seg.idleColor) document.getElementById('ledSegIdleColor').value = rgbToHex(seg.idleColor);
+  document.getElementById('ledSegIdleAnim').value = seg.idleAnimation;
+  document.getElementById('ledSegIdleBri').value = seg.idleBrightness;
+  updateLedSegPreview();
+}
+
+function rgbToHex(c) {
+  return '#' + [c.r,c.g,c.b].map(v => v.toString(16).padStart(2,'0')).join('');
+}
+function hexToRgb(hex) {
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return {r,g,b};
+}
+
+async function saveLedSegment() {
+  const editId = document.getElementById('editLedSegId').value;
+  const data = {
+    name: document.getElementById('ledSegName').value || 'Segment',
+    stripId: parseInt(document.getElementById('ledSegStrip').value),
+    instrumentId: parseInt(document.getElementById('ledSegInstrument').value),
+    pixelStart: parseInt(document.getElementById('ledSegStart').value),
+    pixelCount: parseInt(document.getElementById('ledSegCount').value),
+    hitColor: hexToRgb(document.getElementById('ledSegHitColor').value),
+    hitBrightness: 255,
+    hitFadeDurationMs: parseInt(document.getElementById('ledSegFade').value),
+    hitAnimation: parseInt(document.getElementById('ledSegHitAnim').value),
+    idleColor: hexToRgb(document.getElementById('ledSegIdleColor').value),
+    idleBrightness: parseInt(document.getElementById('ledSegIdleBri').value),
+    idleAnimation: parseInt(document.getElementById('ledSegIdleAnim').value),
+    velocityToBrightness: document.getElementById('ledSegVelBri').checked,
+    enabled: true
+  };
+  // Check for pixel overlap with existing segments on same strip
+  const overlap = ledSegments.find(seg => {
+    if (editId && String(seg.id) === String(editId)) return false;
+    if (seg.stripId !== data.stripId) return false;
+    const aStart = data.pixelStart, aEnd = data.pixelStart + data.pixelCount - 1;
+    const bStart = seg.pixelStart, bEnd = seg.pixelStart + seg.pixelCount - 1;
+    return aStart <= bEnd && bStart <= aEnd;
+  });
+  if (overlap) {
+    if (!confirm('Chevauchement de pixels avec "' + (overlap.name||'Segment') + '" (pixels ' + overlap.pixelStart + '-' + (overlap.pixelStart+overlap.pixelCount-1) + ').\nContinuer quand meme ?')) return;
+  }
+
+  let r;
+  if (editId) {
+    r = await api('led/segment?id=' + editId, 'PUT', data);
+  } else {
+    r = await api('led/segments', 'POST', data);
+  }
+  if (r) { toast(editId ? 'Segment mis a jour' : 'Segment cree'); closeModal('modalLedSegment'); await loadLedData(); }
+}
+
+async function deleteLedSegment(id) {
+  const r = await api('led/segment?id='+id, 'DELETE');
+  if (r) { toast('Segment supprime'); await loadLedData(); }
+}
+
+async function testLedSegment(id) {
+  await api('led/segment/test', 'POST', {id, brightness: 255});
+  toast('Test segment');
+}
+
+// --- Theme actions ---
+function showAddTheme() {
+  document.getElementById('modalLedThemeTitle').textContent = 'Nouveau Theme LED';
+  document.getElementById('editLedThemeId').value = '';
+  document.getElementById('ledThemeName').value = '';
+  document.getElementById('ledThemeIdle').value = '2';
+  document.getElementById('ledThemeHit').value = '0';
+  document.getElementById('ledThemeBri').value = '128';
+  document.getElementById('ledThemeSpeed').value = '5';
+  showModal('modalLedTheme');
+}
+
+function editLedTheme(id) {
+  const theme = ledThemes.find(t => t.id === id);
+  if (!theme) return;
+  showAddTheme();
+  document.getElementById('modalLedThemeTitle').textContent = 'Editer Theme';
+  document.getElementById('editLedThemeId').value = id;
+  document.getElementById('ledThemeName').value = theme.name || '';
+  document.getElementById('ledThemeIdle').value = theme.idleMode;
+  document.getElementById('ledThemeHit').value = theme.hitMode;
+  document.getElementById('ledThemeBri').value = theme.globalBrightness;
+  document.getElementById('ledThemeSpeed').value = theme.fadeSpeed;
+  const pickers = document.querySelectorAll('.led-palette-color');
+  (theme.palette||[]).forEach((c, i) => { if (pickers[i]) pickers[i].value = rgbToHex(c); });
+}
+
+async function saveLedTheme() {
+  const editId = document.getElementById('editLedThemeId').value;
+  const pickers = document.querySelectorAll('.led-palette-color');
+  const palette = Array.from(pickers).map(p => hexToRgb(p.value));
+  const data = {
+    name: document.getElementById('ledThemeName').value || 'Theme',
+    idleMode: parseInt(document.getElementById('ledThemeIdle').value),
+    hitMode: parseInt(document.getElementById('ledThemeHit').value),
+    globalBrightness: parseInt(document.getElementById('ledThemeBri').value),
+    fadeSpeed: parseInt(document.getElementById('ledThemeSpeed').value),
+    palette, enabled: true
+  };
+  let r;
+  if (editId) {
+    r = await api('led/theme?id=' + editId, 'PUT', data);
+  } else {
+    r = await api('led/themes', 'POST', data);
+  }
+  if (r) { toast(editId ? 'Theme mis a jour' : 'Theme cree'); closeModal('modalLedTheme'); await loadLedData(); }
+}
+
+async function deleteLedTheme(id) {
+  const r = await api('led/theme?id='+id, 'DELETE');
+  if (r) { toast('Theme supprime'); await loadLedData(); }
+}
+
+async function setActiveTheme(id) {
+  const r = await api('led/theme/active', 'POST', {id: parseInt(id)});
+  if (r) { toast('Theme active'); await loadLedData(); }
+}
+
+async function setLedBrightness(val) {
+  await api('led/brightness', 'POST', {brightness: parseInt(val)});
+}
+
+// ====================================================================
+// PIPELINE EDITOR
+// ====================================================================
+let peBlockSchema = null;
+let peBlocks = [];
+let peNoteOnActions = [];
+let peNoteOffActions = [];
+let peCcBindings = [];
+let peInstrId = null;
+
+async function peLoadSchema() {
+  if (peBlockSchema) return;
+  peBlockSchema = await api('pipeline/block-schema');
+}
+
+function peSchemaType(typeStr) {
+  if (!peBlockSchema) return null;
+  return peBlockSchema.find(t => t.type === typeStr);
+}
+
+function peSchemaSubtype(typeStr, subtypeId) {
+  const t = peSchemaType(typeStr);
+  if (!t) return null;
+  return (t.subtypes || []).find(s => s.subtype === subtypeId);
+}
+
+const PE_TYPE_ICONS = {condition:'?', transform:'T', time:'t', output:'O'};
+const PE_TYPE_NAMES = {condition:'Condition', transform:'Transform', time:'Temps', output:'Sortie'};
+
+function peBlockLabel(block) {
+  const schema = peSchemaSubtype(block.type, block.subtype);
+  return schema ? schema.label : `${PE_TYPE_NAMES[block.type]||block.type} #${block.subtype}`;
+}
+
+function peBlockDesc(block) {
+  const schema = peSchemaSubtype(block.type, block.subtype);
+  if (!schema) return `p1=${block.param1} p2=${block.param2}`;
+  let parts = [];
+  (schema.params || []).forEach(p => {
+    if (p.max === 0 && p.min === 0) return; // reserved
+    const val = (p.name === 'param1') ? block.param1 : block.param2;
+    if (p.type === 'enum') {
+      const opt = (p.options || []).find(o => o.value === val);
+      parts.push(opt ? opt.label : val);
+    } else if (p.type === 'actuator_id') {
+      const act = actInfo(val);
+      parts.push(act ? act.name : '#'+val);
+    } else {
+      parts.push(`${p.label.split('(')[0].trim()}: ${val}`);
+    }
+  });
+  return parts.join(' · ');
+}
+
+function peRenderBlocks() {
+  const el = document.getElementById('peBlockList');
+  document.getElementById('peBlockCount').textContent = peBlocks.length;
+  if (peBlocks.length === 0) {
+    el.innerHTML = '<div class="hint">Aucun bloc. Le pipeline transmettra la velocite directement a l\'actionneur de sortie.</div>';
+    return;
+  }
+  el.innerHTML = peBlocks.map((b, i) => {
+    const cls = b.type;
+    const icon = PE_TYPE_ICONS[b.type] || '?';
+    const label = peBlockLabel(b);
+    const desc = peBlockDesc(b);
+    const terminal = peSchemaSubtype(b.type, b.subtype)?.terminal;
+    return `
+    ${i > 0 ? '<div class="pe-arrow">&darr;</div>' : ''}
+    <div class="pe-block ${cls}">
+      <div class="pe-block-icon ${cls}">${icon}</div>
+      <div class="pe-block-info">
+        <div class="pe-label">${label}${terminal ? ' <small style="color:var(--warn);">(terminal)</small>':''}</div>
+        <div class="pe-params">${desc}</div>
+      </div>
+      <div class="pe-block-actions">
+        ${i > 0 ? `<button class="btn btn-sm btn-secondary" onclick="peMoveBlock(${i},-1)">&uarr;</button>` : ''}
+        ${i < peBlocks.length-1 ? `<button class="btn btn-sm btn-secondary" onclick="peMoveBlock(${i},1)">&darr;</button>` : ''}
+        <button class="btn btn-sm btn-secondary" onclick="peEditBlock(${i})">&#9998;</button>
+        <button class="btn btn-sm btn-danger" onclick="peRemoveBlock(${i})">&times;</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function peMoveBlock(idx, dir) {
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= peBlocks.length) return;
+  [peBlocks[idx], peBlocks[newIdx]] = [peBlocks[newIdx], peBlocks[idx]];
+  peRenderBlocks();
+}
+
+function peRemoveBlock(idx) {
+  peBlocks.splice(idx, 1);
+  peRenderBlocks();
+}
+
+async function peAddBlock() {
+  await peLoadSchema();
+  if (!peBlockSchema) { toast('Schema indisponible', 'error'); return; }
+
+  const el = document.getElementById('blockTypePicker');
+  el.innerHTML = peBlockSchema.map(t => {
+    const subtypeHtml = (t.subtypes || []).map(s =>
+      `<div class="list-item" style="cursor:pointer;border-left-color:${t.color};" onclick="peInsertBlock('${t.type}',${s.subtype});closeModal('modalAddBlock');">
+        <strong>${s.label}</strong>
+        <div class="hint">${s.description || ''}</div>
+      </div>`
+    ).join('');
+    return `<div>
+      <h4 style="color:${t.color};margin-bottom:4px;">${t.label}</h4>
+      ${subtypeHtml}
+    </div>`;
+  }).join('');
+
+  showModal('modalAddBlock');
+}
+
+function peInsertBlock(typeStr, subtypeId) {
+  const schema = peSchemaSubtype(typeStr, subtypeId);
+  const block = { type: typeStr, subtype: subtypeId, param1: 0, param2: 0 };
+  if (schema && schema.params) {
+    schema.params.forEach(p => {
+      if (p.name === 'param1') block.param1 = p.default || 0;
+      if (p.name === 'param2') block.param2 = p.default || 0;
+    });
+  }
+  peBlocks.push(block);
+  peRenderBlocks();
+}
+
+function peEditBlock(idx) {
+  const block = peBlocks[idx];
+  const schema = peSchemaSubtype(block.type, block.subtype);
+  document.getElementById('editBlockIdx').value = idx;
+  document.getElementById('editBlockTitle').textContent = peBlockLabel(block);
+
+  let html = '';
+  if (schema && schema.params) {
+    schema.params.forEach(p => {
+      if (p.max === 0 && p.min === 0) return; // reserved
+      const val = (p.name === 'param1') ? block.param1 : block.param2;
+      html += `<div class="form-group"><label>${p.label}</label>`;
+      if (p.type === 'enum') {
+        html += `<select id="eb_${p.name}">`;
+        (p.options || []).forEach(o => {
+          html += `<option value="${o.value}" ${val===o.value?'selected':''}>${o.label}</option>`;
+        });
+        html += '</select>';
+      } else if (p.type === 'actuator_id') {
+        html += `<select id="eb_${p.name}">`;
+        actuators.forEach(a => {
+          html += `<option value="${a.id}" ${val===a.id?'selected':''}>${a.name} (${a.id})</option>`;
+        });
+        html += '</select>';
+      } else {
+        html += `<input type="number" id="eb_${p.name}" value="${val}" min="${p.min||0}" max="${p.max||65535}">`;
+      }
+      html += '</div>';
+    });
+  }
+  if (!html) html = '<div class="hint">Ce bloc n\'a pas de parametres configurables.</div>';
+  document.getElementById('editBlockForm').innerHTML = html;
+  showModal('modalEditBlock');
+}
+
+function peApplyBlockEdit() {
+  const idx = parseInt(document.getElementById('editBlockIdx').value);
+  const block = peBlocks[idx];
+  const schema = peSchemaSubtype(block.type, block.subtype);
+  if (schema && schema.params) {
+    schema.params.forEach(p => {
+      if (p.max === 0 && p.min === 0) return;
+      const el = document.getElementById('eb_'+p.name);
+      if (!el) return;
+      const val = parseInt(el.value) || 0;
+      if (p.name === 'param1') block.param1 = val;
+      if (p.name === 'param2') block.param2 = val;
+    });
+  }
+  closeModal('modalEditBlock');
+  peRenderBlocks();
+}
+
+// --- PE Action/CC rendering ---
+function peActSelect(id, selId) {
+  return `<select id="${id}" class="small-select">${actuators.map(a=>
+    `<option value="${a.id}" ${a.id===selId?'selected':''}>${a.name}</option>`).join('')}
+    <option value="255" ${selId===255?'selected':''}>---</option></select>`;
+}
+
+function peRenderActions() {
+  const onEl = document.getElementById('peNoteOnActions');
+  const offEl = document.getElementById('peNoteOffActions');
+  const ccEl = document.getElementById('peCcBindings');
+
+  onEl.innerHTML = peNoteOnActions.length === 0 ? '<div class="hint">Aucune action NoteOn</div>' :
+    peNoteOnActions.map((a, i) => peActionRow(a, i, 'on')).join('');
+
+  offEl.innerHTML = peNoteOffActions.length === 0 ? '<div class="hint">Aucune action NoteOff</div>' :
+    peNoteOffActions.map((a, i) => peActionRow(a, i, 'off')).join('');
+
+  ccEl.innerHTML = peCcBindings.length === 0 ? '<div class="hint">Aucun binding CC</div>' :
+    peCcBindings.map((b, i) => peCcRow(b, i)).join('');
+}
+
+function peActionRow(step, idx, evType) {
+  const cmdOpts = [{v:0,l:'PULSE'},{v:1,l:'POSITION'},{v:2,l:'PWM'},{v:3,l:'OFF'}];
+  const srcOpts = [{v:0,l:'Velocity'},{v:1,l:'Fixe'},{v:2,l:'CC Var'},{v:3,l:'Inv. Vel'}];
+  const curveOpts = [{v:0,l:'Lin'},{v:1,l:'Expo'},{v:2,l:'Log'}];
+  return `<div class="action-editor">
+    <h4>Action #${idx+1} <button class="btn btn-sm btn-danger" onclick="peRemoveAction('${evType}',${idx})">&times;</button></h4>
+    <div class="editor-grid">
+      <div class="form-group"><label>Actionneur</label>${peActSelect('pea_'+evType+'_act_'+idx, step.actuatorId)}</div>
+      <div class="form-group"><label>Commande</label><select id="pea_${evType}_cmd_${idx}" class="small-select">${cmdOpts.map(o=>`<option value="${o.v}" ${step.commandType===o.v?'selected':''}>${o.l}</option>`).join('')}</select></div>
+      <div class="form-group"><label>Source</label><select id="pea_${evType}_src_${idx}" class="small-select">${srcOpts.map(o=>`<option value="${o.v}" ${step.valueSource===o.v?'selected':''}>${o.l}</option>`).join('')}</select></div>
+      <div class="form-group"><label>Fixe</label><input type="number" id="pea_${evType}_fix_${idx}" class="small-input" value="${step.valueFixed||0}" min="0" max="127"></div>
+      <div class="form-group"><label>Delai ms</label><input type="number" id="pea_${evType}_del_${idx}" class="small-input" value="${step.delayMs||0}" min="0" max="5000"></div>
+      <div class="form-group"><label>Dur min</label><input type="number" id="pea_${evType}_dmin_${idx}" class="small-input" value="${step.durationMinMs||0}" min="0" max="5000"></div>
+      <div class="form-group"><label>Dur max</label><input type="number" id="pea_${evType}_dmax_${idx}" class="small-input" value="${step.durationMaxMs||0}" min="0" max="5000"></div>
+      <div class="form-group"><label>Courbe</label><select id="pea_${evType}_crv_${idx}" class="small-select">${curveOpts.map(o=>`<option value="${o.v}" ${step.velocityCurve===o.v?'selected':''}>${o.l}</option>`).join('')}</select></div>
+      <div class="form-group"><label>Grp altern</label><input type="number" id="pea_${evType}_grp_${idx}" class="small-input" value="${step.alternateGroup||0}" min="0" max="8"></div>
+    </div>
+  </div>`;
+}
+
+function peCcRow(bind, idx) {
+  const cmdOpts = [{v:0,l:'PULSE'},{v:1,l:'POSITION'},{v:2,l:'PWM'},{v:3,l:'OFF'}];
+  const curveOpts = [{v:0,l:'Lin'},{v:1,l:'Expo'},{v:2,l:'Log'}];
+  return `<div class="binding-editor">
+    <h4>CC Binding #${idx+1} <button class="btn btn-sm btn-danger" onclick="peRemoveCc(${idx})">&times;</button></h4>
+    <div class="editor-grid">
+      <div class="form-group"><label>CC#</label><input type="number" id="pec_cc_${idx}" class="small-input" value="${bind.ccNumber}" min="0" max="127"></div>
+      <div class="form-group"><label>Actionneur</label>${peActSelect('pec_act_'+idx, bind.actuatorId)}</div>
+      <div class="form-group"><label>Commande</label><select id="pec_cmd_${idx}" class="small-select">${cmdOpts.map(o=>`<option value="${o.v}" ${bind.commandType===o.v?'selected':''}>${o.l}</option>`).join('')}</select></div>
+      <div class="form-group"><label>Range min</label><input type="number" id="pec_rmin_${idx}" class="small-input" value="${bind.rangeMin}" min="0" max="255"></div>
+      <div class="form-group"><label>Range max</label><input type="number" id="pec_rmax_${idx}" class="small-input" value="${bind.rangeMax}" min="0" max="255"></div>
+      <div class="form-group"><label>Courbe</label><select id="pec_crv_${idx}" class="small-select">${curveOpts.map(o=>`<option value="${o.v}" ${bind.curve===o.v?'selected':''}>${o.l}</option>`).join('')}</select></div>
+      <div class="form-group"><label>Inverse</label><input type="checkbox" id="pec_inv_${idx}" ${bind.inverted?'checked':''}></div>
+    </div>
+  </div>`;
+}
+
+function peAddAction(evType) {
+  const defAct = actuators.length > 0 ? actuators[0].id : 255;
+  const isOff = evType === 'off';
+  const step = { actuatorId: defAct, commandType: isOff?3:0, valueSource: isOff?1:0,
+    valueFixed:0, ccIndex:0, delayMs:0, durationMinMs: isOff?0:8, durationMaxMs: isOff?0:25,
+    velocityCurve:0, alternateGroup:0 };
+  if (evType === 'on') peNoteOnActions.push(step);
+  else peNoteOffActions.push(step);
+  peRenderActions();
+}
+
+function peRemoveAction(evType, idx) {
+  if (evType === 'on') peNoteOnActions.splice(idx, 1);
+  else peNoteOffActions.splice(idx, 1);
+  peRenderActions();
+}
+
+function peAddCcBinding() {
+  const defAct = actuators.length > 0 ? actuators[0].id : 255;
+  peCcBindings.push({ ccNumber:4, actuatorId:defAct, commandType:1, rangeMin:0, rangeMax:127, curve:0, inverted:false });
+  peRenderActions();
+}
+
+function peRemoveCc(idx) {
+  peCcBindings.splice(idx, 1);
+  peRenderActions();
+}
+
+function peCollectActions() {
+  // Read current form values back into the arrays
+  peNoteOnActions.forEach((a, i) => {
+    const el = (id) => document.getElementById(id);
+    a.actuatorId = parseInt(el('pea_on_act_'+i)?.value||255);
+    a.commandType = parseInt(el('pea_on_cmd_'+i)?.value||0);
+    a.valueSource = parseInt(el('pea_on_src_'+i)?.value||0);
+    a.valueFixed = parseInt(el('pea_on_fix_'+i)?.value||0);
+    a.delayMs = parseInt(el('pea_on_del_'+i)?.value||0);
+    a.durationMinMs = parseInt(el('pea_on_dmin_'+i)?.value||0);
+    a.durationMaxMs = parseInt(el('pea_on_dmax_'+i)?.value||0);
+    a.velocityCurve = parseInt(el('pea_on_crv_'+i)?.value||0);
+    a.alternateGroup = parseInt(el('pea_on_grp_'+i)?.value||0);
+  });
+  peNoteOffActions.forEach((a, i) => {
+    const el = (id) => document.getElementById(id);
+    a.actuatorId = parseInt(el('pea_off_act_'+i)?.value||255);
+    a.commandType = parseInt(el('pea_off_cmd_'+i)?.value||0);
+    a.valueSource = parseInt(el('pea_off_src_'+i)?.value||0);
+    a.valueFixed = parseInt(el('pea_off_fix_'+i)?.value||0);
+    a.delayMs = parseInt(el('pea_off_del_'+i)?.value||0);
+    a.durationMinMs = parseInt(el('pea_off_dmin_'+i)?.value||0);
+    a.durationMaxMs = parseInt(el('pea_off_dmax_'+i)?.value||0);
+    a.velocityCurve = parseInt(el('pea_off_crv_'+i)?.value||0);
+    a.alternateGroup = parseInt(el('pea_off_grp_'+i)?.value||0);
+  });
+  peCcBindings.forEach((b, i) => {
+    const el = (id) => document.getElementById(id);
+    b.ccNumber = parseInt(el('pec_cc_'+i)?.value||0);
+    b.actuatorId = parseInt(el('pec_act_'+i)?.value||255);
+    b.commandType = parseInt(el('pec_cmd_'+i)?.value||0);
+    b.rangeMin = parseInt(el('pec_rmin_'+i)?.value||0);
+    b.rangeMax = parseInt(el('pec_rmax_'+i)?.value||127);
+    b.curve = parseInt(el('pec_crv_'+i)?.value||0);
+    b.inverted = el('pec_inv_'+i)?.checked || false;
+  });
+}
+
+async function peOpenEditor(instrId) {
+  await peLoadSchema();
+  peInstrId = instrId;
+  const inst = instruments.find(i => i.id === instrId);
+  if (!inst) { toast('Instrument introuvable', 'error'); return; }
+
+  document.getElementById('pipeEditInstrId').value = instrId;
+  document.getElementById('pipeEditorTitle').textContent = 'Pipeline: ' + inst.name;
+
+  // Load pipeline data from API
+  const data = await api('pipeline/blocks?instrumentId=' + instrId);
+
+  // Populate blocks
+  peBlocks = (data && data.blocks) ? data.blocks.map(b => ({
+    type: b.type, subtype: b.subtype, param1: b.param1, param2: b.param2
+  })) : [];
+
+  // Populate actions
+  peNoteOnActions = (data && data.noteOnActions) ? data.noteOnActions.map(a => ({...a})) : (inst.noteOnActions || []).map(a => ({...a}));
+  peNoteOffActions = (data && data.noteOffActions) ? data.noteOffActions.map(a => ({...a})) : (inst.noteOffActions || []).map(a => ({...a}));
+  peCcBindings = (data && data.ccBindings) ? data.ccBindings.map(b => ({...b})) : (inst.ccBindings || []).map(b => ({...b}));
+
+  // Output actuator select
+  const outSel = document.getElementById('peOutputActuator');
+  outSel.innerHTML = '<option value="255">Aucun (auto)</option>' +
+    actuators.map(a => `<option value="${a.id}">${a.name} (${a.id})</option>`).join('');
+  outSel.value = (data && data.outputActuatorId !== undefined) ? data.outputActuatorId :
+    (inst.actuatorIds && inst.actuatorIds[0] !== 255 ? inst.actuatorIds[0] : 255);
+
+  // Retrigger mode
+  document.getElementById('peRetriggerMode').value = (data && data.retriggerMode !== undefined) ? data.retriggerMode : (inst.retriggerMode || 0);
+
+  peRenderBlocks();
+  peRenderActions();
+  showModal('modalPipelineEditor');
+}
+
+async function peSavePipeline() {
+  peCollectActions();
+  const outActId = parseInt(document.getElementById('peOutputActuator').value);
+  const retrigger = parseInt(document.getElementById('peRetriggerMode').value);
+
+  const payload = {
+    blocks: peBlocks,
+    outputActuatorId: outActId,
+    retriggerMode: retrigger,
+    noteOnActions: peNoteOnActions,
+    noteOffActions: peNoteOffActions,
+    ccBindings: peCcBindings
+  };
+
+  const r = await api('pipeline/blocks?instrumentId=' + peInstrId, 'PUT', payload);
+  if (r && r.ok) {
+    toast('Pipeline sauvegarde et recompile', 'success');
+    closeModal('modalPipelineEditor');
+    await loadInstruments();
+    refreshMappings();
+  } else {
+    toast('Erreur lors de la sauvegarde', 'error');
+  }
+}
+
+async function peTestPipeline() {
+  const velocity = parseInt(prompt('Velocity (1-127)?', '80'));
+  if (isNaN(velocity) || velocity < 1 || velocity > 127) return;
+  const r = await api('pipeline/test', 'POST', { instrumentId: peInstrId, velocity });
+  if (r && r.ok) toast('Test envoye (note=' + r.note + ' vel=' + r.velocity + ')', 'success');
+}
+
+// ============================================================================
+// Virtual Piano
+// ============================================================================
+
+const GM_DRUMS = {
+  27:'High Q',28:'Slap',29:'Scratch Push',30:'Scratch Pull',31:'Sticks',
+  32:'Square Click',33:'Metro Click',34:'Metro Bell',35:'Acoustic BD',
+  36:'Bass Drum 1',37:'Side Stick',38:'Acoustic Snare',39:'Hand Clap',
+  40:'Electric Snare',41:'Low Floor Tom',42:'Closed HH',43:'High Floor Tom',
+  44:'Pedal HH',45:'Low Tom',46:'Open HH',47:'Low-Mid Tom',
+  48:'Hi-Mid Tom',49:'Crash 1',50:'High Tom',51:'Ride 1',
+  52:'Chinese Cym',53:'Ride Bell',54:'Tambourine',55:'Splash Cym',
+  56:'Cowbell',57:'Crash 2',58:'Vibraslap',59:'Ride 2',
+  60:'Hi Bongo',61:'Low Bongo',62:'Mute Conga',63:'Open Conga',
+  64:'Low Conga',65:'High Timbale',66:'Low Timbale',67:'High Agogo',
+  68:'Low Agogo',69:'Cabasa',70:'Maracas',71:'Short Whistle',
+  72:'Long Whistle',73:'Short Guiro',74:'Long Guiro',75:'Claves',
+  76:'Hi Wood Block',77:'Low Wood Block',78:'Mute Cuica',79:'Open Cuica',
+  80:'Mute Triangle',81:'Open Triangle'
+};
+
+let pianoConfiguredNotes = new Set();
+
+function renderPianoPads() {
+  const layout = document.getElementById('pianoLayout').value;
+  const grid = document.getElementById('pianoPadGrid');
+  grid.innerHTML = '';
+
+  // Build set of configured notes
+  pianoConfiguredNotes.clear();
+  instruments.forEach(inst => {
+    if (inst.enabled !== false) pianoConfiguredNotes.add(inst.midiNote);
+  });
+
+  let notes = [];
+  if (layout === 'my') {
+    notes = instruments.filter(i => i.enabled !== false).map(i => i.midiNote).sort((a,b) => a-b);
+    if (notes.length === 0) {
+      grid.innerHTML = '<div class="hint">Aucun instrument configure. Creez des instruments d\'abord.</div>';
+      return;
+    }
+  } else if (layout === 'gm') {
+    for (let n = 27; n <= 81; n++) notes.push(n);
+  } else {
+    for (let n = 0; n <= 127; n++) notes.push(n);
+  }
+
+  notes.forEach(n => {
+    const pad = document.createElement('div');
+    pad.className = 'piano-pad' + (pianoConfiguredNotes.has(n) ? ' configured' : '');
+    if (layout === 'my') pad.style.minWidth = '90px';
+    pad.dataset.note = n;
+    let name = GM_DRUMS[n] || ('Note ' + n);
+    if (layout === 'my') {
+      const inst = instruments.find(i => i.midiNote === n && i.enabled !== false);
+      if (inst) name = inst.name;
+    }
+    pad.innerHTML = '<div class="pad-note">' + n + '</div><div class="pad-name">' + name + '</div>';
+
+    pad.addEventListener('mousedown', (e) => { e.preventDefault(); pianoNoteOn(n, pad); });
+    pad.addEventListener('mouseup', () => pianoNoteOff(n, pad));
+    pad.addEventListener('mouseleave', () => pianoNoteOff(n, pad));
+    pad.addEventListener('touchstart', (e) => { e.preventDefault(); pianoNoteOn(n, pad); }, {passive:false});
+    pad.addEventListener('touchend', (e) => { e.preventDefault(); pianoNoteOff(n, pad); });
+    grid.appendChild(pad);
+  });
+}
+
+function pianoNoteOn(note, pad) {
+  if (pad.classList.contains('active')) return;
+  pad.classList.add('active');
+  const vel = parseInt(document.getElementById('pianoVelocity').value) || 80;
+  const ch = parseInt(document.getElementById('pianoChannel').value) || 10;
+  api('test/note', 'POST', {note, velocity:vel, channel:ch});
+}
+
+function pianoNoteOff(note, pad) {
+  if (!pad.classList.contains('active')) return;
+  pad.classList.remove('active');
+  const ch = parseInt(document.getElementById('pianoChannel').value) || 10;
+  api('test/note', 'POST', {note, velocity:0, channel:ch, noteOff:true});
+}
+
+async function sendTestCC() {
+  const cc = parseInt(document.getElementById('testCcNumber').value) || 0;
+  const val = parseInt(document.getElementById('testCcValue').value) || 64;
+  const r = await api('test/cc', 'POST', {cc, value:val});
+  if (r) toast('CC#' + cc + ' = ' + val + ' envoye', 'success');
+}
+
+// Keyboard-to-MIDI note mapping for piano page
+const KEYBOARD_MAP = {
+  'a':36, 'z':38, 'e':40, 'r':41, 't':42, 'y':43, 'u':45, 'i':47, 'o':48, 'p':49,
+  'q':35, 's':37, 'd':39, 'f':44, 'g':46, 'h':50, 'j':51, 'k':52, 'l':53,
+  '1':27, '2':28, '3':29, '4':30, '5':31, '6':32, '7':33, '8':34
+};
+const keyboardHeld = {};
+
+document.addEventListener('keydown', (e) => {
+  if (e.repeat || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+  const panel = document.getElementById('tab-piano');
+  if (!panel || !panel.classList.contains('active')) return;
+  const note = KEYBOARD_MAP[e.key.toLowerCase()];
+  if (note === undefined || keyboardHeld[note]) return;
+  keyboardHeld[note] = true;
+  const grid = document.getElementById('pianoPadGrid');
+  const pad = grid && grid.querySelector('[data-note="'+note+'"]');
+  if (pad) pianoNoteOn(note, pad);
+});
+
+document.addEventListener('keyup', (e) => {
+  const note = KEYBOARD_MAP[e.key.toLowerCase()];
+  if (note === undefined || !keyboardHeld[note]) return;
+  keyboardHeld[note] = false;
+  const grid = document.getElementById('pianoPadGrid');
+  const pad = grid && grid.querySelector('[data-note="'+note+'"]');
+  if (pad) pianoNoteOff(note, pad);
+});
+
+// Global keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.key === 's') {
+    e.preventDefault();
+    saveAll();
+  }
+  if (e.key === 'Escape') {
+    // Close topmost open modal
+    const modals = document.querySelectorAll('.modal-overlay.show');
+    if (modals.length > 0) {
+      const last = modals[modals.length - 1];
+      last.classList.remove('show');
+    }
+  }
+});
+
+// Real-time MIDI activity display
+let pianoLiveInterval = null;
+let pianoLiveActive = false;
+let pianoLastActive = new Set();
+
+function togglePianoLive(enabled) {
+  pianoLiveActive = enabled;
+  const badge = document.getElementById('pianoLiveBadge');
+  if (enabled) {
+    badge.style.display = '';
+    pianoLiveInterval = setInterval(pollActiveNotes, 150);
+    connectWebSocket();
+  } else {
+    badge.style.display = 'none';
+    if (pianoLiveInterval) { clearInterval(pianoLiveInterval); pianoLiveInterval = null; }
+    // Clear all ext-active indicators
+    document.querySelectorAll('.piano-pad.ext-active').forEach(p => p.classList.remove('ext-active'));
+    pianoLastActive.clear();
+  }
+}
+
+async function pollActiveNotes() {
+  if (!pianoLiveActive) return;
+  const data = await api('notes/active');
+  if (!data) return;
+  const activeSet = new Set(data.active || []);
+  const grid = document.getElementById('pianoPadGrid');
+  if (!grid) return;
+
+  // Find newly active notes (trigger flash)
+  activeSet.forEach(n => {
+    if (!pianoLastActive.has(n)) {
+      const pad = grid.querySelector('[data-note="'+n+'"]');
+      if (pad && !pad.classList.contains('active')) {
+        pad.classList.add('ext-active');
+        // Flash effect
+        const flash = document.createElement('div');
+        flash.className = 'pad-flash';
+        pad.appendChild(flash);
+        setTimeout(() => flash.remove(), 300);
+      }
+    }
+  });
+
+  // Find notes that stopped
+  pianoLastActive.forEach(n => {
+    if (!activeSet.has(n)) {
+      const pad = grid.querySelector('[data-note="'+n+'"]');
+      if (pad) pad.classList.remove('ext-active');
+    }
+  });
+
+  pianoLastActive = activeSet;
+}
+
+// WebSocket connection for real-time updates
+let ws = null;
+let midiMonitorActive = false;
+let midiLearnActive = false;
+
+function toggleMidiLearn() {
+  midiLearnActive = !midiLearnActive;
+  const btn = document.getElementById('btnMidiLearn');
+  if (midiLearnActive) {
+    btn.textContent = 'Ecoute...';
+    btn.classList.add('btn-danger');
+    btn.classList.remove('btn-secondary');
+    connectWebSocket(); // Ensure WS is connected
+    toast('Jouez une note MIDI pour l\'assigner', 'success');
+  } else {
+    btn.textContent = 'Learn';
+    btn.classList.remove('btn-danger');
+    btn.classList.add('btn-secondary');
+  }
+}
+
+function toggleMidiMonitor() {
+  midiMonitorActive = !midiMonitorActive;
+  const btn = document.getElementById('btnMidiMonitor');
+  if (midiMonitorActive) {
+    btn.textContent = 'Arreter';
+    btn.classList.add('btn-danger');
+    btn.classList.remove('btn-secondary');
+    connectWebSocket();
+  } else {
+    btn.textContent = 'Demarrer';
+    btn.classList.remove('btn-danger');
+    btn.classList.add('btn-secondary');
+  }
+}
+
+function logMidiEvent(msg) {
+  if (!midiMonitorActive) return;
+  const log = document.getElementById('midiMonitorLog');
+  if (!log) return;
+  const now = new Date();
+  const ts = now.toLocaleTimeString('fr', {hour12:false}) + '.' + String(now.getMilliseconds()).padStart(3,'0');
+  const noteName = GM_DRUMS[msg.note] || ('Note ' + msg.note);
+  const color = msg.on ? 'var(--success)' : 'var(--fg2)';
+  const label = msg.on ? 'ON ' : 'OFF';
+  const vel = msg.vel !== undefined ? msg.vel : '';
+  const line = document.createElement('div');
+  line.innerHTML = '<span style="color:var(--fg2);">' + ts + '</span> ' +
+    '<span style="color:' + color + ';font-weight:600;">' + label + '</span> ' +
+    '<span style="color:var(--accent);">' + msg.note + '</span> ' +
+    '<span style="color:var(--fg2);">' + noteName + '</span>' +
+    (msg.on && vel ? ' <span style="color:var(--accent2);">vel:' + vel + '</span>' : '');
+  log.appendChild(line);
+  // Keep only last 100 entries
+  while (log.children.length > 100) log.removeChild(log.firstChild);
+  log.scrollTop = log.scrollHeight;
+}
+
+function connectWebSocket() {
+  if (ws && ws.readyState <= 1) return; // already open/connecting
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(proto + '//' + location.host + '/ws');
+  ws.onmessage = (evt) => {
+    try {
+      const msg = JSON.parse(evt.data);
+      if (msg.type === 'midi_note') {
+        // Flash MIDI RX indicator in header + show last note
+        const rxDot = document.getElementById('midiRxDot');
+        if (rxDot) { rxDot.classList.add('flash'); clearTimeout(rxDot._t); rxDot._t = setTimeout(() => rxDot.classList.remove('flash'), 80); }
+        if (msg.on) {
+          const lnd = document.getElementById('lastNoteDisplay');
+          if (lnd) { lnd.textContent = msg.note; clearTimeout(lnd._t); lnd._t = setTimeout(() => { lnd.textContent = ''; }, 2000); }
+        }
+        // Piano live display
+        if (pianoLiveActive) {
+          const grid = document.getElementById('pianoPadGrid');
+          if (grid) {
+            const pad = grid.querySelector('[data-note="'+msg.note+'"]');
+            if (pad) {
+              if (msg.on) {
+                pad.classList.add('ext-active');
+                const flash = document.createElement('div');
+                flash.className = 'pad-flash';
+                pad.appendChild(flash);
+                setTimeout(() => flash.remove(), 300);
+              } else {
+                pad.classList.remove('ext-active');
+              }
+            }
+          }
+        }
+        // Flash matching instrument in list
+        if (msg.on) {
+          const instrItem = document.querySelector('.list-item[data-midinote="' + msg.note + '"]');
+          if (instrItem) {
+            instrItem.style.boxShadow = '0 0 8px var(--success)';
+            clearTimeout(instrItem._midiFlash);
+            instrItem._midiFlash = setTimeout(() => { instrItem.style.boxShadow = ''; }, 300);
+          }
+        }
+
+        // MIDI Monitor log
+        logMidiEvent(msg);
+
+        // MIDI Learn: capture first NoteOn
+        if (midiLearnActive && msg.on) {
+          midiLearnActive = false;
+          document.getElementById('instrMidiNote').value = String(msg.note);
+          onMidiNoteChange();
+          const btn = document.getElementById('btnMidiLearn');
+          if (btn) { btn.textContent = 'Learn'; btn.classList.remove('btn-danger'); btn.classList.add('btn-secondary'); }
+          toast('Note MIDI ' + msg.note + ' assignee', 'success');
+        }
+      }
+    } catch(e) {}
+  };
+  ws.onclose = () => {
+    setTimeout(connectWebSocket, 3000); // Always reconnect for MIDI RX indicator
+  };
+}
+
+// ============================================================================
+// Calibration Page
+// ============================================================================
+
+async function loadCalibrationData() {
+  const actData = await api('actuators');
+  const instrData = await api('instruments');
+  if (!actData || !instrData) return;
+
+  const acts = actData.actuators || [];
+  const instrs = instrData.instruments || [];
+
+  document.getElementById('calibActCount').textContent = acts.length;
+
+  // Render actuator calibration list
+  const actList = document.getElementById('calibActuatorList');
+  if (acts.length === 0) {
+    actList.innerHTML = '<div class="empty-state">Aucun actionneur configure</div>';
+  } else {
+    actList.innerHTML = acts.map(a => {
+      const typeName = ['Servo','Solenoide','PWM Motor','Motor Optical'][a.type] || 'Inconnu';
+      const behavNames = ['Sol.Strike','Sol.Hold','Servo Pos','Servo Strike','Comb/Brush',
+        'Pitch Bend','Motor Optical','Hi-Hat Ctrl','Servo Mute','Sol.Mute',
+        'Motor Timed','Motor Speed','Motor Sweep','Motor Alt.'];
+      const behavName = behavNames[a.behavior] || '?';
+      // Type-specific label and hints
+      let sliderLabel = 'Valeur';
+      let hint = '';
+      if (a.type === 0) { // Servo
+        sliderLabel = 'Position';
+        hint = 'Angle: ' + a.paramMin + '°-' + a.paramMax + '° (repos: ' + a.paramDefault + '°)';
+      } else if (a.type === 1) { // Solenoid
+        sliderLabel = a.behavior === 0 ? 'Force' : 'Valeur';
+        hint = a.behavior === 0 ? 'Duree: ' + a.paramMin + '-' + a.paramMax + 'ms | Cooldown: ' + Math.round(a.cooldownUs * 0.1) + 'ms' :
+               a.behavior === 1 ? 'PWM act: ' + a.paramMin + ' hold: ' + a.paramMax + ' | Trans: ' + a.paramDefault + 'ms' :
+               'On/Off toggle';
+      } else if (a.type === 2) { // Motor
+        sliderLabel = 'Vitesse';
+        hint = 'PWM: ' + a.paramMin + '%-' + a.paramMax + '%' + (a.inverted ? ' [INV]' : '');
+      }
+      const border = a.active ? 'var(--success)' : 'var(--accent2)';
+      // Type-specific quick buttons
+      let quickBtns = '';
+      if (a.type === 0) { // Servo: min/center/max quick positions
+        quickBtns = '<div style="display:flex;gap:4px;margin-top:6px;">' +
+          '<button class="btn btn-sm btn-secondary" onclick="calibQuickVal(' + a.id + ',0)">Min (0)</button>' +
+          '<button class="btn btn-sm btn-secondary" onclick="calibQuickVal(' + a.id + ',64)">Centre (64)</button>' +
+          '<button class="btn btn-sm btn-secondary" onclick="calibQuickVal(' + a.id + ',127)">Max (127)</button>' +
+          '</div>';
+      }
+      return '<div class="calib-item" data-actid="' + a.id + '" style="border-left-color:' + border + ';">' +
+        '<h4><span>#' + a.id + ' ' + (a.name||'Sans nom') + '</span>' +
+        '<span class="badge">' + typeName + ' / ' + behavName + '</span>' +
+        '<span class="badge badge-green" id="calibActive' + a.id + '" style="display:' + (a.active ? 'inline-block' : 'none') + ';">ACTIF</span></h4>' +
+        '<div class="calib-controls">' +
+          '<label style="font-size:0.8em;color:var(--fg2);min-width:55px;">' + sliderLabel + ':</label>' +
+          '<input type="range" class="calib-slider" id="calibVal' + a.id + '" min="0" max="127" value="80" ' +
+            'oninput="document.getElementById(\'calibDisp' + a.id + '\').textContent=this.value">' +
+          '<span class="calib-val" id="calibDisp' + a.id + '">80</span>' +
+          '<button class="btn btn-primary btn-sm" onclick="calibTestActuator(' + a.id + ')">Tester</button>' +
+          '<button class="btn btn-danger btn-sm" onclick="calibStopActuator(' + a.id + ')">Stop</button>' +
+        '</div>' +
+        quickBtns +
+        (hint ? '<div style="margin-top:6px;font-size:0.78em;color:var(--fg2);">' + hint + '</div>' : '') +
+      '</div>';
+    }).join('');
+  }
+
+  // Render instrument test list
+  const instrList = document.getElementById('calibInstrumentList');
+  if (instrs.length === 0) {
+    instrList.innerHTML = '<div class="empty-state">Aucun instrument configure</div>';
+  } else {
+    instrList.innerHTML = instrs.map(inst => {
+      // Find linked actuator names
+      const actIds = inst.actuatorIds || [];
+      const actNames = actIds.map(aid => {
+        const a = acts.find(x => x.id === aid);
+        return a ? ('#' + a.id + ' ' + (a.name||'?')) : '#' + aid;
+      });
+      const actInfo = actNames.length ? actNames.join(', ') : 'Aucun';
+      return '<div class="calib-item" data-instid="' + inst.id + '">' +
+        '<h4><span>' + (inst.name||'Sans nom') + '</span>' +
+        '<span class="badge">Note ' + inst.midiNote + ' | CH ' + inst.midiChannel + '</span></h4>' +
+        '<div style="font-size:0.78em;color:var(--fg2);margin-bottom:6px;">Actionneurs: ' + actInfo + '</div>' +
+        '<div class="calib-controls">' +
+          '<label style="font-size:0.8em;color:var(--fg2);min-width:50px;">Velocity:</label>' +
+          '<input type="range" class="calib-slider" id="calibInstVel' + inst.id + '" min="1" max="127" value="80" ' +
+            'oninput="document.getElementById(\'calibInstDisp' + inst.id + '\').textContent=this.value">' +
+          '<span class="calib-val" id="calibInstDisp' + inst.id + '">80</span>' +
+          '<button class="btn btn-success btn-sm" onclick="calibTestInstrument(' + inst.id + ')">Tester</button>' +
+          '<button class="btn btn-secondary btn-sm" onclick="calibSweepInstrument(' + inst.id + ')" title="Test progressif de velocity">Sweep</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+}
+
+async function calibTestActuator(id) {
+  const val = parseInt(document.getElementById('calibVal' + id).value) || 80;
+  await api('test/actuator', 'POST', {id, value:val});
+  toast('Actuateur #' + id + ' teste (val=' + val + ')', 'success');
+}
+
+async function calibStopActuator(id) {
+  await api('test/actuator', 'POST', {id, value:0});
+}
+
+function calibQuickVal(id, val) {
+  document.getElementById('calibVal' + id).value = val;
+  document.getElementById('calibDisp' + id).textContent = val;
+  api('test/actuator', 'POST', {id, value: val});
+}
+
+async function calibTestInstrument(id) {
+  const vel = parseInt(document.getElementById('calibInstVel' + id).value) || 80;
+  await api('test/instrument', 'POST', {id, velocity:vel});
+  toast('Instrument #' + id + ' teste (vel=' + vel + ')', 'success');
+}
+
+async function calibSweepInstrument(id) {
+  const velocities = [20, 40, 60, 80, 100, 120, 127];
+  toast('Sweep velocity: ' + velocities.join(' → '), 'success');
+  for (let i = 0; i < velocities.length; i++) {
+    await api('test/instrument', 'POST', {id, velocity: velocities[i]});
+    await new Promise(r => setTimeout(r, 400));
+  }
+}
+
+// Real-time actuator status polling (calibration tab)
+let calibPollTimer = null;
+function startCalibPolling() {
+  stopCalibPolling();
+  calibPollTimer = setInterval(updateCalibStatus, 500);
+}
+function stopCalibPolling() {
+  if (calibPollTimer) { clearInterval(calibPollTimer); calibPollTimer = null; }
+}
+async function updateCalibStatus() {
+  try {
+    const resp = await fetch('/api/actuators/status');
+    if (!resp.ok) return;
+    const statuses = await resp.json();
+    let activeCount = 0;
+    statuses.forEach(s => {
+      const badge = document.getElementById('calibActive' + s.id);
+      const card = document.querySelector('.calib-item[data-actid="' + s.id + '"]');
+      if (badge) badge.style.display = s.active ? 'inline-block' : 'none';
+      if (card) card.style.borderLeftColor = s.active ? 'var(--success)' : 'var(--accent2)';
+      if (s.active) activeCount++;
+    });
+    const countEl = document.getElementById('calibActiveCount');
+    if (countEl) countEl.textContent = activeCount;
+  } catch(e) {}
+}
+
+async function testAllSequential() {
+  const enabled = actuators.filter(a => a.enabled);
+  if (enabled.length === 0) { toast('Aucun actionneur actif', 'warn'); return; }
+  toast('Test sequentiel: ' + enabled.length + ' actionneurs...', 'success');
+  for (let i = 0; i < enabled.length; i++) {
+    const a = enabled[i];
+    // Highlight current item
+    const card = document.querySelector('.calib-item[data-actid="' + a.id + '"]');
+    if (card) card.style.boxShadow = '0 0 8px var(--success)';
+    await api('test/actuator', 'POST', {id: a.id, value: 80});
+    await new Promise(r => setTimeout(r, 400));
+    if (card) card.style.boxShadow = '';
+  }
+  toast('Test sequentiel termine', 'success');
+}
+
+async function testIntegration() {
+  const enabled = instruments.filter(i => i.enabled !== false);
+  if (enabled.length === 0) { toast('Aucun instrument actif', 'warn'); return; }
+  toast('Test integration: ' + enabled.length + ' instruments via MIDI...', 'success');
+  for (let i = 0; i < enabled.length; i++) {
+    const inst = enabled[i];
+    // Flash the instrument card in calibration list
+    const card = document.querySelector('.calib-item[data-instid="' + inst.id + '"]');
+    if (card) card.style.boxShadow = '0 0 8px var(--success)';
+    // Send NoteOn via MIDI pipeline
+    await api('test/note', 'POST', {note: inst.midiNote, velocity: 80, channel: 10});
+    await new Promise(r => setTimeout(r, 300));
+    // Send NoteOff
+    await api('test/note', 'POST', {note: inst.midiNote, velocity: 0, channel: 10, noteOff: true});
+    await new Promise(r => setTimeout(r, 200));
+    if (card) card.style.boxShadow = '';
+  }
+  toast('Test integration termine', 'success');
+}
+
+async function emergencyStopAll() {
+  // Send OFF command to all actuators
+  for (const a of actuators) {
+    api('test/actuator', 'POST', {id: a.id, value: 0});
+  }
+  toast('STOP ALL - Tous les actionneurs arretes', 'warn');
+}
+
+async function midiPanic() {
+  // Send NoteOff for all configured instrument notes
+  const notes = new Set();
+  instruments.forEach(inst => { if (inst.midiNote !== undefined) notes.add(inst.midiNote); });
+  // Also include common GM percussion range
+  for (let n = 27; n <= 81; n++) notes.add(n);
+  const arr = [...notes];
+  for (let i = 0; i < arr.length; i += 8) {
+    const batch = arr.slice(i, i + 8);
+    await Promise.all(batch.map(n => api('test/note', 'POST', {note: n, velocity: 0, channel: 10, noteOff: true})));
+  }
+  // Also stop all actuators
+  for (const a of actuators) {
+    api('test/actuator', 'POST', {id: a.id, value: 0});
+  }
+  toast('MIDI Panic - Notes et actionneurs arretes', 'warn');
+}
+
+// Theme toggle
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme');
+  const next = current === 'light' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', next === 'dark' ? '' : next);
+  if (next === 'dark') document.documentElement.removeAttribute('data-theme');
+  localStorage.setItem('theme', next);
+  document.getElementById('themeBtn').innerHTML = next === 'light' ? '&#9728;' : '&#9790;';
+}
+// Restore theme from localStorage (runs at page load)
+document.addEventListener('DOMContentLoaded', function() {
+  const t = localStorage.getItem('theme');
+  if (t === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+    const btn = document.getElementById('themeBtn');
+    if (btn) btn.innerHTML = '&#9728;';
+  }
+});
 
 window.addEventListener('load', init);
 </script>

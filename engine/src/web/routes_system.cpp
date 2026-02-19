@@ -18,6 +18,7 @@ void WebServerManager::_handleGetStatus(AsyncWebServerRequest* req) {
   obj["midi_sessions"] = _midiEngine->getSessionCount();
   obj["midi_notes_rx"] = _midiEngine->getNotesReceived();
   obj["midi_notes_tx"] = _midiEngine->getNotesSent();
+  obj["midi_channel_mask"] = _midiEngine->getChannelMask();
 
   // Actuators
   obj["actuator_count"] = _actMgr->getCount();
@@ -50,16 +51,30 @@ void WebServerManager::_handleGetStatus(AsyncWebServerRequest* req) {
   // Loops
   obj["loop_count"] = _loopEngine->getLoopCount();
   obj["loop_playing"] = _loopEngine->isPlaying();
+  obj["loop_paused"] = _loopEngine->isPaused();
   if (_loopEngine->isPlaying()) {
     obj["loop_bpm"] = _loopEngine->getBpm();
     obj["loop_beat"] = _loopEngine->getCurrentBeat();
     obj["loop_bar"] = _loopEngine->getCurrentBar();
+    obj["loop_tick"] = _loopEngine->getCurrentTick();
+    obj["loop_index"] = _loopEngine->getCurrentLoopIndex();
+  }
+  obj["loop_chain_active"] = _loopEngine->isChainActive();
+  if (_loopEngine->isChainActive()) {
+    obj["loop_chain_index"] = _loopEngine->getChainIndex();
+    obj["loop_chain_length"] = _loopEngine->getChainLength();
   }
 
   // System
   obj["free_heap"] = ESP.getFreeHeap();
+  obj["min_free_heap"] = ESP.getMinFreeHeap();
   obj["uptime_s"] = millis() / 1000;
   obj["storage"] = _storage->formatInfo();
+  obj["chip_model"] = ESP.getChipModel();
+  obj["cpu_freq_mhz"] = ESP.getCpuFreqMHz();
+  obj["flash_size"] = ESP.getFlashChipSize();
+  obj["sdk_version"] = ESP.getSdkVersion();
+  obj["firmware_version"] = "1.0.0-beta";
 
   _sendJson(req, 200, doc);
 }
@@ -132,6 +147,12 @@ void WebServerManager::_handleGetCapabilities(AsyncWebServerRequest* req) {
   doc["maxActuators"] = MAX_ACTUATORS;
   doc["maxInstruments"] = MAX_INSTRUMENTS;
   doc["maxActuatorsPerInstrument"] = MAX_ACTUATORS_PER_INST;
+
+  // Velocity curves
+  JsonArray curves = doc["velocityCurves"].to<JsonArray>();
+  { JsonObject c = curves.add<JsonObject>(); c["id"] = CURVE_LINEAR; c["name"] = "Linear"; c["description"] = "Direct 1:1 mapping"; }
+  { JsonObject c = curves.add<JsonObject>(); c["id"] = CURVE_EXPO; c["name"] = "Exponential"; c["description"] = "Faster rise (v^2)"; }
+  { JsonObject c = curves.add<JsonObject>(); c["id"] = CURVE_LOG; c["name"] = "Logarithmic"; c["description"] = "Slower rise (sqrt)"; }
 
   _sendJson(req, 200, doc);
 }
@@ -601,6 +622,49 @@ void WebServerManager::_handleGetAuthToken(AsyncWebServerRequest* req) {
   _sendJson(req, 200, doc);
 }
 
+void WebServerManager::_handleGetMidiChannels(AsyncWebServerRequest* req) {
+  JsonDocument doc;
+  uint16_t mask = _midiEngine->getChannelMask();
+  doc["channelMask"] = mask;
+  JsonArray channels = doc["channels"].to<JsonArray>();
+  for (uint8_t ch = 1; ch <= 16; ch++) {
+    if ((mask >> (ch - 1)) & 1) channels.add(ch);
+  }
+  _sendJson(req, 200, doc);
+}
+
+void WebServerManager::_handleSetMidiChannels(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
+  JsonDocument doc;
+  if (deserializeJson(doc, data, len)) { _sendError(req, 400, "Invalid JSON"); return; }
+
+  uint16_t mask = 0;
+  if (doc.containsKey("channelMask")) {
+    mask = doc["channelMask"] | 0xFFFF;
+  } else if (doc.containsKey("channels")) {
+    JsonArray channels = doc["channels"].as<JsonArray>();
+    for (JsonVariant ch : channels) {
+      uint8_t c = ch.as<uint8_t>();
+      if (c >= 1 && c <= 16) mask |= (1 << (c - 1));
+    }
+  } else {
+    _sendError(req, 400, "Provide channelMask or channels array");
+    return;
+  }
+  if (mask == 0) { _sendError(req, 400, "At least one channel required"); return; }
+
+  _midiEngine->setChannelMask(mask);
+
+  // Persist to /midi.json
+  JsonDocument saveDoc;
+  saveDoc["channelMask"] = mask;
+  _storage->saveJsonFile("/midi.json", saveDoc);
+
+  JsonDocument resp;
+  resp["channelMask"] = mask;
+  resp["message"] = "MIDI channels updated";
+  _sendJson(req, 200, resp);
+}
+
 void WebServerManager::_handleTestCC(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
   JsonDocument doc;
   if (deserializeJson(doc, data, len)) { _sendError(req, 400, "Invalid JSON"); return; }
@@ -620,4 +684,144 @@ void WebServerManager::_handleTestCC(AsyncWebServerRequest* req, uint8_t* data, 
   }
 
   _sendError(req, 200, "CC sent");
+}
+
+void WebServerManager::_handleTestNote(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
+  JsonDocument doc;
+  if (deserializeJson(doc, data, len)) { _sendError(req, 400, "Invalid JSON"); return; }
+  uint8_t note = doc["note"] | 60;
+  uint8_t velocity = doc["velocity"] | 80;
+  uint8_t channel = doc["channel"] | 10;
+  bool noteOff = doc["noteOff"] | false;
+
+  MidiEvent ev;
+  ev.type = noteOff ? MIDI_EVT_NOTE_OFF : MIDI_EVT_NOTE_ON;
+  ev.channel = channel;
+  ev.data1 = note;
+  ev.data2 = velocity;
+  ev.timestamp = micros();
+
+  if (_eventProc) {
+    _eventProc->processMidiEvent(ev);
+  }
+
+  _sendError(req, 200, noteOff ? "NoteOff sent" : "NoteOn sent");
+}
+
+void WebServerManager::_handleGetActiveNotes(AsyncWebServerRequest* req) {
+  uint8_t notes[128];
+  _eventProc->getNoteActive(notes);
+
+  // Return compact array of active note numbers (lightweight for polling)
+  JsonDocument doc;
+  JsonArray arr = doc["active"].to<JsonArray>();
+  for (uint8_t i = 0; i < 128; i++) {
+    if (notes[i] > 0) arr.add(i);
+  }
+  _sendJson(req, 200, doc);
+}
+
+void WebServerManager::_handleValidateConfig(AsyncWebServerRequest* req) {
+  JsonDocument doc;
+  JsonArray issues = doc["issues"].to<JsonArray>();
+  JsonArray warnings = doc["warnings"].to<JsonArray>();
+  JsonArray ok = doc["ok"].to<JsonArray>();
+
+  uint8_t actCfgCount = _actFactory->getConfigCount();
+  uint8_t instrCount = _instrMgr->getInstrumentCount();
+
+  // Check actuators
+  if (actCfgCount == 0) {
+    issues.add("No actuators configured");
+  } else {
+    uint8_t disabledAct = 0;
+    for (uint8_t i = 0; i < actCfgCount; i++) {
+      const ActuatorConfig& cfg = _actFactory->getConfig(i);
+      if (!cfg.enabled) disabledAct++;
+    }
+    if (disabledAct > 0) {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%d actuator(s) disabled", disabledAct);
+      warnings.add(buf);
+    }
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%d actuator(s) configured", actCfgCount);
+    ok.add(buf);
+  }
+
+  // Check instruments
+  if (instrCount == 0) {
+    issues.add("No instruments configured");
+  } else {
+    uint8_t noActions = 0;
+    uint8_t disabledInstr = 0;
+    // Check for duplicate MIDI notes
+    uint8_t noteCh[128][16] = {};
+    for (uint8_t i = 0; i < instrCount; i++) {
+      const InstrumentConfig* instr = _instrMgr->getInstrument(i);
+      if (!instr) continue;
+      if (!instr->enabled) disabledInstr++;
+      if (instr->noteOnActionCount == 0) noActions++;
+      uint8_t ch = instr->midiChannel < 16 ? instr->midiChannel : 0;
+      if (instr->midiNote < 128) noteCh[instr->midiNote][ch]++;
+    }
+    if (noActions > 0) {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%d instrument(s) without NoteOn actions", noActions);
+      warnings.add(buf);
+    }
+    if (disabledInstr > 0) {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%d instrument(s) disabled", disabledInstr);
+      warnings.add(buf);
+    }
+    for (uint8_t n = 0; n < 128; n++) {
+      for (uint8_t c = 0; c < 16; c++) {
+        if (noteCh[n][c] > 1) {
+          char buf[80];
+          snprintf(buf, sizeof(buf), "Duplicate MIDI note %d on channel %d (%d instruments)", n, c + 1, noteCh[n][c]);
+          warnings.add(buf);
+        }
+      }
+    }
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%d instrument(s) configured", instrCount);
+    ok.add(buf);
+  }
+
+  // Memory check
+  uint32_t freeHeap = ESP.getFreeHeap();
+  if (freeHeap < 20000) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "Low memory: %d KB free", freeHeap / 1024);
+    issues.add(buf);
+  }
+
+  // Pipeline check
+  doc["pipeline_count"] = _eventProc->getLookup().pipeline_count;
+  doc["cc_route_count"] = _eventProc->getLookup().cc_route_count;
+
+  _sendJson(req, 200, doc);
+}
+
+void WebServerManager::_handleFactoryReset(AsyncWebServerRequest* req) {
+  // Delete all configuration files
+  const char* files[] = {
+    CONFIG_FILE, ACTUATORS_FILE, INSTRUMENTS_FILE,
+    LEDS_FILE, THEMES_FILE, "/midi.json", "/loops.json",
+    "/error.log"
+  };
+  int deleted = 0;
+  for (const char* f : files) {
+    if (LittleFS.exists(f)) {
+      LittleFS.remove(f);
+      deleted++;
+    }
+  }
+  DBGF("[System] Factory reset: %d files deleted\n", deleted);
+  _sendError(req, 200, "Factory reset done, rebooting...");
+
+  // Delay then reboot
+  delay(500);
+  ESP.restart();
 }

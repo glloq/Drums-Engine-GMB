@@ -5261,6 +5261,49 @@ function logMidiEvent(msg) {
   log.scrollTop = log.scrollHeight;
 }
 
+function _handleWsNote(note, on, vel) {
+  const rxDot = document.getElementById('midiRxDot');
+  if (rxDot) { rxDot.classList.add('flash'); clearTimeout(rxDot._t); rxDot._t = setTimeout(() => rxDot.classList.remove('flash'), 80); }
+  if (on) {
+    const lnd = document.getElementById('lastNoteDisplay');
+    if (lnd) { lnd.textContent = note; clearTimeout(lnd._t); lnd._t = setTimeout(() => { lnd.textContent = ''; }, 2000); }
+  }
+  if (pianoLiveActive) {
+    const grid = document.getElementById('pianoPadGrid');
+    if (grid) {
+      const pad = grid.querySelector('[data-note="'+note+'"]');
+      if (pad) {
+        if (on) {
+          pad.classList.add('ext-active');
+          const flash = document.createElement('div');
+          flash.className = 'pad-flash';
+          pad.appendChild(flash);
+          setTimeout(() => flash.remove(), 300);
+        } else {
+          pad.classList.remove('ext-active');
+        }
+      }
+    }
+  }
+  if (on) {
+    const instrItem = document.querySelector('.list-item[data-midinote="' + note + '"]');
+    if (instrItem) {
+      instrItem.style.boxShadow = '0 0 8px var(--success)';
+      clearTimeout(instrItem._midiFlash);
+      instrItem._midiFlash = setTimeout(() => { instrItem.style.boxShadow = ''; }, 300);
+    }
+  }
+  logMidiEvent({note: note, on: on, vel: vel});
+  if (midiLearnActive && on) {
+    midiLearnActive = false;
+    document.getElementById('instrMidiNote').value = String(note);
+    onMidiNoteChange();
+    const btn = document.getElementById('btnMidiLearn');
+    if (btn) { btn.textContent = 'Learn'; btn.classList.remove('btn-danger'); btn.classList.add('btn-secondary'); }
+    toast('Note MIDI ' + note + ' assignee', 'success');
+  }
+}
+
 function connectWebSocket() {
   if (ws && ws.readyState <= 1) return; // already open/connecting
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -5269,53 +5312,9 @@ function connectWebSocket() {
     try {
       const msg = JSON.parse(evt.data);
       if (msg.type === 'midi_note') {
-        // Flash MIDI RX indicator in header + show last note
-        const rxDot = document.getElementById('midiRxDot');
-        if (rxDot) { rxDot.classList.add('flash'); clearTimeout(rxDot._t); rxDot._t = setTimeout(() => rxDot.classList.remove('flash'), 80); }
-        if (msg.on) {
-          const lnd = document.getElementById('lastNoteDisplay');
-          if (lnd) { lnd.textContent = msg.note; clearTimeout(lnd._t); lnd._t = setTimeout(() => { lnd.textContent = ''; }, 2000); }
-        }
-        // Piano live display
-        if (pianoLiveActive) {
-          const grid = document.getElementById('pianoPadGrid');
-          if (grid) {
-            const pad = grid.querySelector('[data-note="'+msg.note+'"]');
-            if (pad) {
-              if (msg.on) {
-                pad.classList.add('ext-active');
-                const flash = document.createElement('div');
-                flash.className = 'pad-flash';
-                pad.appendChild(flash);
-                setTimeout(() => flash.remove(), 300);
-              } else {
-                pad.classList.remove('ext-active');
-              }
-            }
-          }
-        }
-        // Flash matching instrument in list
-        if (msg.on) {
-          const instrItem = document.querySelector('.list-item[data-midinote="' + msg.note + '"]');
-          if (instrItem) {
-            instrItem.style.boxShadow = '0 0 8px var(--success)';
-            clearTimeout(instrItem._midiFlash);
-            instrItem._midiFlash = setTimeout(() => { instrItem.style.boxShadow = ''; }, 300);
-          }
-        }
-
-        // MIDI Monitor log
-        logMidiEvent(msg);
-
-        // MIDI Learn: capture first NoteOn
-        if (midiLearnActive && msg.on) {
-          midiLearnActive = false;
-          document.getElementById('instrMidiNote').value = String(msg.note);
-          onMidiNoteChange();
-          const btn = document.getElementById('btnMidiLearn');
-          if (btn) { btn.textContent = 'Learn'; btn.classList.remove('btn-danger'); btn.classList.add('btn-secondary'); }
-          toast('Note MIDI ' + msg.note + ' assignee', 'success');
-        }
+        _handleWsNote(msg.note, msg.on, msg.vel);
+      } else if (msg.type === 'midi_notes' && Array.isArray(msg.notes)) {
+        msg.notes.forEach(n => _handleWsNote(n.n, n.on, n.v));
       }
     } catch(e) {}
   };

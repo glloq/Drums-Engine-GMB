@@ -28,7 +28,8 @@ bool Scheduler::schedulePulseAt(uint8_t actuatorId, uint16_t value,
   cmdOn.actuator_id = actuatorId;
   cmdOn.command_type = (uint8_t)CommandType::PULSE;
   cmdOn.value = value;
-  cmdOn.duration = (uint16_t)(durationUs / 100); // Stocke en centaines de us
+  uint32_t durationUnits = durationUs / 100;
+  cmdOn.duration = (durationUnits > UINT16_MAX) ? UINT16_MAX : (uint16_t)durationUnits;
   cmdOn.execute_at = executeAt;
 
   if (!_queue.push(cmdOn)) return false;
@@ -95,7 +96,9 @@ bool Scheduler::scheduleActionSteps(const ActionStep* steps, uint8_t stepCount,
         break;
     }
 
-    uint32_t executeAt = timestamp + ((uint32_t)step.delay_ms * 1000);
+    uint32_t delayUs = (uint32_t)step.delay_ms * 1000;
+    uint32_t executeAt = timestamp + delayUs;
+    if (executeAt < timestamp) executeAt = UINT32_MAX;  // Saturate on overflow
     CommandType cmdType = (CommandType)step.command_type;
 
     if (cmdType == CommandType::PULSE) {

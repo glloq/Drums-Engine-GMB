@@ -1,6 +1,9 @@
 #include "actuator_manager.h"
 #include "../scheduler/scheduler.h"
 
+// Spinlock for _activeCount shared between Core 0 (web/watchdog) and Core 1 (scheduler dispatch)
+static portMUX_TYPE _actMgrMux = portMUX_INITIALIZER_UNLOCKED;
+
 ActuatorManager::ActuatorManager() : _count(0) {
   memset(_actuators, 0, sizeof(_actuators));
   memset(_idMap, 0xFF, sizeof(_idMap));
@@ -49,18 +52,23 @@ void ActuatorManager::dispatch(const ActuatorCommand& cmd) {
   Actuator* act = _actuators[idx];
   if (!act || !act->isEnabled()) return;
 
-  // Protection surcharge: verifier si on depasse le max d'activations
-  // simultanees (sauf pour les commandes OFF qui liberent)
+  // Protection surcharge: check + execute + recount under spinlock
+  // to prevent race between Core 0 (watchdog) and Core 1 (scheduler)
+  portENTER_CRITICAL(&_actMgrMux);
+
   if ((CommandType)cmd.command_type != CommandType::OFF) {
-    if (!act->isActive() && getActiveCount() >= MAX_CONCURRENT_ACTIVE) {
+    if (!act->isActive() && _activeCount >= MAX_CONCURRENT_ACTIVE) {
+      portEXIT_CRITICAL(&_actMgrMux);
       DBGF("[Safety] Overload protection: %d actuators active, refusing new activation\n",
-           getActiveCount());
+           _activeCount);
       return;
     }
   }
 
   act->execute(cmd);
-  updateActiveCount();
+  _updateActiveCountLocked();
+
+  portEXIT_CRITICAL(&_actMgrMux);
 }
 
 void ActuatorManager::stopAll() {
@@ -160,6 +168,7 @@ uint8_t ActuatorManager::checkWatchdog() {
   uint32_t now = micros();
   uint8_t stopped = 0;
 
+  portENTER_CRITICAL(&_actMgrMux);
   for (uint8_t i = 0; i < _count; i++) {
     if (_actuators[i] && _actuators[i]->isActive()) {
       if (_actuators[i]->checkTimeout(now)) {
@@ -167,11 +176,18 @@ uint8_t ActuatorManager::checkWatchdog() {
       }
     }
   }
-  if (stopped > 0) updateActiveCount();
+  if (stopped > 0) _updateActiveCountLocked();
+  portEXIT_CRITICAL(&_actMgrMux);
   return stopped;
 }
 
 void ActuatorManager::updateActiveCount() {
+  portENTER_CRITICAL(&_actMgrMux);
+  _updateActiveCountLocked();
+  portEXIT_CRITICAL(&_actMgrMux);
+}
+
+void ActuatorManager::_updateActiveCountLocked() {
   uint8_t active = 0;
   for (uint8_t i = 0; i < _count; i++) {
     if (_actuators[i] && _actuators[i]->isActive()) {

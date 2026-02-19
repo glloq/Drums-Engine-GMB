@@ -136,9 +136,9 @@ input[type=checkbox] { width: auto; }
 .loop-cell.loop-playhead { box-shadow: inset 0 0 0 2px var(--success); }
 .loop-cell.loop-playhead:not(.active) { background: rgba(76,175,80,0.15); }
 
-.modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 100; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-.modal-overlay.show { display: flex; align-items: flex-start; justify-content: center; }
-.modal { background: var(--bg2); border-radius: var(--radius); padding: 24px; width: 90%; max-width: 500px; margin: 20px auto; flex-shrink: 0; }
+.modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 100; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.modal-overlay.show { display: flex; align-items: flex-start; justify-content: center; padding: 20px 0; }
+.modal { background: var(--bg2); border-radius: var(--radius); padding: 24px; width: 90%; max-width: 500px; margin: 0 auto; flex-shrink: 0; }
 .modal h2 { margin-bottom: 16px; }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
 
@@ -222,7 +222,8 @@ input[type=checkbox] { width: auto; }
   .header h1 { font-size: 1em; }
   .tab { padding: 8px 10px; font-size: 0.82em; }
   .card { padding: 10px; }
-  .modal { padding: 14px; margin: 8px; width: calc(100% - 16px); max-height: 90vh; overflow-y: auto; }
+  .modal { padding: 14px; margin: 0 8px; width: calc(100% - 16px); }
+  .modal-overlay.show { padding: 8px 0; }
   .form-row { gap: 8px; }
   .form-row .form-group { min-width: 100px; }
   .transport { flex-wrap: wrap; gap: 6px; }
@@ -236,6 +237,16 @@ input[type=checkbox] { width: auto; }
   .monitor-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
   .btn-sm { padding: 5px 8px; font-size: 0.78em; }
   .header-right .status { display: none; }
+}
+@media (max-height: 500px) {
+  .modal-overlay.show { padding: 4px 0; }
+  .modal { padding: 10px; font-size: 0.9em; }
+  .modal h2 { margin-bottom: 8px; font-size: 1.1em; }
+  .form-group { margin-bottom: 6px; }
+  .form-group label { font-size: 0.85em; }
+  .modal-actions { margin-top: 8px; }
+  .tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+  .tab { white-space: nowrap; flex-shrink: 0; }
 }
 </style>
 </head>

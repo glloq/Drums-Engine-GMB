@@ -179,6 +179,14 @@
 - [x] WiFi: indicateur qualite signal colore + affichage mDNS
 - [x] MIDI Panic: arret complet notes + actionneurs (calibration)
 - [x] Systeme: affichage version SDK dans la grille info
+- [x] Theme dark/light: toggle dans l'en-tete (persiste localStorage)
+- [x] MIDI Monitor: affichage velocity sur les NoteOn
+- [x] WebSocket: velocity incluse dans les messages midi_note
+- [x] Loop editor: renommage inline du titre (clic + edition)
+- [x] Note Map: creation rapide d'instrument depuis une note non assignee
+- [x] Note Map: detection automatique categorie (drums/cymbals/latin)
+- [x] Actionneurs: icones type (S/M/P/O) avec couleurs distinctes
+- [x] Loop grid: compteur notes par instrument dans les labels
 
 ## Risques / dette technique
 - Couverture tests: script curl fonctionnel mais pas de CI automatise.

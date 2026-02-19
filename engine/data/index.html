@@ -1665,6 +1665,8 @@ function renderActuators() {
     });
   });
 
+  const typeIcons = ['S','M','P','O']; // Servo, Magnet(solenoid), PWM, Optical
+  const typeColors = ['#4fc3f7','#ff7043','#66bb6a','#ffca28'];
   el.innerHTML = actuators.map(a => {
     let details = a.busName + ' pin ' + a.hwPin;
     if (a.type===1 && a.behavior===0) details += ' · Temps: '+a.paramMin+'-'+a.paramMax+'ms';
@@ -1675,9 +1677,12 @@ function renderActuators() {
     if (a.type===1 && a.behavior===1) details += ' · Actif max: '+Math.round(a.cooldownUs*0.1)+'ms';
     const usedBy = actUsedBy[a.id];
     const usedByHtml = usedBy ? ' · <span style="color:var(--accent);">\u266a ' + usedBy.join(', ') + '</span>' : ' · <span style="color:var(--fg2);opacity:0.6;">non assigne</span>';
+    const tIcon = typeIcons[a.type] || '?';
+    const tColor = typeColors[a.type] || 'var(--fg2)';
     return `
     <div class="list-item" style="border-left-color:${a.active?'var(--success)':'var(--accent2)'}">
       <div class="item-title">
+        <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:${tColor};color:#000;font-weight:700;font-size:0.65em;margin-right:4px;">${tIcon}</span>
         <strong>${a.name}</strong>
         <span class="badge">${a.typeName}</span>
         <span class="badge">${a.behaviorName}</span>
@@ -3117,7 +3122,9 @@ function renderCurrentLoopGrid() {
 
   // Instrument rows
   rows.forEach(inst => {
-    html += `<div class="loop-label" title="${inst.name}">${inst.name.substring(0, 8)}</div>`;
+    const instEvtCount = events.filter(e => e[1] === inst.midiNote && e[2] > 0).length;
+    const countBadge = instEvtCount > 0 ? `<span style="font-size:0.7em;color:var(--accent);margin-left:2px;">${instEvtCount}</span>` : '';
+    html += `<div class="loop-label" title="${inst.name}">${inst.name.substring(0, 7)}${countBadge}</div>`;
     for (let s = 0; s < totalSteps; s++) {
       const tick = Math.round(s * ticksPerStep);
       const barIdx = Math.floor(s / stepsPerBar);

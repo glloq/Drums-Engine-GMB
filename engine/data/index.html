@@ -938,6 +938,7 @@ input[type=checkbox] { width: auto; }
         </h3>
         <div class="transport">
           <button class="btn btn-success btn-sm" onclick="playCurrentLoop()">&#9654; Play</button>
+          <button class="btn btn-sm" id="btnPauseLoop" onclick="togglePauseLoop()" style="background:#f0ad4e;color:#fff;display:none;">&#10074;&#10074; Pause</button>
           <button class="btn btn-danger btn-sm" onclick="stopLoop()">&#9632; Stop</button>
           <button class="btn btn-secondary btn-sm" onclick="tapTempo()" title="Cliquez en rythme pour definir le BPM">Tap</button>
           <div class="bpm-display"><span id="loopBpmDisplay">120</span> BPM</div>
@@ -1703,12 +1704,17 @@ function renderActuators() {
   if (actuators.length === 0) {
     el.innerHTML = '<div class="empty-state">' +
       '<p style="font-size:1.1em;margin-bottom:12px;">Bienvenue dans Drums Engine !</p>' +
-      '<div class="help-box" style="text-align:left;max-width:400px;margin:0 auto;">' +
+      '<div class="help-box" style="text-align:left;max-width:450px;margin:0 auto;">' +
       '<p style="margin-bottom:8px;"><strong>Pour commencer:</strong></p>' +
       '<p>1. Cliquez <strong>+ Ajouter</strong> pour creer un actionneur</p>' +
       '<p>2. Choisissez un <strong>preset rapide</strong> ou configurez manuellement</p>' +
       '<p>3. Passez a l\'onglet <strong>Instruments</strong> pour lier l\'actionneur a une note MIDI</p>' +
       '<p>4. Connectez-vous en <strong>rtpMIDI</strong> (port 5004) et jouez !</p>' +
+      '</div>' +
+      '<div style="margin-top:16px;"><p style="font-size:0.9em;color:var(--fg2);margin-bottom:8px;">Kits rapides d\'actionneurs:</p>' +
+      '<button class="btn btn-sm btn-primary" onclick="quickActuatorKit(\'basic\')" style="margin:4px;">Basique (3)</button> ' +
+      '<button class="btn btn-sm btn-primary" onclick="quickActuatorKit(\'standard\')" style="margin:4px;">Standard (5)</button> ' +
+      '<button class="btn btn-sm btn-primary" onclick="quickActuatorKit(\'full\')" style="margin:4px;">Complet (8)</button>' +
       '</div></div>';
     return;
   }
@@ -2004,6 +2010,43 @@ function sortActuators(key) {
     type: (a,b) => (a.type||0) - (b.type||0)
   };
   if (cmp[key]) { actuators.sort(cmp[key]); renderActuators(); }
+}
+
+const quickActuatorKits = {
+  basic: [
+    {name:'Kick Solenoid', type:1, behavior:0, bus:0, hwAddress:0x20, hwPin:0, paramMin:8, paramMax:25, paramDefault:15, cooldownUs:1000, enabled:true},
+    {name:'Snare Solenoid', type:1, behavior:0, bus:0, hwAddress:0x20, hwPin:1, paramMin:8, paramMax:22, paramDefault:14, cooldownUs:800, enabled:true},
+    {name:'HH Servo', type:0, behavior:2, bus:1, hwAddress:0x40, hwPin:0, paramMin:30, paramMax:150, paramDefault:90, cooldownUs:50, enabled:true}
+  ],
+  standard: [
+    {name:'Kick Solenoid', type:1, behavior:0, bus:0, hwAddress:0x20, hwPin:0, paramMin:8, paramMax:25, paramDefault:15, cooldownUs:1000, enabled:true},
+    {name:'Snare Solenoid', type:1, behavior:0, bus:0, hwAddress:0x20, hwPin:1, paramMin:8, paramMax:22, paramDefault:14, cooldownUs:800, enabled:true},
+    {name:'Tom Hi Solenoid', type:1, behavior:0, bus:0, hwAddress:0x20, hwPin:2, paramMin:8, paramMax:22, paramDefault:14, cooldownUs:800, enabled:true},
+    {name:'HH Servo', type:0, behavior:2, bus:1, hwAddress:0x40, hwPin:0, paramMin:30, paramMax:150, paramDefault:90, cooldownUs:50, enabled:true},
+    {name:'Crash Solenoid', type:1, behavior:0, bus:0, hwAddress:0x20, hwPin:3, paramMin:10, paramMax:28, paramDefault:18, cooldownUs:1200, enabled:true}
+  ],
+  full: [
+    {name:'Kick Solenoid', type:1, behavior:0, bus:0, hwAddress:0x20, hwPin:0, paramMin:8, paramMax:25, paramDefault:15, cooldownUs:1000, enabled:true},
+    {name:'Snare Solenoid', type:1, behavior:0, bus:0, hwAddress:0x20, hwPin:1, paramMin:8, paramMax:22, paramDefault:14, cooldownUs:800, enabled:true},
+    {name:'Tom Hi Solenoid', type:1, behavior:0, bus:0, hwAddress:0x20, hwPin:2, paramMin:8, paramMax:22, paramDefault:14, cooldownUs:800, enabled:true},
+    {name:'Tom Mid Solenoid', type:1, behavior:0, bus:0, hwAddress:0x20, hwPin:3, paramMin:8, paramMax:22, paramDefault:14, cooldownUs:800, enabled:true},
+    {name:'Tom Lo Solenoid', type:1, behavior:0, bus:0, hwAddress:0x20, hwPin:4, paramMin:8, paramMax:22, paramDefault:14, cooldownUs:800, enabled:true},
+    {name:'HH Servo', type:0, behavior:2, bus:1, hwAddress:0x40, hwPin:0, paramMin:30, paramMax:150, paramDefault:90, cooldownUs:50, enabled:true},
+    {name:'Crash Solenoid', type:1, behavior:0, bus:0, hwAddress:0x20, hwPin:5, paramMin:10, paramMax:28, paramDefault:18, cooldownUs:1200, enabled:true},
+    {name:'Ride Solenoid', type:1, behavior:0, bus:0, hwAddress:0x20, hwPin:6, paramMin:8, paramMax:20, paramDefault:14, cooldownUs:800, enabled:true}
+  ]
+};
+
+async function quickActuatorKit(kitId) {
+  const kit = quickActuatorKits[kitId];
+  if (!kit) return;
+  if (!confirm('Creer ' + kit.length + ' actionneurs preconfigures ?')) return;
+  for (const cfg of kit) {
+    await api('actuators', 'POST', cfg);
+  }
+  await loadActuators();
+  markConfigDirty();
+  toast(kit.length + ' actionneurs crees', 'success');
 }
 
 async function actBulkOp(action) {
@@ -3407,7 +3450,10 @@ function renderCurrentLoopGrid() {
   rows.forEach(inst => {
     const instEvtCount = events.filter(e => e[1] === inst.midiNote && e[2] > 0).length;
     const countBadge = instEvtCount > 0 ? `<span style="font-size:0.7em;color:var(--accent);margin-left:2px;">${instEvtCount}</span>` : '';
-    html += `<div class="loop-label" title="${inst.name}">${inst.name.substring(0, 7)}${countBadge}</div>`;
+    const gmName = GM_DRUMS[inst.midiNote] || '';
+    const labelNote = `(${inst.midiNote})`;
+    const fullTitle = inst.name + (gmName ? ' - ' + gmName : '') + ' ' + labelNote;
+    html += `<div class="loop-label" title="${fullTitle}">${inst.name.substring(0, 7)}${countBadge}</div>`;
     for (let s = 0; s < totalSteps; s++) {
       const tick = Math.round(s * ticksPerStep);
       const barIdx = Math.floor(s / stepsPerBar);
@@ -3596,12 +3642,30 @@ async function playCurrentLoop() {
   await api('loop/play?id=' + currentLoopIdx, 'POST');
   toast('Lecture...', 'success');
   startLoopPlayhead();
+  const pauseBtn = document.getElementById('btnPauseLoop');
+  if (pauseBtn) { pauseBtn.style.display = ''; pauseBtn.innerHTML = '&#10074;&#10074; Pause'; }
+}
+
+async function togglePauseLoop() {
+  const btn = document.getElementById('btnPauseLoop');
+  const data = await api('status', 'GET', null, true);
+  if (data && data.loop_paused) {
+    await api('loop/resume', 'POST');
+    if (btn) btn.innerHTML = '&#10074;&#10074; Pause';
+    startLoopPlayhead();
+  } else {
+    await api('loop/pause', 'POST');
+    if (btn) btn.innerHTML = '&#9654; Resume';
+    stopLoopPlayhead();
+  }
 }
 
 async function stopLoop() {
   await api('loop/stop', 'POST');
   stopLoopPlayhead();
   clearPlayhead();
+  const pauseBtn = document.getElementById('btnPauseLoop');
+  if (pauseBtn) pauseBtn.style.display = 'none';
 }
 
 function startLoopPlayhead() {
@@ -4389,6 +4453,18 @@ async function saveLedSegment() {
     velocityToBrightness: document.getElementById('ledSegVelBri').checked,
     enabled: true
   };
+  // Check for pixel overlap with existing segments on same strip
+  const overlap = ledSegments.find(seg => {
+    if (editId && String(seg.id) === String(editId)) return false;
+    if (seg.stripId !== data.stripId) return false;
+    const aStart = data.pixelStart, aEnd = data.pixelStart + data.pixelCount - 1;
+    const bStart = seg.pixelStart, bEnd = seg.pixelStart + seg.pixelCount - 1;
+    return aStart <= bEnd && bStart <= aEnd;
+  });
+  if (overlap) {
+    if (!confirm('Chevauchement de pixels avec "' + (overlap.name||'Segment') + '" (pixels ' + overlap.pixelStart + '-' + (overlap.pixelStart+overlap.pixelCount-1) + ').\nContinuer quand meme ?')) return;
+  }
+
   let r;
   if (editId) {
     r = await api('led/segment?id=' + editId, 'PUT', data);

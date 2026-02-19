@@ -245,6 +245,28 @@ void WebServerManager::_setupRoutes() {
       _handleStopLoop(req);
     });
 
+  _server.on("/api/loop/pause", HTTP_POST,
+    [this](AsyncWebServerRequest* req) {
+      if (!_rateLimiter.checkRate(req)) return;
+      if (!_auth.checkAuth(req)) return;
+      _loopEngine->pause();
+      JsonDocument doc;
+      doc["message"] = "Paused";
+      doc["paused"] = _loopEngine->isPaused();
+      _sendJson(req, 200, doc);
+    });
+
+  _server.on("/api/loop/resume", HTTP_POST,
+    [this](AsyncWebServerRequest* req) {
+      if (!_rateLimiter.checkRate(req)) return;
+      if (!_auth.checkAuth(req)) return;
+      _loopEngine->resume();
+      JsonDocument doc;
+      doc["message"] = "Resumed";
+      doc["paused"] = _loopEngine->isPaused();
+      _sendJson(req, 200, doc);
+    });
+
   _server.on("/api/loop/chain", HTTP_POST,
     [this](AsyncWebServerRequest* req) {},
     NULL,

@@ -51,6 +51,7 @@ void WebServerManager::_handleGetStatus(AsyncWebServerRequest* req) {
   // Loops
   obj["loop_count"] = _loopEngine->getLoopCount();
   obj["loop_playing"] = _loopEngine->isPlaying();
+  obj["loop_paused"] = _loopEngine->isPaused();
   if (_loopEngine->isPlaying()) {
     obj["loop_bpm"] = _loopEngine->getBpm();
     obj["loop_beat"] = _loopEngine->getCurrentBeat();
@@ -146,6 +147,12 @@ void WebServerManager::_handleGetCapabilities(AsyncWebServerRequest* req) {
   doc["maxActuators"] = MAX_ACTUATORS;
   doc["maxInstruments"] = MAX_INSTRUMENTS;
   doc["maxActuatorsPerInstrument"] = MAX_ACTUATORS_PER_INST;
+
+  // Velocity curves
+  JsonArray curves = doc["velocityCurves"].to<JsonArray>();
+  { JsonObject c = curves.add<JsonObject>(); c["id"] = CURVE_LINEAR; c["name"] = "Linear"; c["description"] = "Direct 1:1 mapping"; }
+  { JsonObject c = curves.add<JsonObject>(); c["id"] = CURVE_EXPO; c["name"] = "Exponential"; c["description"] = "Faster rise (v^2)"; }
+  { JsonObject c = curves.add<JsonObject>(); c["id"] = CURVE_LOG; c["name"] = "Logarithmic"; c["description"] = "Slower rise (sqrt)"; }
 
   _sendJson(req, 200, doc);
 }

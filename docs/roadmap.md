@@ -221,6 +221,26 @@
 - [x] Note Map: creation batch de tous les instruments GM manquants en un clic
 - [x] Badge canal MIDI sur les cartes instrument (si different du canal 10)
 
+## Phase 15 — Robustesse, pause/resume et onboarding (17 features)
+**Statut: implementee**
+- [x] Fix loop chain deletion safety (stop chain si boucle referencee supprimee)
+- [x] Ajustement indices chain apres suppression de boucle
+- [x] API `POST /api/loop/pause` et `POST /api/loop/resume`
+- [x] Etat `loop_paused` expose dans `/api/status`
+- [x] Bouton Pause/Resume dans les controles transport boucle
+- [x] Synchronisation etat pause via polling status
+- [x] Affichage position boucle (mesure.temps) dans le transport
+- [x] Kits rapides actionneurs (basique 3 / standard 5 / complet 8)
+- [x] Detection chevauchement pixels LED segments (warning)
+- [x] Visualisation layout LED strip (barre couleurs segments)
+- [x] Filtre instruments incomplets (checkbox)
+- [x] Attribut `data-complete` sur les items instrument
+- [x] Export/Import config v4: inclut LED strips + segments + themes
+- [x] Courbes velocity exposees dans `/api/capabilities` (linear/expo/log)
+- [x] Test integration: chaine complete MIDI → instrument (calibration)
+- [x] Auto-scroll vers item cree apres ajout (actionneur/instrument)
+- [x] Persistence onglet actif (sessionStorage + restauration au chargement)
+
 ## Risques / dette technique
 - Couverture tests: script curl fonctionnel mais pas de CI automatise.
 - Dependance environnement outillage (`pio`) pour validation complete firmware.

@@ -37,6 +37,8 @@ Base URL: `http://<ip-esp32>/`
 - `DELETE /api/loop?id=<id>`
 - `POST /api/loop/play?id=<id>`
 - `POST /api/loop/stop`
+- `POST /api/loop/pause` — mettre en pause la boucle en cours
+- `POST /api/loop/resume` — reprendre la lecture apres pause
 - `POST /api/loop/chain` — enchainer plusieurs boucles sequentiellement
 
 ### LED Strips

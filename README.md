@@ -1,10 +1,10 @@
 # Drums-Engine-MIDI
 
-Moteur embarqué temps réel pour percussion robotisée, piloté par MIDI, avec configuration via interface web sur ESP32.
+Moteur embarque temps reel pour percussion robotisee, pilote par MIDI, avec configuration via interface web sur ESP32.
 
 ## Base active
 - Le code firmware actif est dans `engine/`.
-- La documentation projet est centralisée dans `docs/`.
+- La documentation projet est centralisee dans `docs/`.
 
 ## Demarrage rapide
 
@@ -32,15 +32,30 @@ Connectez-vous et configurez le WiFi via `POST /api/wifi`.
 ```
 Le token est affiche au boot sur Serial ou via `GET /api/auth-token`.
 
+## Architecture
+
+```
+Core 1 (RT 1kHz)                    Core 0 (App)
+┌────────────────────┐              ┌──────────────────┐
+│ MIDI Layer         │              │ Web Server REST  │
+│ Event Processor    │              │ Loop Engine      │
+│ Scheduler          │              │ WiFi Manager     │
+│ Actuator Manager   │              │ Storage LittleFS │
+│ HAL Drivers        │              └──────────────────┘
+└────────────────────┘
+```
+
+Protections concurrence : spinlocks dual-core, mutex I2C, ISR atomique, ecriture LittleFS atomique.
+
 ## Documentation
 - Index documentation: [`docs/README.md`](docs/README.md)
-- État des lieux actuel: [`docs/system-status.md`](docs/system-status.md)
+- Etat des lieux actuel: [`docs/system-status.md`](docs/system-status.md)
 - Architecture technique: [`docs/architecture.md`](docs/architecture.md)
 - API web: [`docs/web-api.md`](docs/web-api.md)
-- Scheduler temps réel: [`docs/realtime-scheduler.md`](docs/realtime-scheduler.md)
+- Scheduler temps reel: [`docs/realtime-scheduler.md`](docs/realtime-scheduler.md)
 - Guide de deploiement: [`docs/deployment-guide.md`](docs/deployment-guide.md)
 - Audit production: [`docs/production-readiness.md`](docs/production-readiness.md)
 - Roadmap: [`docs/roadmap.md`](docs/roadmap.md)
 
 ## Licence
-Projet distribué sous licence MIT (voir `LICENSE`).
+Projet distribue sous licence MIT (voir `LICENSE`).

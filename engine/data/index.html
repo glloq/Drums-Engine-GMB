@@ -281,12 +281,6 @@ input[type=checkbox] { width: auto; }
           <option value="id">ID</option>
           <option value="type">Type</option>
         </select>
-        <select style="padding:6px;font-size:0.85em;" onchange="actBulkOp(this.value);this.value='';">
-          <option value="">Actions...</option>
-          <option value="enableAll">Activer tous</option>
-          <option value="disableAll">Desactiver tous</option>
-          <option value="stopAll">Stop tous</option>
-        </select>
         <button class="btn btn-primary" onclick="showAddActuator()">+ Ajouter</button>
       </div>
     </div>
@@ -2191,26 +2185,6 @@ async function quickActuatorKit(kitId) {
   await loadActuators();
   markConfigDirty();
   toast(kit.length + ' actionneurs crees', 'success');
-}
-
-async function actBulkOp(action) {
-  if (!action) return;
-  if (action === 'stopAll') {
-    for (const a of actuators) {
-      api('test/actuator', 'POST', {id: a.id, value: 0});
-    }
-    toast('STOP ALL - Tous arretes', 'warn');
-    return;
-  }
-  const enabled = action === 'enableAll';
-  let ok = 0;
-  for (const a of actuators) {
-    const cfg = Object.assign({}, a, {enabled});
-    const r = await api('actuator?id=' + a.id, 'PUT', cfg);
-    if (r) ok++;
-  }
-  toast((enabled ? 'Actives' : 'Desactives') + ': ' + ok + '/' + actuators.length, 'success');
-  await loadActuators();
 }
 
 // ====================================================================

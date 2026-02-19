@@ -272,7 +272,7 @@ input[type=checkbox] { width: auto; }
 <div class="tabs">
   <div class="tab active" data-tab="actuators"><span class="tab-step">1</span> Actionneurs <span id="tabBadgeAct" class="tab-badge"></span></div>
   <div class="tab" data-tab="instruments"><span class="tab-step">2</span> Instruments <span id="tabBadgeInstr" class="tab-badge"></span></div>
-  <div class="tab" data-tab="leds">LEDs</div>
+  <div class="tab" data-tab="leds" id="tabLeds" style="display:none;">LEDs</div>
   <div class="tab" data-tab="mappings">Traitement MIDI</div>
   <div class="tab" data-tab="piano">Piano</div>
   <div class="tab" data-tab="calibration">Calibration</div>
@@ -1146,7 +1146,11 @@ input[type=checkbox] { width: auto; }
     <!-- Preferences -->
     <div class="card" style="margin-top:12px;">
       <h3>Preferences</h3>
-      <label style="font-size:0.85em;cursor:pointer;">
+      <label style="font-size:0.85em;cursor:pointer;display:block;margin-bottom:6px;">
+        <input type="checkbox" id="settShowLedsTab" onchange="toggleLedsTab(this.checked)">
+        Afficher l'onglet LEDs
+      </label>
+      <label style="font-size:0.85em;cursor:pointer;display:block;">
         <input type="checkbox" id="settHideUsedActuators" checked onchange="hideUsedActuators=this.checked;localStorage.setItem('hideUsedAct',this.checked?'1':'0');">
         Masquer les actionneurs deja utilises dans les listes d'instruments
       </label>
@@ -1530,11 +1534,16 @@ async function init() {
     });
   });
 
+  // Restore preferences
+  const showLeds = localStorage.getItem('showLedsTab') === '1';
+  document.getElementById('settShowLedsTab').checked = showLeds;
+  document.getElementById('tabLeds').style.display = showLeds ? '' : 'none';
+
   // Restore last active tab from sessionStorage
   const lastTab = sessionStorage.getItem('lastTab');
   if (lastTab) {
     const tab = document.querySelector('.tab[data-tab="' + lastTab + '"]');
-    if (tab) tab.click();
+    if (tab && tab.style.display !== 'none') tab.click();
   }
 }
 
@@ -2211,6 +2220,15 @@ function sortActuators(key) {
 }
 
 let _hideUsedActuators = false;
+function toggleLedsTab(show) {
+  document.getElementById('tabLeds').style.display = show ? '' : 'none';
+  localStorage.setItem('showLedsTab', show ? '1' : '0');
+  // If hiding and LEDs tab is active, switch to actuators
+  if (!show && document.getElementById('tab-leds').classList.contains('active')) {
+    document.querySelector('.tab[data-tab="actuators"]').click();
+  }
+}
+
 function toggleHideUsedActuators() {
   _hideUsedActuators = !_hideUsedActuators;
   const btn = document.getElementById('btnHideUsed');

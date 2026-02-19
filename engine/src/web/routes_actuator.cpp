@@ -167,6 +167,36 @@ bool WebServerManager::_validateActuatorConfig(const ActuatorConfig& cfg, const 
       errMsg = "PWM motor supports LEDC_PWM or PCA9685";
       return false;
     }
+    // Valider le behavior pour PWM_MOTOR
+    if (cfg.behavior != ActuatorBehavior::MOTOR_TIMED &&
+        cfg.behavior != ActuatorBehavior::MOTOR_SPEED &&
+        cfg.behavior != ActuatorBehavior::MOTOR_SWEEP &&
+        cfg.behavior != ActuatorBehavior::MOTOR_ALTERNATE) {
+      errMsg = "PWM motor behavior must be MOTOR_TIMED, MOTOR_SPEED, MOTOR_SWEEP or MOTOR_ALTERNATE";
+      return false;
+    }
+    // MOTOR_SWEEP requiert au moins un end stop
+    if (cfg.behavior == ActuatorBehavior::MOTOR_SWEEP) {
+      if (cfg.endStopPin1 == 0xFF && cfg.endStopPin2 == 0xFF) {
+        errMsg = "MOTOR_SWEEP requires at least one endStopPin";
+        return false;
+      }
+    }
+    // MOTOR_ALTERNATE requiert end stop + direction pin (hwAddress)
+    if (cfg.behavior == ActuatorBehavior::MOTOR_ALTERNATE) {
+      if (cfg.endStopPin1 == 0xFF && cfg.endStopPin2 == 0xFF) {
+        errMsg = "MOTOR_ALTERNATE requires at least one endStopPin";
+        return false;
+      }
+      if (cfg.bus != HardwareBus::LEDC_PWM) {
+        errMsg = "MOTOR_ALTERNATE requires LEDC_PWM bus (direction pin via hwAddress)";
+        return false;
+      }
+      if (cfg.hwAddress == 0 || cfg.hwAddress >= 40) {
+        errMsg = "MOTOR_ALTERNATE requires hwAddress as direction GPIO pin (1-39)";
+        return false;
+      }
+    }
   }
 
   if (cfg.type == ActuatorType::MOTOR_OPTICAL) {

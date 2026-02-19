@@ -11,8 +11,10 @@ uint8_t MotorActuator::_isrSlotPins[MAX_OPTICAL_MOTORS] = {0xFF, 0xFF, 0xFF, 0xF
 constexpr void (*MotorActuator::_isrTable[MAX_OPTICAL_MOTORS])();
 
 MotorActuator::MotorActuator(HalDriver* driver)
-  : _driver(driver), _currentSpeed(0), _sensorPin(0),
+  : _driver(driver), _currentSpeed(0),
+    _sensorPin(0xFF), _dirPin(0xFF), _forward(true),
     _targetEdges(0), _positionTracking(false),
+    _timedDurationUs(0), _alternateRunning(false),
     _homing(false), _endStopReached(false) {}
 
 void MotorActuator::init() {
@@ -22,14 +24,30 @@ void MotorActuator::init() {
   _active = false;
   _targetEdges = 0;
   _positionTracking = false;
+  _timedDurationUs = 0;
+  _alternateRunning = false;
+  _sensorPin = 0xFF;
+  _dirPin = 0xFF;
+  _forward = true;
 
-  // Store sensor pin and configure as INPUT_PULLUP for interrupt use
-  _sensorPin = _config.hwAddress;
-  if (_sensorPin > 0 && _sensorPin < 40) {
-    pinMode(_sensorPin, INPUT_PULLUP);
+  // hwAddress : role depend du type/behavior
+  //   MOTOR_OPTICAL   → capteur optique (INPUT_PULLUP, ISR)
+  //   MOTOR_ALTERNATE → pin direction H-bridge (OUTPUT)
+  //   Autres PWM_MOTOR → ignore
+  if (_config.type == ActuatorType::MOTOR_OPTICAL) {
+    _sensorPin = _config.hwAddress;
+    if (_sensorPin > 0 && _sensorPin < 40) {
+      pinMode(_sensorPin, INPUT_PULLUP);
+    }
+  } else if (_config.behavior == ActuatorBehavior::MOTOR_ALTERNATE) {
+    if (_config.hwAddress > 0 && _config.hwAddress < 40) {
+      _dirPin = _config.hwAddress;
+      pinMode(_dirPin, OUTPUT);
+      digitalWrite(_dirPin, HIGH);
+    }
   }
 
-  // Configure end stop pins
+  // End stop pins
   if (_config.endStopPin1 != 0xFF && _config.endStopPin1 < 40) {
     pinMode(_config.endStopPin1, INPUT_PULLUP);
   }
@@ -39,50 +57,109 @@ void MotorActuator::init() {
   _homing = false;
   _endStopReached = false;
 
-  DBGF("[Actuator] Motor '%s' init (ch=%d, sensor=%d, endstop1=%d, endstop2=%d, range=%d-%d)\n",
-       _config.name, _config.hwPin, _sensorPin,
+  DBGF("[Actuator] Motor '%s' init (ch=%d, behavior=%d, endstop1=%d, endstop2=%d, range=%d-%d)\n",
+       _config.name, _config.hwPin, (int)_config.behavior,
        _config.endStopPin1, _config.endStopPin2,
        _config.paramMin, _config.paramMax);
 }
 
+// =========================================================================
+// execute — dispatch selon CommandType et behavior
+// =========================================================================
 void MotorActuator::execute(const ActuatorCommand& cmd) {
   if (!_driver || !_driver->isReady() || !_config.enabled) return;
 
   uint32_t now = micros();
 
   switch ((CommandType)cmd.command_type) {
-    case CommandType::PWM: {
-      // PWM overrides any active optical tracking — detach ISR first
-      if (_positionTracking) {
-        _detachOpticalISR();
+
+    // -----------------------------------------------------------------
+    // PULSE — declenchement ponctuel (TIMED, SWEEP, ALTERNATE)
+    // -----------------------------------------------------------------
+    case CommandType::PULSE: {
+      // Arreter tout tracking optique en cours
+      if (_positionTracking) _detachOpticalISR();
+      _positionTracking = false;
+
+      uint16_t cmdVal = _config.inverted ? (127 - cmd.value) : cmd.value;
+      uint16_t speed = map(cmdVal, 0, 127, _config.paramMin, _config.paramMax);
+
+      switch (_config.behavior) {
+
+        case ActuatorBehavior::MOTOR_TIMED:
+          // Tourne a 'speed' pendant 'duration' puis arret auto
+          _timedDurationUs = (uint32_t)cmd.duration * 100;
+          _alternateRunning = false;
+          _driver->pwmWrite(_config.hwPin, speed);
+          _currentSpeed = speed;
+          markActivation(now);
+          DBGF("[Actuator] Motor '%s' timed (speed=%d, dur=%lu us)\n",
+               _config.name, speed, (unsigned long)_timedDurationUs);
+          break;
+
+        case ActuatorBehavior::MOTOR_SWEEP:
+          // Tourne a 'speed' jusqu'a ce qu'un end stop soit atteint
+          _endStopReached = false;
+          _alternateRunning = false;
+          _driver->pwmWrite(_config.hwPin, speed);
+          _currentSpeed = speed;
+          markActivation(now);
+          DBGF("[Actuator] Motor '%s' sweep (speed=%d)\n",
+               _config.name, speed);
+          break;
+
+        case ActuatorBehavior::MOTOR_ALTERNATE:
+          // Alterne : tourne a 'speed', inverse direction a chaque end stop
+          _forward = true;
+          _alternateRunning = true;
+          _endStopReached = false;
+          _setDirection(_forward);
+          _driver->pwmWrite(_config.hwPin, speed);
+          _currentSpeed = speed;
+          markActivation(now);
+          DBGF("[Actuator] Motor '%s' alternate start (speed=%d)\n",
+               _config.name, speed);
+          break;
+
+        default:
+          break;
       }
+      break;
+    }
+
+    // -----------------------------------------------------------------
+    // PWM — controle direct de vitesse (tous behaviors moteur)
+    // -----------------------------------------------------------------
+    case CommandType::PWM: {
+      if (_positionTracking) _detachOpticalISR();
+      _positionTracking = false;
+      _targetEdges = 0;
+
       uint16_t cmdVal = _config.inverted ? (127 - cmd.value) : cmd.value;
       uint16_t speed = map(cmdVal, 0, 127, _config.paramMin, _config.paramMax);
       _driver->pwmWrite(_config.hwPin, speed);
       _currentSpeed = speed;
-      _positionTracking = false;
-      _targetEdges = 0;
+
       if (speed > 0) {
-        if (!_active) {
-          markActivation(now);
-        }
+        if (!_active) markActivation(now);
       } else {
+        _alternateRunning = false;
         markDeactivation();
       }
       break;
     }
 
+    // -----------------------------------------------------------------
+    // POSITION — suivi optique (MOTOR_OPTICAL_TRACK uniquement)
+    // -----------------------------------------------------------------
     case CommandType::POSITION: {
-      if (_config.behavior != ActuatorBehavior::MOTOR_OPTICAL_TRACK) {
-        break;
-      }
+      if (_config.behavior != ActuatorBehavior::MOTOR_OPTICAL_TRACK) break;
 
       uint16_t minEdges = (_config.paramMin == 0) ? 1 : _config.paramMin;
       uint16_t maxEdges = (_config.paramMax < minEdges) ? minEdges : _config.paramMax;
       _targetEdges = map(cmd.value, 0, 127, minEdges, maxEdges);
       _positionTracking = (_targetEdges > 0);
 
-      // Arm the hardware interrupt for optical edge counting
       _attachOpticalISR();
 
       uint16_t drive = (_config.paramDefault == 0) ? 128 : _config.paramDefault;
@@ -90,7 +167,7 @@ void MotorActuator::execute(const ActuatorCommand& cmd) {
       _driver->pwmWrite(_config.hwPin, drive);
       _currentSpeed = drive;
       markActivation(now);
-      DBGF("[Actuator] Motor optical '%s' target edges=%lu (sensor pin=%d, ISR armed)\n",
+      DBGF("[Actuator] Motor optical '%s' target=%lu edges (sensor=%d)\n",
            _config.name, (unsigned long)_targetEdges, _sensorPin);
       break;
     }
@@ -101,6 +178,15 @@ void MotorActuator::execute(const ActuatorCommand& cmd) {
 
     default:
       break;
+  }
+}
+
+// =========================================================================
+// Direction — ecriture GPIO pour H-bridge (DIR+PWM)
+// =========================================================================
+void MotorActuator::_setDirection(bool forward) {
+  if (_dirPin != 0xFF && _dirPin < 40) {
+    digitalWrite(_dirPin, forward ? HIGH : LOW);
   }
 }
 
@@ -204,24 +290,49 @@ bool MotorActuator::_checkEndStops() {
 void MotorActuator::stop() {
   if (!_driver || !_driver->isReady()) return;
 
-  // Detach ISR before stopping the motor to avoid spurious counts
   _detachOpticalISR();
 
   _driver->pwmWrite(_config.hwPin, 0);
   _currentSpeed = 0;
   _positionTracking = false;
   _targetEdges = 0;
+  _timedDurationUs = 0;
+  _alternateRunning = false;
   _homing = false;
   markDeactivation();
 }
 
+// =========================================================================
+// checkTimeout — watchdog appele a 1 kHz par ActuatorManager
+// =========================================================================
+// Logique par behavior :
+//   MOTOR_TIMED     → arret apres _timedDurationUs
+//   MOTOR_SWEEP     → arret quand end stop atteint (check standard)
+//   MOTOR_ALTERNATE → inverse direction quand end stop atteint, continue
+//   MOTOR_SPEED     → timeout securite seulement
+//   OPTICAL_TRACK   → suivi compteur ISR
+// =========================================================================
 bool MotorActuator::checkTimeout(uint32_t nowUs) {
   if (!_active) return false;
 
-  // Check end stops on every tick (polled, not ISR - sufficient at 1kHz)
+  // --- End stop (polling 1 kHz, front montant) ---
   if (_checkEndStops()) {
     if (!_endStopReached) {
       _endStopReached = true;
+
+      // MOTOR_ALTERNATE : inverser et continuer
+      if (_alternateRunning) {
+        _driver->pwmWrite(_config.hwPin, 0);           // pause breve
+        _forward = !_forward;
+        _setDirection(_forward);
+        _driver->pwmWrite(_config.hwPin, _currentSpeed); // reprendre
+        _activationStartUs = nowUs;                     // reset timeout securite
+        DBGF("[Actuator] Motor '%s' end stop -> %s\n",
+             _config.name, _forward ? "FWD" : "REV");
+        return false;
+      }
+
+      // Tous les autres behaviors : arret
       DBGF("[Actuator] Motor '%s' end stop triggered - stopping\n", _config.name);
       stop();
       return true;
@@ -230,17 +341,31 @@ bool MotorActuator::checkTimeout(uint32_t nowUs) {
     _endStopReached = false;
   }
 
+  // --- MOTOR_OPTICAL_TRACK : suivi compteur ISR ---
   if (_config.behavior == ActuatorBehavior::MOTOR_OPTICAL_TRACK) {
     _updateOpticalTracking(nowUs);
     return !_active;
   }
 
+  // --- MOTOR_TIMED : arret apres duree ecoulee ---
+  if (_config.behavior == ActuatorBehavior::MOTOR_TIMED && _timedDurationUs > 0) {
+    uint32_t elapsed = nowUs - _activationStartUs;
+    if (elapsed >= _timedDurationUs) {
+      DBGF("[Actuator] Motor '%s' timed done (%lu us)\n",
+           _config.name, (unsigned long)_timedDurationUs);
+      stop();
+      return true;
+    }
+  }
+
+  // --- Timeout securite global ---
   uint32_t elapsed = nowUs - _activationStartUs;
   if (elapsed >= MOTOR_MAX_CONTINUOUS_US) {
-    DBGF("[Safety] Motor '%s' duty-cycle timeout after %lu us - forced stop\n",
+    DBGF("[Safety] Motor '%s' timeout %lu us - forced stop\n",
          _config.name, (unsigned long)elapsed);
     stop();
     return true;
   }
+
   return false;
 }

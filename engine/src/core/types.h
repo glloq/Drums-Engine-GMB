@@ -46,6 +46,10 @@ enum class ActuatorBehavior : uint8_t {
   HIHAT_CONTROLLER,       // Servo hi-hat pedal controller (CC#4, splash detection)
   SERVO_MUTE,             // Servo mute (position fermee = mute, ouverte = libre)
   SOLENOID_MUTE,          // Solenoide mute (off = mute/contact, on = libre)
+  MOTOR_TIMED,            // Moteur active pour une duree puis arret auto
+  MOTOR_SPEED,            // Moteur vitesse continue (velocity → vitesse)
+  MOTOR_SWEEP,            // Moteur tourne jusqu'au end stop puis arret
+  MOTOR_ALTERNATE,        // Moteur alterne direction entre end stops
   BEHAVIOR_COUNT
 };
 
@@ -161,12 +165,17 @@ struct ActuatorConfig {
   uint8_t endStopPin2;     // End stop pin 2 GPIO (0xFF = disabled)
 
   // --- Behavior-specific param semantics ---
-  // SOLENOID_STRIKE: paramMin=durMin(ms), paramMax=durMax(ms), cooldownUs=cooldown/100
-  // SOLENOID_HOLD:   paramMin=pwmActivation(0-255), paramMax=pwmHold(0-255),
-  //                  paramDefault=transitionMs, cooldownUs=maxActiveTime*10
-  // SERVO_*:         paramMin=angleMin, paramMax=angleMax, paramDefault=angleDefault
-  // MOTOR:           paramMin=pwmMin%, paramMax=pwmMax%, paramDefault=driveSpeed,
-  //                  endStopPin1/2 for limit switches
+  // SOLENOID_STRIKE:   paramMin=durMin(ms), paramMax=durMax(ms), cooldownUs=cooldown/100
+  // SOLENOID_HOLD:     paramMin=pwmActivation(0-255), paramMax=pwmHold(0-255),
+  //                    paramDefault=transitionMs, cooldownUs=maxActiveTime*10
+  // SERVO_*:           paramMin=angleMin, paramMax=angleMax, paramDefault=angleDefault
+  // MOTOR_OPTICAL:     paramMin=edgesMin, paramMax=edgesMax, paramDefault=driveSpeed,
+  //                    hwAddress=sensorPin GPIO, endStopPin1/2 for limit switches
+  // MOTOR_TIMED:       paramMin=pwmMin%, paramMax=pwmMax%, duration from command
+  // MOTOR_SPEED:       paramMin=pwmMin%, paramMax=pwmMax% (PWM command → vitesse)
+  // MOTOR_SWEEP:       paramMin=pwmMin%, paramMax=pwmMax%, endStopPin1/2 requis
+  // MOTOR_ALTERNATE:   paramMin=pwmMin%, paramMax=pwmMax%, hwAddress=dirPin GPIO,
+  //                    endStopPin1/2 requis (alterne direction entre les 2 butees)
 
   ActuatorConfig()
     : id(0), type(ActuatorType::SOLENOID), behavior(ActuatorBehavior::SOLENOID_STRIKE),
@@ -361,6 +370,10 @@ inline const char* actuatorBehaviorName(ActuatorBehavior b) {
     case ActuatorBehavior::HIHAT_CONTROLLER:    return "Hi-Hat Controller";
     case ActuatorBehavior::SERVO_MUTE:          return "Servo Mute";
     case ActuatorBehavior::SOLENOID_MUTE:       return "Solenoid Mute";
+    case ActuatorBehavior::MOTOR_TIMED:         return "Motor Timed";
+    case ActuatorBehavior::MOTOR_SPEED:         return "Motor Speed";
+    case ActuatorBehavior::MOTOR_SWEEP:         return "Motor Sweep";
+    case ActuatorBehavior::MOTOR_ALTERNATE:     return "Motor Alternate";
     default:                               return "Unknown";
   }
 }

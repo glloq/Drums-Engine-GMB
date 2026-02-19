@@ -261,6 +261,12 @@ input[type=checkbox] { width: auto; }
       <h2>Instruments (<span id="instrCount">0</span>)</h2>
       <div style="display:flex;gap:8px;align-items:center;">
         <input type="text" id="instrSearch" placeholder="Filtrer..." oninput="filterList('instrumentList',this.value)" style="width:120px;padding:6px 10px;font-size:0.85em;">
+        <select id="instrBulkAction" style="padding:6px;font-size:0.85em;" onchange="instrBulkOp(this.value);this.value='';">
+          <option value="">Actions...</option>
+          <option value="enableAll">Activer tous</option>
+          <option value="disableAll">Desactiver tous</option>
+          <option value="testAll">Tester tous</option>
+        </select>
         <button class="btn btn-secondary" onclick="showCreateInstrumentFromTemplate()">Template</button>
         <button class="btn btn-primary" onclick="showAddInstrument()">+ Ajouter</button>
       </div>
@@ -647,7 +653,10 @@ input[type=checkbox] { width: auto; }
       </div>
       <div class="form-group">
         <label>Note MIDI</label>
-        <select id="instrMidiNote" onchange="onMidiNoteChange()"></select>
+        <div style="display:flex;gap:4px;">
+          <select id="instrMidiNote" onchange="onMidiNoteChange()" style="flex:1;"></select>
+          <button class="btn btn-sm btn-secondary" id="btnMidiLearn" onclick="toggleMidiLearn()" title="Jouer une note MIDI pour l'assigner automatiquement" style="white-space:nowrap;">Learn</button>
+        </div>
       </div>
       <div class="form-group" style="display:flex;align-items:flex-end;">
         <label><input type="checkbox" id="instrEnabled" checked> Actif</label>
@@ -1587,6 +1596,15 @@ function renderActuators() {
       '</div></div>';
     return;
   }
+  // Build reverse lookup: actuator ID → instrument names
+  const actUsedBy = {};
+  instruments.forEach(inst => {
+    (inst.actuatorIds || []).forEach(aid => {
+      if (!actUsedBy[aid]) actUsedBy[aid] = [];
+      actUsedBy[aid].push(inst.name || 'Instrument #' + inst.id);
+    });
+  });
+
   el.innerHTML = actuators.map(a => {
     let details = a.busName + ' pin ' + a.hwPin;
     if (a.type===1 && a.behavior===0) details += ' · Temps: '+a.paramMin+'-'+a.paramMax+'ms';
@@ -1595,6 +1613,8 @@ function renderActuators() {
     if (a.type===2) details += ' · PWM: '+a.paramMin+'%-'+a.paramMax+'%' + (a.hwAddress>0 ? ' Capteur:GPIO'+a.hwAddress : '') + (a.inverted ? ' [INV]' : '');
     if (a.type===1 && a.cooldownUs > 0 && a.behavior===0) details += ' · Cooldown: '+Math.round(a.cooldownUs*0.1)+'ms';
     if (a.type===1 && a.behavior===1) details += ' · Actif max: '+Math.round(a.cooldownUs*0.1)+'ms';
+    const usedBy = actUsedBy[a.id];
+    const usedByHtml = usedBy ? ' · <span style="color:var(--accent);">\u266a ' + usedBy.join(', ') + '</span>' : ' · <span style="color:var(--fg2);opacity:0.6;">non assigne</span>';
     return `
     <div class="list-item" style="border-left-color:${a.active?'var(--success)':'var(--accent2)'}">
       <div class="item-title">
@@ -1610,7 +1630,7 @@ function renderActuators() {
         <button class="btn btn-sm btn-secondary" onclick="duplicateActuator(${a.id})">Dupliquer</button>
         <button class="btn btn-sm btn-danger" onclick="confirmDelete(this, () => deleteActuator(${a.id}))">Suppr</button>
       </div>
-      <div class="item-detail">${details}</div>
+      <div class="item-detail">${details}${usedByHtml}</div>
     </div>`;
   }).join('');
 }
@@ -2003,6 +2023,27 @@ function populateHiHatNoteSelects() {
 async function loadInstruments() {
   const data = await api('instruments');
   if (data) { instruments = data; renderInstruments(); }
+}
+
+async function instrBulkOp(action) {
+  if (!action || instruments.length === 0) return;
+  if (action === 'enableAll' || action === 'disableAll') {
+    const enabled = action === 'enableAll';
+    for (const inst of instruments) {
+      inst.enabled = enabled;
+      await api('instrument?id=' + inst.id, 'PUT', inst);
+    }
+    toast(enabled ? 'Tous actives' : 'Tous desactives', 'success');
+    await loadInstruments();
+  } else if (action === 'testAll') {
+    for (const inst of instruments) {
+      if (inst.enabled) {
+        api('test/instrument', 'POST', {id: inst.id, velocity: 80});
+        await new Promise(r => setTimeout(r, 200));
+      }
+    }
+    toast('Test de tous les instruments termine', 'success');
+  }
 }
 
 function renderInstruments() {
@@ -3333,6 +3374,7 @@ function closeModal(id) {
     editNoteOnActions = [];
     editNoteOffActions = [];
     editCcBindings = [];
+    if (midiLearnActive) { midiLearnActive = false; const btn = document.getElementById('btnMidiLearn'); if (btn) { btn.textContent = 'Learn'; btn.classList.remove('btn-danger'); btn.classList.add('btn-secondary'); } }
   }
 }
 
@@ -4234,6 +4276,23 @@ async function pollActiveNotes() {
 // WebSocket connection for real-time updates
 let ws = null;
 let midiMonitorActive = false;
+let midiLearnActive = false;
+
+function toggleMidiLearn() {
+  midiLearnActive = !midiLearnActive;
+  const btn = document.getElementById('btnMidiLearn');
+  if (midiLearnActive) {
+    btn.textContent = 'Ecoute...';
+    btn.classList.add('btn-danger');
+    btn.classList.remove('btn-secondary');
+    connectWebSocket(); // Ensure WS is connected
+    toast('Jouez une note MIDI pour l\'assigner', 'success');
+  } else {
+    btn.textContent = 'Learn';
+    btn.classList.remove('btn-danger');
+    btn.classList.add('btn-secondary');
+  }
+}
 
 function toggleMidiMonitor() {
   midiMonitorActive = !midiMonitorActive;
@@ -4301,6 +4360,16 @@ function connectWebSocket() {
         }
         // MIDI Monitor log
         logMidiEvent(msg);
+
+        // MIDI Learn: capture first NoteOn
+        if (midiLearnActive && msg.on) {
+          midiLearnActive = false;
+          document.getElementById('instrMidiNote').value = String(msg.note);
+          onMidiNoteChange();
+          const btn = document.getElementById('btnMidiLearn');
+          if (btn) { btn.textContent = 'Learn'; btn.classList.remove('btn-danger'); btn.classList.add('btn-secondary'); }
+          toast('Note MIDI ' + msg.note + ' assignee', 'success');
+        }
       }
     } catch(e) {}
   };

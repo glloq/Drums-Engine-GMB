@@ -701,7 +701,7 @@ input[type=checkbox] { width: auto; }
           <option value="shake">Shaker (servo + solenoide alternés)</option>
           <option value="comb_dual">Brosse double servo (descente + brosse)</option>
           <option value="hihat">Hi-Hat (frappe + pedale + mute)</option>
-          <option value="motor">Moteur rotatif</option>
+          <option value="motor">Moteur (vitesse/chrono/sweep/alternance)</option>
           <option value="custom">Personnalise (editeur complet)</option>
         </select>
       </div>
@@ -1646,8 +1646,44 @@ function onActBehaviorChange() {
       document.getElementById('hintAngleMax').textContent = 'Position maximum';
     }
   } else if (type === 2) {
-    // Motor
+    // Motor behaviors: adapt field labels and visibility
     motor.style.display = 'block';
+    const sensorRow = document.getElementById('actMotorSensorPin').closest('.form-group');
+    const endStop1 = document.getElementById('actMotorEndStop1').closest('.form-group');
+    const endStop2 = document.getElementById('actMotorEndStop2').closest('.form-group');
+    const invertRow = document.getElementById('actMotorInverted').closest('.form-group');
+    // Show all by default, then hide per behavior
+    sensorRow.style.display = '';
+    endStop1.style.display = '';
+    endStop2.style.display = '';
+    invertRow.style.display = '';
+    if (behavior === 6) {
+      // Optical: sensor pin required, end stops optional
+      sensorRow.querySelector('label').textContent = 'Pin capteur optique (GPIO)';
+      sensorRow.querySelector('.hint').textContent = 'Requis: GPIO du capteur pour comptage edges.';
+    } else if (behavior === 10) {
+      // Timed: no sensor, no end stops needed
+      sensorRow.style.display = 'none';
+      endStop1.style.display = 'none';
+      endStop2.style.display = 'none';
+    } else if (behavior === 11) {
+      // Speed: no sensor, no end stops
+      sensorRow.style.display = 'none';
+      endStop1.style.display = 'none';
+      endStop2.style.display = 'none';
+    } else if (behavior === 12) {
+      // Sweep: sensor = direction pin, 1-2 end stops
+      sensorRow.querySelector('label').textContent = 'Pin direction (GPIO)';
+      sensorRow.querySelector('.hint').textContent = '0 = pas de pin direction (1 seul sens). GPIO pour H-bridge DIR.';
+      endStop1.querySelector('.hint').textContent = 'Requis: fin de course aller.';
+      endStop2.querySelector('.hint').textContent = '255 = desactive. Si present: aller-retour.';
+    } else if (behavior === 13) {
+      // Alternate: sensor = direction pin, 2 end stops required
+      sensorRow.querySelector('label').textContent = 'Pin direction (GPIO)';
+      sensorRow.querySelector('.hint').textContent = 'Requis: GPIO pour H-bridge DIR (alterne HIGH/LOW).';
+      endStop1.querySelector('.hint').textContent = 'Requis: fin de course sens A.';
+      endStop2.querySelector('.hint').textContent = 'Requis: fin de course sens B.';
+    }
   }
   updateActuatorHelp();
 }
@@ -3196,8 +3232,10 @@ function describeStep(step) {
     }
     case 2: // PWM
       cls = 'trans';
-      if (step.valueSource === 0) desc = `Rotation <b>${name}</b> <small>(velocite${durInfo})</small>`;
-      else desc = `PWM <b>${name}</b> <small>(fixe=${step.valueFixed ?? 0}${durInfo})</small>`;
+      { const bverb = (act && BEHAVIOR_VERBS[act.behavior]) ? BEHAVIOR_VERBS[act.behavior][0] : 'Moteur';
+        if (step.valueSource === 0) desc = `${bverb} <b>${name}</b> <small>(velocite${durInfo})</small>`;
+        else desc = `${bverb} <b>${name}</b> <small>(fixe=${step.valueFixed ?? 0}${durInfo})</small>`;
+      }
       break;
     case 3: // OFF
       cls = 'cond';

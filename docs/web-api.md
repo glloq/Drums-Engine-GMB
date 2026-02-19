@@ -77,6 +77,7 @@ Base URL: `http://<ip-esp32>/`
 - `GET /api/templates`
 - `GET /api/cc-routes`
 - `POST /api/save`
+- `GET /api/validate` — verification automatique de la configuration (issues, warnings, ok)
 
 ### WiFi
 - `GET /api/wifi` — statut WiFi (mode, ssid, ip, rssi)

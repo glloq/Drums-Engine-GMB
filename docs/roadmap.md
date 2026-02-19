@@ -212,6 +212,8 @@
 - [x] Pourcentage RAM utilise dans info systeme
 - [x] Detection conflits de pin actionneur (bus/adresse/pin)
 - [x] Flash MIDI temps reel sur les cartes instrument (via WebSocket)
+- [x] API validation config `GET /api/validate` (issues, warnings, pipeline/CC stats)
+- [x] Test sequentiel actionneurs en calibration (highlight visuel progressif)
 
 ## Risques / dette technique
 - Couverture tests: script curl fonctionnel mais pas de CI automatise.

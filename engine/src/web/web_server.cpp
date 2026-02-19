@@ -305,6 +305,10 @@ void WebServerManager::_setupRoutes() {
   _server.on("/api/auth-token", HTTP_GET,
     [this](AsyncWebServerRequest* req) { _handleGetAuthToken(req); });
 
+  // --- Validation ---
+  _server.on("/api/validate", HTTP_GET,
+    [this](AsyncWebServerRequest* req) { _handleValidateConfig(req); });
+
   // --- Factory Reset ---
   _server.on("/api/factory-reset", HTTP_POST,
     [this](AsyncWebServerRequest* req) {

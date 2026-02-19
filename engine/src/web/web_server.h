@@ -109,6 +109,7 @@ private:
   void _handleGetMidiChannels(AsyncWebServerRequest* req);
   void _handleSetMidiChannels(AsyncWebServerRequest* req, uint8_t* data, size_t len);
   void _handleFactoryReset(AsyncWebServerRequest* req);
+  void _handleValidateConfig(AsyncWebServerRequest* req);
 
   // LED Strips
   void _handleGetLedStrips(AsyncWebServerRequest* req);

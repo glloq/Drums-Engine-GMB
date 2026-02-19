@@ -714,6 +714,89 @@ void WebServerManager::_handleGetActiveNotes(AsyncWebServerRequest* req) {
   _sendJson(req, 200, doc);
 }
 
+void WebServerManager::_handleValidateConfig(AsyncWebServerRequest* req) {
+  JsonDocument doc;
+  JsonArray issues = doc["issues"].to<JsonArray>();
+  JsonArray warnings = doc["warnings"].to<JsonArray>();
+  JsonArray ok = doc["ok"].to<JsonArray>();
+
+  uint8_t actCfgCount = _actFactory->getConfigCount();
+  uint8_t instrCount = _instrMgr->getInstrumentCount();
+
+  // Check actuators
+  if (actCfgCount == 0) {
+    issues.add("No actuators configured");
+  } else {
+    uint8_t disabledAct = 0;
+    for (uint8_t i = 0; i < actCfgCount; i++) {
+      const ActuatorConfig& cfg = _actFactory->getConfig(i);
+      if (!cfg.enabled) disabledAct++;
+    }
+    if (disabledAct > 0) {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%d actuator(s) disabled", disabledAct);
+      warnings.add(buf);
+    }
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%d actuator(s) configured", actCfgCount);
+    ok.add(buf);
+  }
+
+  // Check instruments
+  if (instrCount == 0) {
+    issues.add("No instruments configured");
+  } else {
+    uint8_t noActions = 0;
+    uint8_t disabledInstr = 0;
+    // Check for duplicate MIDI notes
+    uint8_t noteCh[128][16] = {};
+    for (uint8_t i = 0; i < instrCount; i++) {
+      const InstrumentConfig* instr = _instrMgr->getInstrument(i);
+      if (!instr) continue;
+      if (!instr->enabled) disabledInstr++;
+      if (instr->noteOnActionCount == 0) noActions++;
+      uint8_t ch = instr->midiChannel < 16 ? instr->midiChannel : 0;
+      if (instr->midiNote < 128) noteCh[instr->midiNote][ch]++;
+    }
+    if (noActions > 0) {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%d instrument(s) without NoteOn actions", noActions);
+      warnings.add(buf);
+    }
+    if (disabledInstr > 0) {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%d instrument(s) disabled", disabledInstr);
+      warnings.add(buf);
+    }
+    for (uint8_t n = 0; n < 128; n++) {
+      for (uint8_t c = 0; c < 16; c++) {
+        if (noteCh[n][c] > 1) {
+          char buf[80];
+          snprintf(buf, sizeof(buf), "Duplicate MIDI note %d on channel %d (%d instruments)", n, c + 1, noteCh[n][c]);
+          warnings.add(buf);
+        }
+      }
+    }
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%d instrument(s) configured", instrCount);
+    ok.add(buf);
+  }
+
+  // Memory check
+  uint32_t freeHeap = ESP.getFreeHeap();
+  if (freeHeap < 20000) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "Low memory: %d KB free", freeHeap / 1024);
+    issues.add(buf);
+  }
+
+  // Pipeline check
+  doc["pipeline_count"] = _eventProc->getLookup().pipeline_count;
+  doc["cc_route_count"] = _eventProc->getLookup().cc_route_count;
+
+  _sendJson(req, 200, doc);
+}
+
 void WebServerManager::_handleFactoryReset(AsyncWebServerRequest* req) {
   // Delete all configuration files
   const char* files[] = {

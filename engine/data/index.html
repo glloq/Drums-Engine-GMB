@@ -445,8 +445,9 @@ input[type=checkbox] { width: auto; }
           <button class="btn btn-secondary btn-sm" onclick="midiPanic()" title="Envoie NoteOff sur toutes les notes">MIDI Panic</button>
         </div>
       </h3>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
         <p class="hint" style="margin:0;">Testez chaque actionneur individuellement.</p>
+        <button class="btn btn-sm btn-success" onclick="testAllSequential()" title="Teste chaque actionneur un par un">Test Sequence</button>
         <input type="text" placeholder="Filtrer..." oninput="filterList('calibActuatorList',this.value)" style="width:120px;padding:5px 8px;font-size:0.85em;">
       </div>
       <div id="calibActuatorList"></div>
@@ -3808,10 +3809,17 @@ function confirmFactoryReset() {
   });
 }
 
-function runDiagnostics() {
+async function runDiagnostics() {
   const issues = [];
   const warns = [];
   const ok = [];
+
+  // Server-side validation
+  const serverDiag = await api('validate', 'GET', null, true);
+  if (serverDiag) {
+    if (serverDiag.pipeline_count !== undefined)
+      ok.push(serverDiag.pipeline_count + ' pipeline(s) compile(s), ' + (serverDiag.cc_route_count || 0) + ' route(s) CC');
+  }
 
   // Check actuators
   if (actuators.length === 0) {
@@ -5219,6 +5227,22 @@ async function updateCalibStatus() {
     const countEl = document.getElementById('calibActiveCount');
     if (countEl) countEl.textContent = activeCount;
   } catch(e) {}
+}
+
+async function testAllSequential() {
+  const enabled = actuators.filter(a => a.enabled);
+  if (enabled.length === 0) { toast('Aucun actionneur actif', 'warn'); return; }
+  toast('Test sequentiel: ' + enabled.length + ' actionneurs...', 'success');
+  for (let i = 0; i < enabled.length; i++) {
+    const a = enabled[i];
+    // Highlight current item
+    const card = document.querySelector('.calib-item[data-actid="' + a.id + '"]');
+    if (card) card.style.boxShadow = '0 0 8px var(--success)';
+    await api('test/actuator', 'POST', {id: a.id, value: 80});
+    await new Promise(r => setTimeout(r, 400));
+    if (card) card.style.boxShadow = '';
+  }
+  toast('Test sequentiel termine', 'success');
 }
 
 async function emergencyStopAll() {

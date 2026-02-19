@@ -274,6 +274,7 @@ input[type=checkbox] { width: auto; }
       <h2>Actionneurs (<span id="actCount">0</span>)</h2>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <input type="text" id="actSearch" placeholder="Filtrer..." oninput="filterList('actuatorList',this.value)" style="width:120px;padding:6px 10px;font-size:0.85em;">
+        <button id="btnHideUsed" class="btn btn-sm btn-secondary" onclick="toggleHideUsedActuators()" title="Masquer les actionneurs deja assignes">Cacher utilises</button>
         <select id="actSort" style="padding:6px;font-size:0.85em;" onchange="sortActuators(this.value)">
           <option value="">Trier...</option>
           <option value="name">Nom</option>
@@ -462,6 +463,48 @@ input[type=checkbox] { width: auto; }
         <input type="text" placeholder="Filtrer..." oninput="filterList('calibInstrumentList',this.value)" style="width:120px;padding:5px 8px;font-size:0.85em;">
       </div>
       <div id="calibInstrumentList"></div>
+    </div>
+
+    <!-- Microphone Latency Measurement (only visible if INMP441 detected) -->
+    <div class="card" style="margin-top:16px;display:none;" id="calibMicSection">
+      <h3 style="display:flex;justify-content:space-between;align-items:center;">
+        <span>Mesure de Latence (Micro INMP441)</span>
+        <span class="badge badge-green" id="micStatusBadge">Connecte</span>
+      </h3>
+      <p class="hint" style="margin-bottom:12px;">Mesure le delai reel entre l'envoi de la commande et la detection du son par le micro. Placez le micro pres de l'instrument a tester.</p>
+
+      <div class="form-row" style="margin-bottom:12px;">
+        <div class="form-group">
+          <label>Actionneur a tester</label>
+          <select id="micLatencyActuator"></select>
+        </div>
+        <div class="form-group">
+          <label>Seuil de detection</label>
+          <input type="range" id="micThreshold" min="100" max="5000" value="500" oninput="document.getElementById('micThresholdVal').textContent=this.value">
+          <div style="display:flex;justify-content:space-between;font-size:0.78em;color:var(--fg2);">
+            <span>Sensible</span><span id="micThresholdVal">500</span><span>Fort</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Force du test</label>
+          <input type="range" id="micTestValue" min="20" max="127" value="100" oninput="document.getElementById('micTestValueDisp').textContent=this.value">
+          <span class="calib-val" id="micTestValueDisp">100</span>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;">
+        <button class="btn btn-primary" onclick="measureLatencySingle()">Mesurer 1x</button>
+        <button class="btn btn-success" onclick="measureLatencyBurst()" id="btnLatencyBurst">Mesurer 5x (moyenne)</button>
+        <button class="btn btn-secondary" onclick="measureLatencyAll()">Tester tous les actionneurs</button>
+        <div id="micLevelBar" style="flex:1;height:8px;background:var(--bg);border-radius:4px;overflow:hidden;">
+          <div id="micLevelFill" style="height:100%;width:0%;background:var(--success);transition:width 0.1s;"></div>
+        </div>
+      </div>
+
+      <div id="latencyResults" style="display:none;">
+        <h4 style="margin-bottom:8px;">Resultats</h4>
+        <div id="latencyResultsList" style="font-family:monospace;font-size:0.85em;"></div>
+      </div>
     </div>
   </div>
 
@@ -1803,9 +1846,18 @@ function renderActuators() {
     });
   });
 
+  // Filter used actuators if toggle is active
+  const usedIds = new Set(Object.keys(actUsedBy).map(Number));
+  const displayList = _hideUsedActuators ? actuators.filter(a => !usedIds.has(a.id)) : actuators;
+
+  if (_hideUsedActuators && displayList.length === 0) {
+    el.innerHTML = '<div class="empty-state"><p>Tous les actionneurs sont assignes a un instrument.</p></div>';
+    return;
+  }
+
   const typeIcons = ['S','M','P','O']; // Servo, Magnet(solenoid), PWM, Optical
   const typeColors = ['#4fc3f7','#ff7043','#66bb6a','#ffca28'];
-  el.innerHTML = actuators.map(a => {
+  el.innerHTML = displayList.map(a => {
     let details = a.busName + ' pin ' + a.hwPin;
     if (a.type===1 && a.behavior===0) details += ' · Temps: '+a.paramMin+'-'+a.paramMax+'ms';
     if (a.type===1 && a.behavior===1) details += ' · PWM: act='+a.paramMin+' hold='+a.paramMax+' tMax='+a.paramDefault+'ms';
@@ -2086,6 +2138,22 @@ function sortActuators(key) {
     type: (a,b) => (a.type||0) - (b.type||0)
   };
   if (cmp[key]) { actuators.sort(cmp[key]); renderActuators(); }
+}
+
+let _hideUsedActuators = false;
+function toggleHideUsedActuators() {
+  _hideUsedActuators = !_hideUsedActuators;
+  const btn = document.getElementById('btnHideUsed');
+  if (_hideUsedActuators) {
+    btn.classList.remove('btn-secondary');
+    btn.classList.add('btn-primary');
+    btn.textContent = 'Voir tous';
+  } else {
+    btn.classList.remove('btn-primary');
+    btn.classList.add('btn-secondary');
+    btn.textContent = 'Cacher utilises';
+  }
+  renderActuators();
 }
 
 const quickActuatorKits = {
@@ -4325,7 +4393,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     if (tab.dataset.tab === 'mappings') refreshMappings();
     if (tab.dataset.tab === 'leds') loadLedData();
     if (tab.dataset.tab === 'piano') renderPianoPads();
-    if (tab.dataset.tab === 'calibration') { loadCalibrationData(); startCalibPolling(); } else { stopCalibPolling(); }
+    if (tab.dataset.tab === 'calibration') { loadCalibrationData(); startCalibPolling(); } else { stopCalibPolling(); stopMicLevelPolling(); }
     // Stop piano live polling when leaving piano tab
     if (tab.dataset.tab !== 'piano' && pianoLiveActive) {
       document.getElementById('pianoLiveToggle').checked = false;
@@ -5431,8 +5499,29 @@ async function loadCalibrationData() {
   const instrData = await api('instruments');
   if (!actData || !instrData) return;
 
-  const acts = actData.actuators || [];
-  const instrs = instrData.instruments || [];
+  // API returns arrays directly, not wrapped objects
+  const acts = Array.isArray(actData) ? actData : (actData.actuators || []);
+  const instrs = Array.isArray(instrData) ? instrData : (instrData.instruments || []);
+
+  // Check if INMP441 mic is connected and show/hide latency section
+  try {
+    const micData = await api('mic/status');
+    if (micData && micData.connected) {
+      document.getElementById('calibMicSection').style.display = '';
+      // Populate actuator dropdown for latency measurement
+      const sel = document.getElementById('micLatencyActuator');
+      sel.innerHTML = acts.filter(a => a.enabled).map(a => {
+        const tNames = ['Servo','Sol.','Motor','Motor'];
+        return '<option value="' + a.id + '">#' + a.id + ' ' + (a.name||'Sans nom') + ' (' + (tNames[a.type]||'?') + ')</option>';
+      }).join('');
+      startMicLevelPolling();
+    } else {
+      document.getElementById('calibMicSection').style.display = 'none';
+      stopMicLevelPolling();
+    }
+  } catch(e) {
+    document.getElementById('calibMicSection').style.display = 'none';
+  }
 
   document.getElementById('calibActCount').textContent = acts.length;
 
@@ -5638,6 +5727,139 @@ async function midiPanic() {
     api('test/actuator', 'POST', {id: a.id, value: 0});
   }
   toast('MIDI Panic - Notes et actionneurs arretes', 'warn');
+}
+
+// ============================================================================
+// Microphone Latency Measurement
+// ============================================================================
+
+let micPollTimer = null;
+
+function startMicLevelPolling() {
+  stopMicLevelPolling();
+  micPollTimer = setInterval(async () => {
+    try {
+      const d = await api('mic/status');
+      if (d && d.connected) {
+        const pct = Math.min(100, d.level);
+        document.getElementById('micLevelFill').style.width = pct + '%';
+        document.getElementById('micLevelFill').style.background =
+          pct > 70 ? 'var(--danger)' : pct > 40 ? 'var(--warning)' : 'var(--success)';
+      }
+    } catch(e) {}
+  }, 200);
+}
+
+function stopMicLevelPolling() {
+  if (micPollTimer) { clearInterval(micPollTimer); micPollTimer = null; }
+}
+
+function _getMicParams() {
+  const actuatorId = parseInt(document.getElementById('micLatencyActuator').value);
+  const threshold = parseInt(document.getElementById('micThreshold').value) || 500;
+  const value = parseInt(document.getElementById('micTestValue').value) || 100;
+  return { actuatorId, threshold, value, timeoutMs: 500 };
+}
+
+function _appendLatencyResult(text, cls) {
+  const container = document.getElementById('latencyResults');
+  const list = document.getElementById('latencyResultsList');
+  container.style.display = '';
+  const div = document.createElement('div');
+  div.style.padding = '4px 0';
+  div.style.borderBottom = '1px solid var(--bg)';
+  if (cls === 'error') div.style.color = 'var(--danger)';
+  else if (cls === 'success') div.style.color = 'var(--success)';
+  div.textContent = text;
+  list.prepend(div);
+}
+
+async function measureLatencySingle() {
+  const params = _getMicParams();
+  if (isNaN(params.actuatorId)) { toast('Selectionnez un actionneur', 'warn'); return; }
+  toast('Mesure en cours...', 'success');
+  try {
+    const r = await api('mic/measure-latency', 'POST', params);
+    if (!r) { _appendLatencyResult('Erreur: pas de reponse', 'error'); return; }
+    if (r.detected) {
+      _appendLatencyResult(
+        'Act #' + r.actuatorId + ' → ' + r.latencyMs.toFixed(2) + ' ms (' + r.latencyUs + ' µs) | peak=' + r.triggerPeak,
+        'success'
+      );
+      toast('Latence: ' + r.latencyMs.toFixed(2) + ' ms', 'success');
+    } else {
+      _appendLatencyResult('Act #' + r.actuatorId + ' → Aucun son detecte (seuil=' + r.threshold + ')', 'error');
+      toast('Aucun son detecte — ajustez le seuil ou la force', 'warn');
+    }
+  } catch(e) {
+    _appendLatencyResult('Erreur: ' + e.message, 'error');
+  }
+}
+
+async function measureLatencyBurst() {
+  const params = _getMicParams();
+  if (isNaN(params.actuatorId)) { toast('Selectionnez un actionneur', 'warn'); return; }
+  const btn = document.getElementById('btnLatencyBurst');
+  btn.disabled = true;
+  btn.textContent = 'Mesure...';
+  const results = [];
+  const count = 5;
+  for (let i = 0; i < count; i++) {
+    btn.textContent = 'Mesure ' + (i + 1) + '/' + count;
+    try {
+      const r = await api('mic/measure-latency', 'POST', params);
+      if (r && r.detected) {
+        results.push(r.latencyMs);
+      }
+    } catch(e) {}
+    if (i < count - 1) await new Promise(r => setTimeout(r, 600)); // pause between hits
+  }
+  btn.disabled = false;
+  btn.textContent = 'Mesurer 5x (moyenne)';
+
+  if (results.length === 0) {
+    _appendLatencyResult('Burst Act #' + params.actuatorId + ' → 0/' + count + ' detectes', 'error');
+    toast('Aucun son detecte sur ' + count + ' essais', 'warn');
+    return;
+  }
+  const avg = results.reduce((a, b) => a + b, 0) / results.length;
+  const min = Math.min(...results);
+  const max = Math.max(...results);
+  _appendLatencyResult(
+    'Burst Act #' + params.actuatorId + ' → moy=' + avg.toFixed(2) + ' ms | min=' + min.toFixed(2) + ' | max=' + max.toFixed(2) + ' (' + results.length + '/' + count + ' ok)',
+    'success'
+  );
+  toast('Latence moyenne: ' + avg.toFixed(2) + ' ms (' + results.length + '/' + count + ')', 'success');
+}
+
+async function measureLatencyAll() {
+  const sel = document.getElementById('micLatencyActuator');
+  const opts = Array.from(sel.options);
+  if (opts.length === 0) { toast('Aucun actionneur disponible', 'warn'); return; }
+  const threshold = parseInt(document.getElementById('micThreshold').value) || 500;
+  const value = parseInt(document.getElementById('micTestValue').value) || 100;
+  toast('Test de tous les actionneurs (' + opts.length + ')...', 'success');
+  _appendLatencyResult('--- Test complet (' + opts.length + ' actionneurs) ---', '');
+
+  for (let i = 0; i < opts.length; i++) {
+    const actId = parseInt(opts[i].value);
+    const actLabel = opts[i].textContent;
+    sel.value = actId; // highlight current in dropdown
+    try {
+      const r = await api('mic/measure-latency', 'POST', {
+        actuatorId: actId, value, threshold, timeoutMs: 500
+      });
+      if (r && r.detected) {
+        _appendLatencyResult(actLabel + ' → ' + r.latencyMs.toFixed(2) + ' ms | peak=' + r.triggerPeak, 'success');
+      } else {
+        _appendLatencyResult(actLabel + ' → Pas de son detecte', 'error');
+      }
+    } catch(e) {
+      _appendLatencyResult(actLabel + ' → Erreur: ' + e.message, 'error');
+    }
+    if (i < opts.length - 1) await new Promise(r => setTimeout(r, 800));
+  }
+  toast('Test complet termine', 'success');
 }
 
 // Theme toggle

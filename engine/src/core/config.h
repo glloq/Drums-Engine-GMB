@@ -68,6 +68,16 @@
 #define MAX_CONCURRENT_ACTIVE    8         // Max simultaneously active actuators
 #define WATCHDOG_CHECK_US        100000    // Check watchdog every 100ms
 
+// --- Microphone (INMP441 via I2S) ---
+#define MIC_I2S_NUM          I2S_NUM_0    // I2S peripheral number
+#define MIC_I2S_SCK          26           // Serial Clock (BCLK)
+#define MIC_I2S_WS           25           // Word Select (LRCLK)
+#define MIC_I2S_SD           33           // Serial Data (DOUT)
+#define MIC_SAMPLE_RATE      44100
+#define MIC_DMA_BUF_COUNT    4
+#define MIC_DMA_BUF_LEN      256
+#define MIC_DEFAULT_THRESHOLD 500         // Default trigger threshold (amplitude)
+
 // --- LED Strips (WS2812B via RMT) ---
 #define LED_MAX_STRIPS       4          // Max physical LED strips (1 RMT channel each)
 #define LED_MAX_SEGMENTS     16         // Max LED segments (assigned to instruments)

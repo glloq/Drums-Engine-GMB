@@ -529,6 +529,20 @@ void WebServerManager::_setupRoutes() {
       }
     });
 
+  // --- Microphone / Latency Measurement ---
+  _server.on("/api/mic/status", HTTP_GET,
+    [this](AsyncWebServerRequest* req) { _handleGetMicStatus(req); });
+
+  _server.on("/api/mic/measure-latency", HTTP_POST,
+    [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) {
+        if (!_auth.checkAuth(req)) return;
+        _handleMeasureLatency(req, data, len);
+      }
+    });
+
   _server.onNotFound([](AsyncWebServerRequest* req) {
     req->send(404, "application/json", "{\"error\":\"Not found\"}");
   });

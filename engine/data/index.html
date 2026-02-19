@@ -1048,14 +1048,14 @@ input[type=checkbox] { width: auto; }
       </div>
       <div class="form-group">
         <label>Nombre pixels</label>
-        <input type="number" id="ledSegCount" min="1" max="256" value="8">
+        <input type="number" id="ledSegCount" min="1" max="256" value="8" oninput="updateLedSegPreview()">
       </div>
     </div>
     <h4 style="margin:12px 0 8px;font-size:0.9em;color:var(--accent);">Hit (declenchement)</h4>
     <div class="form-row">
       <div class="form-group">
         <label>Couleur hit</label>
-        <input type="color" id="ledSegHitColor" value="#ffffff">
+        <input type="color" id="ledSegHitColor" value="#ffffff" oninput="updateLedSegPreview()">
       </div>
       <div class="form-group">
         <label>Animation</label>
@@ -1077,7 +1077,7 @@ input[type=checkbox] { width: auto; }
     <div class="form-row">
       <div class="form-group">
         <label>Couleur idle</label>
-        <input type="color" id="ledSegIdleColor" value="#141428">
+        <input type="color" id="ledSegIdleColor" value="#141428" oninput="updateLedSegPreview()">
       </div>
       <div class="form-group">
         <label>Animation</label>
@@ -1090,8 +1090,13 @@ input[type=checkbox] { width: auto; }
       </div>
       <div class="form-group">
         <label>Luminosite idle</label>
-        <input type="range" id="ledSegIdleBri" min="0" max="255" value="30">
+        <input type="range" id="ledSegIdleBri" min="0" max="255" value="30" oninput="updateLedSegPreview()">
       </div>
+    </div>
+    <!-- Color preview -->
+    <div style="margin:12px 0;">
+      <label style="font-size:0.85em;color:var(--fg2);display:block;margin-bottom:4px;">Apercu</label>
+      <div id="ledSegPreview" style="display:flex;gap:2px;height:20px;border-radius:4px;overflow:hidden;"></div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal('modalLedSegment')">Annuler</button>
@@ -3361,6 +3366,27 @@ function showAddSegment() {
   instSel.innerHTML = '<option value="255">Aucun</option>';
   instruments.forEach(i => { instSel.innerHTML += `<option value="${i.id}">${i.name} (note ${i.midiNote})</option>`; });
   showModal('modalLedSegment');
+  updateLedSegPreview();
+}
+
+function updateLedSegPreview() {
+  const preview = document.getElementById('ledSegPreview');
+  if (!preview) return;
+  const count = parseInt(document.getElementById('ledSegCount').value) || 8;
+  const hitColor = document.getElementById('ledSegHitColor').value;
+  const idleColor = document.getElementById('ledSegIdleColor').value;
+  const idleBri = parseInt(document.getElementById('ledSegIdleBri').value) || 30;
+  const idleOpacity = (idleBri / 255).toFixed(2);
+  const displayCount = Math.min(count, 32);
+  let html = '';
+  // Show first half as idle, second half as hit (simulating a note trigger)
+  for (let i = 0; i < displayCount; i++) {
+    const isHit = i >= displayCount / 2;
+    const color = isHit ? hitColor : idleColor;
+    const opacity = isHit ? '1' : idleOpacity;
+    html += `<div style="flex:1;background:${color};opacity:${opacity};min-width:4px;"></div>`;
+  }
+  preview.innerHTML = html;
 }
 
 function editLedSegment(id) {
@@ -3381,6 +3407,7 @@ function editLedSegment(id) {
   if (seg.idleColor) document.getElementById('ledSegIdleColor').value = rgbToHex(seg.idleColor);
   document.getElementById('ledSegIdleAnim').value = seg.idleAnimation;
   document.getElementById('ledSegIdleBri').value = seg.idleBrightness;
+  updateLedSegPreview();
 }
 
 function rgbToHex(c) {

@@ -278,6 +278,12 @@ input[type=checkbox] { width: auto; }
       <h2>Instruments (<span id="instrCount">0</span>)</h2>
       <div style="display:flex;gap:8px;align-items:center;">
         <input type="text" id="instrSearch" placeholder="Filtrer..." oninput="filterList('instrumentList',this.value)" style="width:120px;padding:6px 10px;font-size:0.85em;">
+        <select id="instrSort" style="padding:6px;font-size:0.85em;" onchange="sortInstruments(this.value)">
+          <option value="">Tri...</option>
+          <option value="name">Nom</option>
+          <option value="note">Note MIDI</option>
+          <option value="category">Categorie</option>
+        </select>
         <select id="instrBulkAction" style="padding:6px;font-size:0.85em;" onchange="instrBulkOp(this.value);this.value='';">
           <option value="">Actions...</option>
           <option value="enableAll">Activer tous</option>
@@ -414,7 +420,10 @@ input[type=checkbox] { width: auto; }
     <div class="card">
       <h3 style="display:flex;justify-content:space-between;align-items:center;">
         <span>Calibration Actionneurs <span class="badge" id="calibActCount">0</span> <span class="badge badge-green" id="calibActiveCount" style="font-size:0.75em;">0</span> actifs</span>
-        <button class="btn btn-danger btn-sm" onclick="emergencyStopAll()" style="font-weight:700;">STOP ALL</button>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-danger btn-sm" onclick="emergencyStopAll()" style="font-weight:700;">STOP ALL</button>
+          <button class="btn btn-secondary btn-sm" onclick="midiPanic()" title="Envoie NoteOff sur toutes les notes">MIDI Panic</button>
+        </div>
       </h3>
       <p class="hint" style="margin-bottom:12px;">Testez chaque actionneur individuellement. Ajustez la valeur et la duree puis cliquez sur Tester.</p>
       <div id="calibActuatorList"></div>
@@ -2140,6 +2149,16 @@ async function instrBulkOp(action) {
   }
 }
 
+function sortInstruments(key) {
+  if (!key) return;
+  const cmp = {
+    name: (a,b) => (a.name||'').localeCompare(b.name||''),
+    note: (a,b) => (a.midiNote||0) - (b.midiNote||0),
+    category: (a,b) => (a.category||'other').localeCompare(b.category||'other')
+  };
+  if (cmp[key]) { instruments.sort(cmp[key]); renderInstruments(); }
+}
+
 function renderInstruments() {
   const el = document.getElementById('instrumentList');
   document.getElementById('instrCount').textContent = instruments.length;
@@ -3511,14 +3530,17 @@ async function clearSystemLogs() {
 }
 
 async function exportConfig() {
-  const actData = await api('actuators');
-  const instrData = await api('instruments');
+  const [actData, instrData, loopsData, midiData] = await Promise.all([
+    api('actuators'), api('instruments'), api('loops'), api('midi/channels')
+  ]);
   if (!actData || !instrData) { toast('Erreur lors de l\'export', 'error'); return; }
   const config = {
-    version: 2,
+    version: 3,
     exportDate: new Date().toISOString(),
     actuators: actData.actuators || actData,
-    instruments: instrData.instruments || instrData
+    instruments: instrData.instruments || instrData,
+    loops: (loopsData && loopsData.loops) ? loopsData.loops : [],
+    midiChannelMask: midiData ? midiData.channelMask : 0xFFFF
   };
   const blob = new Blob([JSON.stringify(config, null, 2)], {type: 'application/json'});
   const url = URL.createObjectURL(blob);
@@ -3527,7 +3549,7 @@ async function exportConfig() {
   a.download = 'drums-engine-config-' + new Date().toISOString().slice(0,10) + '.json';
   a.click();
   URL.revokeObjectURL(url);
-  toast('Configuration exportee', 'success');
+  toast('Configuration exportee (' + config.actuators.length + ' act, ' + config.instruments.length + ' instr, ' + config.loops.length + ' loops)', 'success');
 }
 
 async function importConfig(file) {
@@ -3571,16 +3593,32 @@ async function importConfig(file) {
       if (result !== null && result !== undefined) instrOk++; else instrErr++;
     }
 
+    // Import loops (v3+)
+    let loopsOk = 0;
+    if (config.loops && config.loops.length > 0) {
+      for (const loop of config.loops) {
+        const r = await api('loops', 'POST', loop);
+        if (r) loopsOk++;
+      }
+    }
+
+    // Import MIDI channel mask (v3+)
+    if (config.midiChannelMask !== undefined) {
+      await api('midi/channels', 'PUT', {channelMask: config.midiChannelMask});
+    }
+
     // Save and reload
     await api('save', 'POST');
     await Promise.all([loadActuators(), loadInstruments()]);
 
     const errTotal = actErr + instrErr;
+    let summary = actOk + ' actionneurs, ' + instrOk + ' instruments';
+    if (loopsOk > 0) summary += ', ' + loopsOk + ' boucles';
     if (errTotal === 0) {
-      status.innerHTML = '<span style="color:var(--success);">Import reussi: ' + actOk + ' actionneurs, ' + instrOk + ' instruments</span>';
+      status.innerHTML = '<span style="color:var(--success);">Import reussi: ' + summary + '</span>';
       toast('Configuration importee avec succes', 'success');
     } else {
-      status.innerHTML = '<span style="color:var(--warn);">Import partiel: ' + actOk + '/' + actCount + ' act., ' + instrOk + '/' + instrCount + ' instr. (' + errTotal + ' erreurs)</span>';
+      status.innerHTML = '<span style="color:var(--warn);">Import partiel: ' + summary + ' (' + errTotal + ' erreurs)</span>';
       toast('Import partiel - verifiez les erreurs', 'warn');
     }
   } catch (e) {
@@ -4774,6 +4812,24 @@ async function emergencyStopAll() {
     api('test/actuator', 'POST', {id: a.id, value: 0});
   }
   toast('STOP ALL - Tous les actionneurs arretes', 'warn');
+}
+
+async function midiPanic() {
+  // Send NoteOff for all configured instrument notes
+  const notes = new Set();
+  instruments.forEach(inst => { if (inst.midiNote !== undefined) notes.add(inst.midiNote); });
+  // Also include common GM percussion range
+  for (let n = 27; n <= 81; n++) notes.add(n);
+  const arr = [...notes];
+  for (let i = 0; i < arr.length; i += 8) {
+    const batch = arr.slice(i, i + 8);
+    await Promise.all(batch.map(n => api('test/note', 'POST', {note: n, velocity: 0, channel: 10, noteOff: true})));
+  }
+  // Also stop all actuators
+  for (const a of actuators) {
+    api('test/actuator', 'POST', {id: a.id, value: 0});
+  }
+  toast('MIDI Panic - Notes et actionneurs arretes', 'warn');
 }
 
 window.addEventListener('load', init);

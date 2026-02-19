@@ -166,6 +166,19 @@
 - [x] API legere `/api/actuators/status` pour polling rapide (id + active seulement)
 - [x] Instruments: slider velocity inline + test direct depuis la liste
 - [x] Categorie couleur instruments: drums (rouge), cymbals (or), latin (vert), other (bleu)
+- [x] Loop editor: Tap Tempo (moyenne des 8 derniers taps, timeout 3s)
+- [x] Loop editor: presets rythmiques (Rock, Rock+Ride, Funk, Bossa Nova, HiHat)
+- [x] Loop editor: quantification triolets (1/8T, 1/16T)
+- [x] Loop list: bouton Dupliquer (clone boucle + events)
+- [x] Factory reset: `POST /api/factory-reset` (supprime config, redemarre)
+- [x] Factory reset: bouton dans Reglages avec double confirmation
+- [x] Export/Import config v3: inclut boucles + masque canaux MIDI
+- [x] Instruments: tri par nom, note MIDI, categorie
+- [x] Actionneurs: actions groupees (activer/desactiver/stop tous)
+- [x] Piano virtuel: overlay aide raccourcis clavier
+- [x] WiFi: indicateur qualite signal colore + affichage mDNS
+- [x] MIDI Panic: arret complet notes + actionneurs (calibration)
+- [x] Systeme: affichage version SDK dans la grille info
 
 ## Risques / dette technique
 - Couverture tests: script curl fonctionnel mais pas de CI automatise.

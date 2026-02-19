@@ -92,6 +92,9 @@ Base URL: `http://<ip-esp32>/`
 - `GET /api/logs` — logs recents (ring buffer) + optionnel `?full=1` pour le fichier complet
 - `DELETE /api/logs` — vider les logs
 
+### Maintenance
+- `POST /api/factory-reset` — supprime toute la config et redemarre l'ESP32 (auth requise)
+
 ## Payloads utiles
 
 ### `POST /api/instruments/from-template`

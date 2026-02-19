@@ -1448,6 +1448,13 @@ async function init() {
       if (e.target === overlay) overlay.classList.remove('show');
     });
   });
+
+  // Restore last active tab from sessionStorage
+  const lastTab = sessionStorage.getItem('lastTab');
+  if (lastTab) {
+    const tab = document.querySelector('.tab[data-tab="' + lastTab + '"]');
+    if (tab) tab.click();
+  }
 }
 
 async function loadMidiNotes() {
@@ -1797,6 +1804,7 @@ function showAddActuator() {
   document.getElementById('actEnabled').checked = true;
   onActTypeChange();
   showModal('modalActuator');
+  setTimeout(() => document.getElementById('actName').focus(), 100);
 }
 
 function editActuator(id) {
@@ -1949,9 +1957,15 @@ async function saveActuator() {
   // Fix #19: Verify API response before closing modal
   if (result === null || result === undefined) return;
   closeModal('modalActuator');
+  const newId = (editId === '' && result && result.id) ? result.id : null;
   await loadActuators();
   markConfigDirty();
   toast('Actionneur enregistre', 'success');
+  // Auto-scroll to newly created item
+  if (newId !== null) {
+    const el = document.querySelector('.list-item[onclick*="editActuator(' + newId + ')"]');
+    if (el) el.scrollIntoView({behavior: 'smooth', block: 'center'});
+  }
 }
 
 async function deleteActuator(id) {
@@ -2557,6 +2571,7 @@ function showAddInstrument(template=null) {
   onInstrTypeChange();
   if (!template) onMidiNoteChange();
   showModal('modalInstrument');
+  setTimeout(() => document.getElementById('instrName').focus(), 100);
 }
 
 function _detectInstrumentType(inst) {
@@ -2855,9 +2870,15 @@ async function saveInstrument() {
   // Fix #19: Verify API response before closing modal
   if (result === null || result === undefined) return;
   closeModal('modalInstrument');
+  const newInstrId = (editId === '' && result && result.id) ? result.id : null;
   await loadInstruments();
   markConfigDirty();
   toast('Instrument enregistre', 'success');
+  // Auto-scroll to newly created item
+  if (newInstrId !== null) {
+    const el = document.querySelector('.list-item[ondblclick*="editInstrument(' + newInstrId + ')"]');
+    if (el) el.scrollIntoView({behavior: 'smooth', block: 'center'});
+  }
 }
 
 async function saveHiHatInstruments(baseName, retrigger, enabled, editId) {
@@ -4085,6 +4106,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
     tab.classList.add('active');
     document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+    sessionStorage.setItem('lastTab', tab.dataset.tab);
     if (tab.dataset.tab === 'mappings') refreshMappings();
     if (tab.dataset.tab === 'leds') loadLedData();
     if (tab.dataset.tab === 'piano') renderPianoPads();

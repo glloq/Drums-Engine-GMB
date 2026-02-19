@@ -4484,6 +4484,15 @@ async function loadCalibrationData() {
         hint = 'PWM: ' + a.paramMin + '%-' + a.paramMax + '%' + (a.inverted ? ' [INV]' : '');
       }
       const border = a.active ? 'var(--success)' : 'var(--accent2)';
+      // Type-specific quick buttons
+      let quickBtns = '';
+      if (a.type === 0) { // Servo: min/center/max quick positions
+        quickBtns = '<div style="display:flex;gap:4px;margin-top:6px;">' +
+          '<button class="btn btn-sm btn-secondary" onclick="calibQuickVal(' + a.id + ',0)">Min (0)</button>' +
+          '<button class="btn btn-sm btn-secondary" onclick="calibQuickVal(' + a.id + ',64)">Centre (64)</button>' +
+          '<button class="btn btn-sm btn-secondary" onclick="calibQuickVal(' + a.id + ',127)">Max (127)</button>' +
+          '</div>';
+      }
       return '<div class="calib-item" style="border-left-color:' + border + ';">' +
         '<h4><span>#' + a.id + ' ' + (a.name||'Sans nom') + '</span>' +
         '<span class="badge">' + typeName + ' / ' + behavName + '</span>' +
@@ -4496,6 +4505,7 @@ async function loadCalibrationData() {
           '<button class="btn btn-primary btn-sm" onclick="calibTestActuator(' + a.id + ')">Tester</button>' +
           '<button class="btn btn-danger btn-sm" onclick="calibStopActuator(' + a.id + ')">Stop</button>' +
         '</div>' +
+        quickBtns +
         (hint ? '<div style="margin-top:6px;font-size:0.78em;color:var(--fg2);">' + hint + '</div>' : '') +
       '</div>';
     }).join('');
@@ -4539,6 +4549,12 @@ async function calibTestActuator(id) {
 
 async function calibStopActuator(id) {
   await api('test/actuator', 'POST', {id, value:0});
+}
+
+function calibQuickVal(id, val) {
+  document.getElementById('calibVal' + id).value = val;
+  document.getElementById('calibDisp' + id).textContent = val;
+  api('test/actuator', 'POST', {id, value: val});
 }
 
 async function calibTestInstrument(id) {

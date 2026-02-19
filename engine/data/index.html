@@ -119,7 +119,8 @@ input[type=checkbox] { width: auto; }
 .transport .bpm-display { font-size: 1.4em; font-weight: bold; min-width: 70px; text-align: center; }
 .loop-toolbar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 4px; padding-bottom: 4px; border-bottom: 1px solid #333; }
 .loop-vel-label { font-size: 0.75em; color: var(--fg2); min-width: 32px; text-align: center; }
-.loop-playhead { border-left: 2px solid var(--success); }
+.loop-cell.loop-playhead { box-shadow: inset 0 0 0 2px var(--success); }
+.loop-cell.loop-playhead:not(.active) { background: rgba(76,175,80,0.15); }
 
 .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 100; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .modal-overlay.show { display: flex; align-items: flex-start; justify-content: center; }
@@ -2851,6 +2852,7 @@ function openLoopEditor(idx) {
 function closeLoopEditor() {
   document.getElementById('loopEditor').style.display = 'none';
   currentLoopIdx = -1;
+  stopLoopPlayhead();
 }
 
 function renderCurrentLoopGrid() {
@@ -2917,12 +2919,14 @@ function renderCurrentLoopGrid() {
       }
 
       const title = isActive ? `vel: ${vel}` : '';
-      html += `<div class="${cls}" style="${style}" title="${title}"
+      html += `<div class="${cls}" style="${style}" title="${title}" data-step="${s}"
                     onclick="toggleLoopCell(${currentLoopIdx}, ${inst.midiNote}, ${tick}, ${ticksPerStep}, this)"
                     oncontextmenu="cycleLoopVelocity(event, ${currentLoopIdx}, ${inst.midiNote}, ${tick}, ${ticksPerStep})"></div>`;
     }
   });
   grid.style.gridTemplateColumns = `60px repeat(${totalSteps}, 1fr)`;
+  grid.dataset.totalSteps = totalSteps;
+  grid.dataset.ticksPerStep = ticksPerStep;
   grid.innerHTML = html;
 }
 
@@ -2982,14 +2986,54 @@ function updateLoopBpm(val) {
   }
 }
 
+let loopPlayheadTimer = null;
+
 async function playCurrentLoop() {
   if (currentLoopIdx < 0) return;
   await api('loop/play?id=' + currentLoopIdx, 'POST');
   toast('Lecture...', 'success');
+  startLoopPlayhead();
 }
 
 async function stopLoop() {
   await api('loop/stop', 'POST');
+  stopLoopPlayhead();
+  clearPlayhead();
+}
+
+function startLoopPlayhead() {
+  stopLoopPlayhead();
+  loopPlayheadTimer = setInterval(updateLoopPlayhead, 100);
+}
+
+function stopLoopPlayhead() {
+  if (loopPlayheadTimer) { clearInterval(loopPlayheadTimer); loopPlayheadTimer = null; }
+}
+
+function clearPlayhead() {
+  document.querySelectorAll('#loopGrid .loop-playhead').forEach(el => el.classList.remove('loop-playhead'));
+  document.querySelectorAll('#loopGrid .beat-marker').forEach(el => el.style.color = '');
+}
+
+async function updateLoopPlayhead() {
+  const grid = document.getElementById('loopGrid');
+  if (!grid || currentLoopIdx < 0) { stopLoopPlayhead(); return; }
+  const data = await api('status');
+  if (!data || !data.loop_playing) { stopLoopPlayhead(); clearPlayhead(); return; }
+  if (data.loop_index !== currentLoopIdx) return;
+
+  const totalSteps = parseInt(grid.dataset.totalSteps) || 16;
+  const ticksPerStep = parseFloat(grid.dataset.ticksPerStep) || 48;
+  const currentTick = data.loop_tick || 0;
+  const currentStep = Math.floor(currentTick / ticksPerStep);
+
+  // Clear previous playhead
+  clearPlayhead();
+
+  // Highlight current step column
+  if (currentStep >= 0 && currentStep < totalSteps) {
+    grid.querySelectorAll(`[data-step="${currentStep}"]`).forEach(el => el.classList.add('loop-playhead'));
+  }
 }
 
 // ====================================================================

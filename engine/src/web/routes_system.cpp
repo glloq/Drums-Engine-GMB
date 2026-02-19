@@ -55,6 +55,8 @@ void WebServerManager::_handleGetStatus(AsyncWebServerRequest* req) {
     obj["loop_bpm"] = _loopEngine->getBpm();
     obj["loop_beat"] = _loopEngine->getCurrentBeat();
     obj["loop_bar"] = _loopEngine->getCurrentBar();
+    obj["loop_tick"] = _loopEngine->getCurrentTick();
+    obj["loop_index"] = _loopEngine->getCurrentLoopIndex();
   }
 
   // System

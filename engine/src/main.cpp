@@ -599,6 +599,16 @@ void initTask(void* param) {
   // 8. MIDI over WiFi
   midiEngine.begin();
 
+  // 8b. Load MIDI channel filter from storage
+  {
+    JsonDocument midiCfg;
+    if (storage.loadJsonFile("/midi.json", midiCfg)) {
+      uint16_t mask = midiCfg["channelMask"] | 0xFFFF;
+      midiEngine.setChannelMask(mask);
+      DBGF("[Config] MIDI channel mask: 0x%04X\n", mask);
+    }
+  }
+
   // 9. Web Server (includes auth, rate-limiting, WiFi API, logs API)
   webServer.setRecompileCallback(compilePipelines);
   webServer.begin();

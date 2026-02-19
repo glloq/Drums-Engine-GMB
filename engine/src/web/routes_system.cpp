@@ -18,6 +18,7 @@ void WebServerManager::_handleGetStatus(AsyncWebServerRequest* req) {
   obj["midi_sessions"] = _midiEngine->getSessionCount();
   obj["midi_notes_rx"] = _midiEngine->getNotesReceived();
   obj["midi_notes_tx"] = _midiEngine->getNotesSent();
+  obj["midi_channel_mask"] = _midiEngine->getChannelMask();
 
   // Actuators
   obj["actuator_count"] = _actMgr->getCount();
@@ -605,6 +606,49 @@ void WebServerManager::_handleGetAuthToken(AsyncWebServerRequest* req) {
   doc["token"] = _auth.getToken();
   doc["usage"] = "Authorization: Bearer <token>";
   _sendJson(req, 200, doc);
+}
+
+void WebServerManager::_handleGetMidiChannels(AsyncWebServerRequest* req) {
+  JsonDocument doc;
+  uint16_t mask = _midiEngine->getChannelMask();
+  doc["channelMask"] = mask;
+  JsonArray channels = doc["channels"].to<JsonArray>();
+  for (uint8_t ch = 1; ch <= 16; ch++) {
+    if ((mask >> (ch - 1)) & 1) channels.add(ch);
+  }
+  _sendJson(req, 200, doc);
+}
+
+void WebServerManager::_handleSetMidiChannels(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
+  JsonDocument doc;
+  if (deserializeJson(doc, data, len)) { _sendError(req, 400, "Invalid JSON"); return; }
+
+  uint16_t mask = 0;
+  if (doc.containsKey("channelMask")) {
+    mask = doc["channelMask"] | 0xFFFF;
+  } else if (doc.containsKey("channels")) {
+    JsonArray channels = doc["channels"].as<JsonArray>();
+    for (JsonVariant ch : channels) {
+      uint8_t c = ch.as<uint8_t>();
+      if (c >= 1 && c <= 16) mask |= (1 << (c - 1));
+    }
+  } else {
+    _sendError(req, 400, "Provide channelMask or channels array");
+    return;
+  }
+  if (mask == 0) { _sendError(req, 400, "At least one channel required"); return; }
+
+  _midiEngine->setChannelMask(mask);
+
+  // Persist to /midi.json
+  JsonDocument saveDoc;
+  saveDoc["channelMask"] = mask;
+  _storage->saveJsonFile("/midi.json", saveDoc);
+
+  JsonDocument resp;
+  resp["channelMask"] = mask;
+  resp["message"] = "MIDI channels updated";
+  _sendJson(req, 200, resp);
 }
 
 void WebServerManager::_handleTestCC(AsyncWebServerRequest* req, uint8_t* data, size_t len) {

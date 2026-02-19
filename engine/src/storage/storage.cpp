@@ -19,6 +19,14 @@ bool Storage::fileExists(const char* path) {
   return LittleFS.exists(path);
 }
 
+bool Storage::saveJsonFile(const char* path, const JsonDocument& doc) {
+  return _writeJson(path, doc);
+}
+
+bool Storage::loadJsonFile(const char* path, JsonDocument& doc) {
+  return _readJson(path, doc);
+}
+
 // ============================================================================
 // Actuators persistence
 // ============================================================================

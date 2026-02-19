@@ -909,10 +909,19 @@ input[type=checkbox] { width: auto; }
       <div class="hint" style="margin-top:6px;">Reduit la velocite max et ferme les servos mute proportionnellement</div>
     </div>
 
-    <!-- MIDI Info -->
+    <!-- MIDI Info + Channel Config -->
     <div class="card" style="margin-top:12px;">
       <h3>MIDI</h3>
       <div id="midiInfo" style="font-size:0.85em;color:var(--fg2);line-height:1.8;"></div>
+      <div style="margin-top:10px;">
+        <label style="font-size:0.85em;color:var(--fg2);display:block;margin-bottom:6px;">Canaux MIDI actifs</label>
+        <div id="midiChannelGrid" style="display:grid;grid-template-columns:repeat(8,1fr);gap:4px;"></div>
+        <div style="display:flex;gap:6px;margin-top:8px;">
+          <button class="btn btn-sm btn-secondary" onclick="setMidiChannels('all')">Tous</button>
+          <button class="btn btn-sm btn-secondary" onclick="setMidiChannels('drums')">Ch.10 (Drums)</button>
+          <button class="btn btn-sm btn-primary" onclick="saveMidiChannels()">Appliquer</button>
+        </div>
+      </div>
     </div>
 
     <!-- System Info -->
@@ -3105,6 +3114,44 @@ async function saveWifiSettings() {
   if (result) toast('WiFi enregistre. Redemarrage...', 'success');
 }
 
+// MIDI Channel configuration
+function renderMidiChannelGrid(mask) {
+  const grid = document.getElementById('midiChannelGrid');
+  if (!grid) return;
+  let html = '';
+  for (let ch = 1; ch <= 16; ch++) {
+    const active = (mask >> (ch - 1)) & 1;
+    const label = ch === 10 ? '10*' : ch;
+    html += `<div onclick="toggleMidiChannel(${ch})" style="padding:4px;text-align:center;border-radius:4px;cursor:pointer;font-size:0.8em;font-weight:bold;
+      background:${active ? 'var(--accent)' : 'var(--bg)'};color:${active ? '#fff' : 'var(--fg2)'};
+      border:1px solid ${active ? 'var(--accent)' : '#444'};user-select:none;" data-ch="${ch}">${label}</div>`;
+  }
+  grid.innerHTML = html;
+  grid.dataset.mask = mask;
+}
+function toggleMidiChannel(ch) {
+  const grid = document.getElementById('midiChannelGrid');
+  let mask = parseInt(grid.dataset.mask) || 0xFFFF;
+  mask ^= (1 << (ch - 1));
+  if (mask === 0) mask = 1 << (ch - 1); // Prevent disabling all
+  renderMidiChannelGrid(mask);
+}
+function setMidiChannels(preset) {
+  if (preset === 'all') renderMidiChannelGrid(0xFFFF);
+  else if (preset === 'drums') renderMidiChannelGrid(1 << 9); // ch 10
+}
+async function saveMidiChannels() {
+  const grid = document.getElementById('midiChannelGrid');
+  const mask = parseInt(grid.dataset.mask) || 0xFFFF;
+  const res = await api('midi/channels', 'PUT', {channelMask: mask});
+  if (res) toast('Canaux MIDI mis a jour', 'success');
+}
+async function loadMidiChannels() {
+  const data = await api('midi/channels');
+  if (data) renderMidiChannelGrid(data.channelMask);
+  else renderMidiChannelGrid(0xFFFF);
+}
+
 async function scanI2C() {
   const data = await api('scan-i2c');
   if (data) {
@@ -3232,7 +3279,7 @@ async function importConfig(file) {
 // ====================================================================
 function showModal(id) {
   document.getElementById(id).classList.add('show');
-  if (id === 'modalSettings') { loadWifiSettings(); refreshStatus(); document.getElementById('settHideUsedActuators').checked = hideUsedActuators; }
+  if (id === 'modalSettings') { loadWifiSettings(); loadMidiChannels(); refreshStatus(); document.getElementById('settHideUsedActuators').checked = hideUsedActuators; }
   if (id === 'modalLoopEditor') { renderLoops(); }
 }
 function closeModal(id) {

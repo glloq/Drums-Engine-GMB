@@ -293,6 +293,20 @@ void WebServerManager::_setupRoutes() {
   _server.on("/api/auth-token", HTTP_GET,
     [this](AsyncWebServerRequest* req) { _handleGetAuthToken(req); });
 
+  // --- MIDI Channel Config ---
+  _server.on("/api/midi/channels", HTTP_GET,
+    [this](AsyncWebServerRequest* req) { _handleGetMidiChannels(req); });
+
+  _server.on("/api/midi/channels", HTTP_PUT,
+    [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) {
+        if (!_auth.checkAuth(req)) return;
+        _handleSetMidiChannels(req, data, len);
+      }
+    });
+
   // --- LED Strips API ---
   _server.on("/api/led/strips", HTTP_GET,
     [this](AsyncWebServerRequest* req) { _handleGetLedStrips(req); });

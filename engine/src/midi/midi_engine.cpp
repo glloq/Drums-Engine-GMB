@@ -101,6 +101,7 @@ void MidiEngine::_onNoteOn(byte channel, byte note, byte velocity) {
   if (!_instance) return;
   _instance->_notesReceived++;
   _instance->_lastActivity = millis();
+  if (!_instance->isChannelAllowed(channel)) return;
 
   if (_instance->_usePipelineMode()) {
     MidiEvent ev;
@@ -119,6 +120,7 @@ void MidiEngine::_onNoteOff(byte channel, byte note, byte velocity) {
   if (!_instance) return;
   _instance->_notesReceived++;
   _instance->_lastActivity = millis();
+  if (!_instance->isChannelAllowed(channel)) return;
 
   if (_instance->_usePipelineMode()) {
     MidiEvent ev;
@@ -136,6 +138,7 @@ void MidiEngine::_onNoteOff(byte channel, byte note, byte velocity) {
 void MidiEngine::_onControlChange(byte channel, byte number, byte value) {
   if (!_instance) return;
   _instance->_lastActivity = millis();
+  if (!_instance->isChannelAllowed(channel)) return;
 
   if (_instance->_usePipelineMode()) {
     MidiEvent ev;
@@ -153,6 +156,7 @@ void MidiEngine::_onControlChange(byte channel, byte number, byte value) {
 void MidiEngine::_onPitchBend(byte channel, int value) {
   if (!_instance) return;
   _instance->_lastActivity = millis();
+  if (!_instance->isChannelAllowed(channel)) return;
 
   if (_instance->_usePipelineMode()) {
     MidiEvent ev;
@@ -170,6 +174,7 @@ void MidiEngine::_onPitchBend(byte channel, int value) {
 void MidiEngine::_onAftertouch(byte channel, byte pressure) {
   if (!_instance) return;
   _instance->_lastActivity = millis();
+  if (!_instance->isChannelAllowed(channel)) return;
 
   if (_instance->_usePipelineMode()) {
     MidiEvent ev;

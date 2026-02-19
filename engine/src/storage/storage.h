@@ -62,6 +62,10 @@ public:
   size_t usedBytes();
   String formatInfo();
 
+  // Generic JSON file (for small configs like MIDI settings)
+  bool saveJsonFile(const char* path, const JsonDocument& doc);
+  bool loadJsonFile(const char* path, JsonDocument& doc);
+
   // Verifier si un fichier existe
   bool fileExists(const char* path);
 

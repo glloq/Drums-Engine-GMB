@@ -92,6 +92,7 @@ private:
   void _handleDeleteLoop(AsyncWebServerRequest* req);
   void _handlePlayLoop(AsyncWebServerRequest* req);
   void _handleStopLoop(AsyncWebServerRequest* req);
+  void _handlePlayChain(AsyncWebServerRequest* req, uint8_t* data, size_t len);
 
   // System
   void _handleGetStatus(AsyncWebServerRequest* req);

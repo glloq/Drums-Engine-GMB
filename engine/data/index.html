@@ -438,12 +438,18 @@ input[type=checkbox] { width: auto; }
           <button class="btn btn-secondary btn-sm" onclick="midiPanic()" title="Envoie NoteOff sur toutes les notes">MIDI Panic</button>
         </div>
       </h3>
-      <p class="hint" style="margin-bottom:12px;">Testez chaque actionneur individuellement. Ajustez la valeur et la duree puis cliquez sur Tester.</p>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+        <p class="hint" style="margin:0;">Testez chaque actionneur individuellement.</p>
+        <input type="text" placeholder="Filtrer..." oninput="filterList('calibActuatorList',this.value)" style="width:120px;padding:5px 8px;font-size:0.85em;">
+      </div>
       <div id="calibActuatorList"></div>
     </div>
     <div class="card" style="margin-top:16px;">
       <h3>Test Rapide Instruments</h3>
-      <p class="hint" style="margin-bottom:12px;">Declenchez un instrument complet avec une velocity choisie.</p>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+        <p class="hint" style="margin:0;">Declenchez un instrument complet avec une velocity choisie.</p>
+        <input type="text" placeholder="Filtrer..." oninput="filterList('calibInstrumentList',this.value)" style="width:120px;padding:5px 8px;font-size:0.85em;">
+      </div>
       <div id="calibInstrumentList"></div>
     </div>
   </div>
@@ -867,6 +873,26 @@ input[type=checkbox] { width: auto; }
       <button class="btn btn-secondary btn-sm" onclick="closeModal('modalLoopEditor')">Fermer</button>
     </h2>
     <div id="loopList" style="margin-top:8px;"></div>
+    <!-- Chain playback -->
+    <div class="card" style="margin-top:10px;" id="loopChainCard">
+      <h3 style="display:flex;justify-content:space-between;align-items:center;">
+        Enchainement
+        <span id="chainStatus" style="font-size:0.75em;color:var(--fg2);"></span>
+      </h3>
+      <div id="chainBuilder" style="margin-top:6px;">
+        <div id="chainList" style="display:flex;flex-wrap:wrap;gap:4px;min-height:28px;padding:6px;background:var(--bg);border-radius:var(--radius);border:1px dashed var(--accent2);margin-bottom:8px;">
+          <span style="color:var(--fg2);font-size:0.8em;" id="chainPlaceholder">Cliquez les boucles ci-dessus pour les ajouter</span>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          <button class="btn btn-success btn-sm" onclick="playChain()">&#9654; Enchainer</button>
+          <button class="btn btn-danger btn-sm" onclick="stopLoop()">&#9632; Stop</button>
+          <button class="btn btn-secondary btn-sm" onclick="clearChain()">Vider</button>
+          <label style="font-size:0.8em;display:flex;align-items:center;gap:4px;margin-left:auto;">
+            <input type="checkbox" id="chainRepeat" checked> Boucler
+          </label>
+        </div>
+      </div>
+    </div>
     <!-- Inline new loop form -->
     <div class="card" style="margin-top:10px;">
       <h3>Nouvelle boucle</h3>
@@ -2976,7 +3002,45 @@ function renderPipelineCard(inst) {
 
   if (!rows) rows = '<div class="hint">Aucune action configuree</div>';
 
-  return `<div class="card pipe-card"><h3><span>${inst.name} ${badges}</span><button class="btn btn-sm btn-secondary" onclick="peOpenEditor(${inst.id})">Edit Pipeline</button></h3>${rows}</div>`;
+  const pasteBtn = pipelineClipboard ? `<button class="btn btn-sm" style="background:var(--warn);color:#000;" onclick="pasteActions(${inst.id})" title="Coller les actions copiees">Coller</button>` : '';
+  return `<div class="card pipe-card"><h3><span>${inst.name} ${badges}</span><div style="display:flex;gap:4px;">${pasteBtn}<button class="btn btn-sm btn-secondary" onclick="copyActions(${inst.id})" title="Copier les actions">Copier</button><button class="btn btn-sm btn-secondary" onclick="peOpenEditor(${inst.id})">Edit Pipeline</button></div></h3>${rows}</div>`;
+}
+
+let pipelineClipboard = null;
+
+function copyActions(instrId) {
+  const inst = instruments.find(i => i.id === instrId);
+  if (!inst) return;
+  pipelineClipboard = {
+    noteOnActions: JSON.parse(JSON.stringify(inst.noteOnActions || [])),
+    noteOffActions: JSON.parse(JSON.stringify(inst.noteOffActions || [])),
+    ccBindings: JSON.parse(JSON.stringify(inst.ccBindings || [])),
+    retriggerMode: inst.retriggerMode || 0,
+    sourceName: inst.name
+  };
+  toast('Actions copiees depuis ' + inst.name, 'success');
+  renderMappings();
+}
+
+async function pasteActions(instrId) {
+  if (!pipelineClipboard) return;
+  const inst = instruments.find(i => i.id === instrId);
+  if (!inst) return;
+  if (!confirm('Remplacer les actions de "' + inst.name + '" par celles de "' + pipelineClipboard.sourceName + '" ?')) return;
+
+  const payload = {
+    blocks: [],
+    outputActuatorId: (inst.actuatorIds && inst.actuatorIds[0] !== 255) ? inst.actuatorIds[0] : 255,
+    retriggerMode: pipelineClipboard.retriggerMode,
+    noteOnActions: pipelineClipboard.noteOnActions,
+    noteOffActions: pipelineClipboard.noteOffActions,
+    ccBindings: pipelineClipboard.ccBindings
+  };
+  await api('pipeline/blocks?instrumentId=' + instrId, 'PUT', payload);
+  await loadInstruments();
+  renderMappings();
+  toast('Actions collees sur ' + inst.name, 'success');
+  markConfigDirty();
 }
 
 async function refreshMappings() {
@@ -3020,6 +3084,8 @@ async function loadLoops() {
   if (data) { loops = data; renderLoops(); }
 }
 
+let loopChain = [];
+
 function renderLoops() {
   const el = document.getElementById('loopList');
   document.getElementById('loopCount').textContent = loops.length;
@@ -3036,12 +3102,51 @@ function renderLoops() {
         <span class="badge">${loop.bars||1} mes.</span>
       </div>
       <div class="item-actions">
+        <button class="btn btn-sm" style="background:var(--accent2);color:#fff;" onclick="addToChain(${i})" title="Ajouter a l'enchainement">+Chain</button>
         <button class="btn btn-sm btn-success" onclick="openLoopEditor(${i})">Editer</button>
         <button class="btn btn-sm btn-secondary" onclick="duplicateLoop(${i})">Dupliquer</button>
         <button class="btn btn-sm btn-danger" onclick="confirmDelete(this, () => deleteLoopItem(${i}))">Suppr</button>
       </div>
     </div>
   `).join('');
+}
+
+function addToChain(idx) {
+  if (idx < 0 || idx >= loops.length) return;
+  loopChain.push(idx);
+  renderChain();
+}
+
+function removeFromChain(pos) {
+  loopChain.splice(pos, 1);
+  renderChain();
+}
+
+function clearChain() {
+  loopChain = [];
+  renderChain();
+}
+
+function renderChain() {
+  const el = document.getElementById('chainList');
+  const ph = document.getElementById('chainPlaceholder');
+  if (loopChain.length === 0) {
+    el.innerHTML = '<span style="color:var(--fg2);font-size:0.8em;" id="chainPlaceholder">Cliquez +Chain pour ajouter des boucles</span>';
+    return;
+  }
+  el.innerHTML = loopChain.map((idx, pos) => {
+    const name = (loops[idx] && loops[idx].name) || ('Loop ' + idx);
+    return '<span class="badge" style="cursor:pointer;padding:4px 8px;" onclick="removeFromChain(' + pos + ')" title="Cliquer pour retirer">' +
+      (pos + 1) + '. ' + name + ' &times;</span>';
+  }).join('');
+}
+
+async function playChain() {
+  if (loopChain.length === 0) { toast('Ajoutez des boucles a l\'enchainement', 'warn'); return; }
+  const repeat = document.getElementById('chainRepeat').checked;
+  await api('loop/chain', 'POST', { loopIds: loopChain, repeat: repeat });
+  toast('Enchainement demarre (' + loopChain.length + ' boucles)', 'success');
+  startLoopPlayhead();
 }
 
 async function createLoop() {
@@ -3351,20 +3456,39 @@ function clearPlayhead() {
 
 async function updateLoopPlayhead() {
   const grid = document.getElementById('loopGrid');
-  if (!grid || currentLoopIdx < 0) { stopLoopPlayhead(); return; }
-  const data = await api('status');
-  if (!data || !data.loop_playing) { stopLoopPlayhead(); clearPlayhead(); return; }
-  if (data.loop_index !== currentLoopIdx) return;
+  const data = await api('status', 'GET', null, true);
+  if (!data || !data.loop_playing) {
+    stopLoopPlayhead(); clearPlayhead();
+    const cs = document.getElementById('chainStatus');
+    if (cs) cs.textContent = '';
+    return;
+  }
+
+  // Update chain status display
+  const cs = document.getElementById('chainStatus');
+  if (cs) {
+    if (data.loop_chain_active) {
+      cs.textContent = 'Boucle ' + (data.loop_chain_index + 1) + '/' + data.loop_chain_length;
+    } else {
+      cs.textContent = '';
+    }
+  }
+
+  // If chain is playing, track the currently-playing loop in the editor
+  if (data.loop_chain_active && data.loop_index !== currentLoopIdx && currentLoopIdx >= 0) {
+    // Chain moved to a different loop; update editor if open
+  }
+
+  if (!grid || currentLoopIdx < 0) return;
+  if (data.loop_index !== currentLoopIdx) { clearPlayhead(); return; }
 
   const totalSteps = parseInt(grid.dataset.totalSteps) || 16;
   const ticksPerStep = parseFloat(grid.dataset.ticksPerStep) || 48;
   const currentTick = data.loop_tick || 0;
   const currentStep = Math.floor(currentTick / ticksPerStep);
 
-  // Clear previous playhead
   clearPlayhead();
 
-  // Highlight current step column
   if (currentStep >= 0 && currentStep < totalSteps) {
     grid.querySelectorAll(`[data-step="${currentStep}"]`).forEach(el => el.classList.add('loop-playhead'));
   }
@@ -3745,7 +3869,9 @@ document.querySelectorAll('.tab').forEach(tab => {
 });
 
 function filterList(listId, query) {
-  const items = document.getElementById(listId).querySelectorAll('.list-item');
+  const el = document.getElementById(listId);
+  if (!el) return;
+  const items = el.querySelectorAll('.list-item, .calib-item');
   const q = query.toLowerCase().trim();
   items.forEach(item => {
     item.style.display = (!q || item.textContent.toLowerCase().includes(q)) ? '' : 'none';

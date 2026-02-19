@@ -58,6 +58,11 @@ void WebServerManager::_handleGetStatus(AsyncWebServerRequest* req) {
     obj["loop_tick"] = _loopEngine->getCurrentTick();
     obj["loop_index"] = _loopEngine->getCurrentLoopIndex();
   }
+  obj["loop_chain_active"] = _loopEngine->isChainActive();
+  if (_loopEngine->isChainActive()) {
+    obj["loop_chain_index"] = _loopEngine->getChainIndex();
+    obj["loop_chain_length"] = _loopEngine->getChainLength();
+  }
 
   // System
   obj["free_heap"] = ESP.getFreeHeap();

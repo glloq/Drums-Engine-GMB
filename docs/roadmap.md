@@ -194,6 +194,14 @@
 - [x] API silencieuse pour polling (suppression toast spam)
 - [x] Servo quick positions: Min/Centre/Max dans calibration
 
+## Phase 14 — Enchainement et productivite pipeline
+**Statut: implementee**
+- [x] Enchainement boucles: lecture sequentielle de N boucles (avec repetition optionnelle)
+- [x] API `POST /api/loop/chain` (loopIds + repeat)
+- [x] UI enchainement: construction visuelle de la chaine + statut temps reel
+- [x] Copier/Coller actions entre instruments (NoteOn/NoteOff/CC)
+- [x] Filtre recherche page calibration (actionneurs + instruments)
+
 ## Risques / dette technique
 - Couverture tests: script curl fonctionnel mais pas de CI automatise.
 - Dependance environnement outillage (`pio`) pour validation complete firmware.

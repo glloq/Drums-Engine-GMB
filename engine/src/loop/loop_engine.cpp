@@ -5,7 +5,8 @@ LoopEngine::LoopEngine(InstrumentManager* instrumentMgr)
   : _instrumentMgr(instrumentMgr), _eventProc(nullptr), _loopCount(0),
     _playing(false), _paused(false), _currentLoop(0),
     _currentTick(0), _nextEventIndex(0), _lastTickTime(0),
-    _tickIntervalUs(0), _tickRemainderPerTick(0), _tickRemainderAccum(0) {}
+    _tickIntervalUs(0), _tickRemainderPerTick(0), _tickRemainderAccum(0),
+    _chainActive(false), _chainRepeat(false), _chainLength(0), _chainIndex(0) {}
 
 // --- Lecture ---
 
@@ -26,11 +27,25 @@ void LoopEngine::play(uint8_t loopIndex) {
        loop.name, loop.bpm, loop.eventCount);
 }
 
+void LoopEngine::playChain(const uint8_t* loopIds, uint8_t count, bool repeat) {
+  if (count == 0) return;
+  _chainLength = (count > MAX_LOOPS) ? MAX_LOOPS : count;
+  for (uint8_t i = 0; i < _chainLength; i++) _chain[i] = loopIds[i];
+  _chainRepeat = repeat;
+  _chainIndex = 0;
+  _chainActive = true;
+  play(_chain[0]);
+  DBGF("[Loop] Chain started (%d loops, repeat=%d)\n", _chainLength, repeat);
+}
+
 void LoopEngine::stop() {
   _playing = false;
   _paused = false;
   _currentTick = 0;
   _nextEventIndex = 0;
+  _chainActive = false;
+  _chainIndex = 0;
+  _chainLength = 0;
   DBGLN("[Loop] Stopped");
 }
 
@@ -61,6 +76,11 @@ void LoopEngine::update() {
 
     uint16_t total = _totalTicks(loop);
     if (_currentTick >= total) {
+      if (_chainActive) {
+        _advanceChain();
+        if (!_playing) return;  // Chain finished, stop
+        break;  // New loop started, recalc timing
+      }
       _currentTick = 0;
       _nextEventIndex = 0;
     }
@@ -270,6 +290,29 @@ uint16_t LoopEngine::getBpm() const {
 }
 
 // --- Private ---
+
+void LoopEngine::_advanceChain() {
+  _chainIndex++;
+  if (_chainIndex >= _chainLength) {
+    if (_chainRepeat) {
+      _chainIndex = 0;
+    } else {
+      stop();
+      return;
+    }
+  }
+  // Start next loop in chain (preserves _chainActive state)
+  uint8_t nextLoop = _chain[_chainIndex];
+  if (nextLoop >= _loopCount) { stop(); return; }
+  Loop& loop = _loops[nextLoop];
+  if (loop.eventCount == 0) { stop(); return; }
+  _currentLoop = nextLoop;
+  _currentTick = 0;
+  _nextEventIndex = 0;
+  _lastTickTime = micros();
+  _calcTickInterval(loop.bpm, loop.ppq);
+  DBGF("[Loop] Chain advancing to loop %d ('%s')\n", nextLoop, loop.name);
+}
 
 void LoopEngine::_calcTickInterval(uint16_t bpm, uint16_t ppq) {
   unsigned long divisor = (unsigned long)bpm * ppq;

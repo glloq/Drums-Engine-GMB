@@ -26,11 +26,15 @@ public:
 
   // Controle de lecture
   void play(uint8_t loopIndex);
+  void playChain(const uint8_t* loopIds, uint8_t count, bool repeat = true);
   void stop();
   void pause();
   void resume();
   bool isPlaying() const { return _playing; }
   bool isPaused() const { return _paused; }
+  bool isChainActive() const { return _chainActive; }
+  uint8_t getChainIndex() const { return _chainIndex; }
+  uint8_t getChainLength() const { return _chainLength; }
 
   // Appeler dans loop()
   void update();
@@ -78,7 +82,15 @@ private:
   unsigned long _tickRemainderPerTick;  // Fractional remainder per tick (x1000)
   unsigned long _tickRemainderAccum;    // Accumulated remainder (x1000)
 
+  // Chain playback
+  bool _chainActive;
+  bool _chainRepeat;
+  uint8_t _chain[MAX_LOOPS];
+  uint8_t _chainLength;
+  uint8_t _chainIndex;
+
   void _calcTickInterval(uint16_t bpm, uint16_t ppq);
+  void _advanceChain();
   uint16_t _totalTicks(const Loop& loop) const;
   void _sortEvents(Loop& loop);
   void _dispatchEvent(const LoopEvent& evt);

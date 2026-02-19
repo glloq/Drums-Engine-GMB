@@ -245,6 +245,15 @@ void WebServerManager::_setupRoutes() {
       _handleStopLoop(req);
     });
 
+  _server.on("/api/loop/chain", HTTP_POST,
+    [this](AsyncWebServerRequest* req) {},
+    NULL,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (!_rateLimiter.checkRate(req)) return;
+      if (!_auth.checkAuth(req)) return;
+      _handlePlayChain(req, data, len);
+    });
+
   // --- System API ---
   _server.on("/api/status", HTTP_GET,
     [this](AsyncWebServerRequest* req) { _handleGetStatus(req); });

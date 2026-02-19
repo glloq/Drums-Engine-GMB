@@ -405,3 +405,138 @@ Double la vélocité, attend 50ms, puis fait une montée progressive sur 100ms.
 ```
 
 Alterne entre deux groupes : ce bloc ne laisse passer qu'une frappe sur deux.
+
+---
+
+## Exemples avancés — Sélection d'actionneur par vélocité
+
+Un cas fréquent : utiliser un actionneur différent selon l'intensité de la frappe. Par exemple, un solénoïde léger pour les ghost notes et un moteur puissant pour les frappes fortes. Comme un seul pipeline est linéaire (un bloc condition qui échoue stoppe tout), la solution repose sur **plusieurs instruments mappés sur la même note MIDI**, chacun avec un pipeline filtrant une plage de vélocité.
+
+### Exemple 1 — Deux actionneurs (doux / fort)
+
+On crée **2 instruments** sur la même note MIDI (ex: note 38, caisse claire) :
+
+**Instrument A** — "Snare Soft" (actionneur : solénoïde léger, id=2)
+
+```
+Bloc 1 : CONDITION velocity_split  param1=1   param2=80
+         → laisse passer uniquement vélocité 1-80
+Bloc 2 : TRANSFORM velocity_curve  param1=1 (EXPO)
+         → courbe exponentielle pour réponse progressive
+Bloc 3 : OUTPUT pulse              param1=2 (solénoïde)  param2=0
+         → envoie pulse au solénoïde
+```
+
+**Instrument B** — "Snare Hard" (actionneur : moteur DC, id=5)
+
+```
+Bloc 1 : CONDITION velocity_split  param1=81  param2=127
+         → laisse passer uniquement vélocité 81-127
+Bloc 2 : TRANSFORM gain            param2=120%
+         → légère amplification
+Bloc 3 : OUTPUT pulse              param1=5 (moteur)  param2=0
+         → envoie pulse au moteur
+```
+
+**Résultat :**
+- Frappe douce (vel 1-80) → solénoïde léger avec courbe expo
+- Frappe forte (vel 81-127) → moteur DC avec gain
+
+> **Note :** Les deux instruments reçoivent le même NoteOn. Chaque pipeline évalue ses conditions indépendamment. Celui dont la condition échoue s'interrompt silencieusement.
+
+### Exemple 2 — Trois zones de vélocité (ghost / normal / accent)
+
+Trois instruments sur la même note MIDI (ex: note 36, grosse caisse) :
+
+**Instrument A** — "Kick Ghost" (petit solénoïde, id=1)
+
+```
+Bloc 1 : CONDITION velocity_split  param1=1   param2=40
+Bloc 2 : TRANSFORM clamp           param1=20  param2=60
+         → normalise la plage douce vers 20-60
+Bloc 3 : TIME pulse                param1=5   param2=15
+         → pulse court 5-15ms proportionnel à la vélocité
+```
+
+**Instrument B** — "Kick Normal" (solénoïde moyen, id=3)
+
+```
+Bloc 1 : CONDITION velocity_split  param1=41  param2=100
+Bloc 2 : TRANSFORM velocity_curve  param1=0 (LINEAR)
+Bloc 3 : OUTPUT pulse              param1=3   param2=0
+```
+
+**Instrument C** — "Kick Accent" (moteur puissant, id=7)
+
+```
+Bloc 1 : CONDITION velocity_split  param1=101 param2=127
+Bloc 2 : TRANSFORM gain            param2=150%
+         → amplifie pour maximiser l'impact
+Bloc 3 : TIME ramp                 param1=0 (auto) param2=30
+         → montée progressive sur 30ms pour un impact massif
+```
+
+**Résultat :**
+
+```
+Vélocité    Actionneur         Comportement
+──────────  ─────────────────  ──────────────────────────
+  1 - 40    Petit solénoïde    Pulse court, toucher léger
+ 41 - 100   Solénoïde moyen    Pulse standard linéaire
+101 - 127   Moteur puissant    Ramp progressive, impact max
+```
+
+### Exemple 3 — Crossfade entre deux actionneurs
+
+Pour un effet de fondu entre deux actionneurs (ex: deux batteurs frappant la même peau) :
+
+**Instrument A** — "Beater Left" (actionneur id=4)
+
+```
+Bloc 1 : TRANSFORM invert
+         → inverse : vel forte → valeur faible
+Bloc 2 : TRANSFORM clamp           param1=10  param2=100
+         → plancher à 10 pour que le beater reste actif
+Bloc 3 : OUTPUT pulse              param1=4   param2=0
+```
+
+**Instrument B** — "Beater Right" (actionneur id=6)
+
+```
+Bloc 1 : TRANSFORM clamp           param1=10  param2=100
+Bloc 2 : OUTPUT pulse              param1=6   param2=0
+```
+
+**Résultat :**
+
+```
+Vélocité    Beater Left    Beater Right    Effet
+──────────  ────────────   ─────────────   ──────────
+  faible    fort (inversé) faible          gauche dominant
+  moyenne   moyen          moyen           les deux égaux
+  forte     faible         fort            droite dominant
+```
+
+Les deux actionneurs frappent toujours, mais l'intensité relative bascule.
+
+### Exemple 4 — Round-robin avec vélocité + rate-limit
+
+Quatre actionneurs alternent sur la même note, avec un gate pour éviter les doubles déclenchements :
+
+**Instrument A-D** — même note MIDI, chacun avec un `round_robin` différent :
+
+**Instrument A** (actionneur id=1, groupe 0)
+
+```
+Bloc 1 : CONDITION round_robin     param1=0   param2=4
+         → ne passe que pour le hit n°1, 5, 9...
+Bloc 2 : TIME gate                 param2=50
+         → minimum 50ms entre deux activations
+Bloc 3 : CONDITION velocity_split  param1=20  param2=127
+         → ignore les ghost notes
+Bloc 4 : OUTPUT pulse              param1=1   param2=0
+```
+
+**Instruments B, C, D** — identiques mais `round_robin param1=1`, `2`, `3`.
+
+**Résultat :** Les frappes se répartissent sur 4 actionneurs en rotation, avec un intervalle minimum et un seuil de vélocité.

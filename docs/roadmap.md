@@ -194,7 +194,7 @@
 - [x] API silencieuse pour polling (suppression toast spam)
 - [x] Servo quick positions: Min/Centre/Max dans calibration
 
-## Phase 14 — Enchainement et productivite pipeline
+## Phase 14 — Enchainement, productivite et UX (22 features)
 **Statut: implementee**
 - [x] Enchainement boucles: lecture sequentielle de N boucles (avec repetition optionnelle)
 - [x] API `POST /api/loop/chain` (loopIds + repeat)
@@ -219,6 +219,7 @@
 - [x] Boucles: compteur notes dans la liste
 - [x] Piano: mode "Mes Instruments" (affiche uniquement les instruments configures)
 - [x] Note Map: creation batch de tous les instruments GM manquants en un clic
+- [x] Badge canal MIDI sur les cartes instrument (si different du canal 10)
 
 ## Risques / dette technique
 - Couverture tests: script curl fonctionnel mais pas de CI automatise.

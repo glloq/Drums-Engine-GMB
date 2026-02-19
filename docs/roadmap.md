@@ -210,6 +210,8 @@
 - [x] Compteurs dans onglets (badges actionneurs/instruments)
 - [x] Compteur notes assignees dans la carte MIDI
 - [x] Pourcentage RAM utilise dans info systeme
+- [x] Detection conflits de pin actionneur (bus/adresse/pin)
+- [x] Flash MIDI temps reel sur les cartes instrument (via WebSocket)
 
 ## Risques / dette technique
 - Couverture tests: script curl fonctionnel mais pas de CI automatise.

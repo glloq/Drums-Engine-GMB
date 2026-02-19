@@ -1925,6 +1925,19 @@ async function saveActuator() {
     toast('Angle min doit etre inferieur au max', 'error');
     return;
   }
+
+  // Pin conflict detection
+  const editIdNum = editId !== '' ? parseInt(editId) : -1;
+  const conflict = actuators.find(a =>
+    a.id !== editIdNum &&
+    a.bus === data.bus &&
+    a.hwAddress === data.hwAddress &&
+    a.hwPin === data.hwPin
+  );
+  if (conflict) {
+    if (!confirm('Conflit de pin: "' + conflict.name + '" utilise deja ce bus/adresse/pin.\nContinuer quand meme ?')) return;
+  }
+
   let result;
   if (editId !== '') {
     result = await api('actuator?id=' + editId, 'PUT', data);
@@ -2284,7 +2297,7 @@ function renderInstruments() {
     const statusColor = !inst.enabled ? 'var(--fg2)' : (!hasActuator || onCount === 0) ? 'var(--warn)' : 'var(--success)';
     const catColor = catColors[inst.category] || 'var(--accent2)';
     return `
-    <div class="list-item" style="border-left-color:${catColor};" ondblclick="editInstrument(${inst.id})" title="Double-clic pour modifier">
+    <div class="list-item" data-midinote="${mNote}" style="border-left-color:${catColor};transition:box-shadow 0.15s;" ondblclick="editInstrument(${inst.id})" title="Double-clic pour modifier">
       <div class="item-title">
         <span style="color:${statusColor};font-size:0.9em;" title="${isComplete ? 'Complet' : !inst.enabled ? 'Desactive' : !hasActuator ? 'Sans actionneur' : 'Sans actions NoteOn'}">${statusIcon}</span>
         <strong>${inst.name}</strong>
@@ -5022,6 +5035,16 @@ function connectWebSocket() {
             }
           }
         }
+        // Flash matching instrument in list
+        if (msg.on) {
+          const instrItem = document.querySelector('.list-item[data-midinote="' + msg.note + '"]');
+          if (instrItem) {
+            instrItem.style.boxShadow = '0 0 8px var(--success)';
+            clearTimeout(instrItem._midiFlash);
+            instrItem._midiFlash = setTimeout(() => { instrItem.style.boxShadow = ''; }, 300);
+          }
+        }
+
         // MIDI Monitor log
         logMidiEvent(msg);
 

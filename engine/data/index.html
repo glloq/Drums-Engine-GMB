@@ -267,10 +267,12 @@ input[type=checkbox] { width: auto; }
           <option value="disableAll">Desactiver tous</option>
           <option value="testAll">Tester tous</option>
         </select>
+        <button class="btn btn-secondary btn-sm" onclick="toggleNoteMap()" title="Carte des notes MIDI">Note Map</button>
         <button class="btn btn-secondary" onclick="showCreateInstrumentFromTemplate()">Template</button>
         <button class="btn btn-primary" onclick="showAddInstrument()">+ Ajouter</button>
       </div>
     </div>
+    <div id="noteMapContainer" style="display:none;margin-bottom:12px;"></div>
     <div id="instrumentList"></div>
   </div>
 
@@ -2023,6 +2025,42 @@ function populateHiHatNoteSelects() {
 async function loadInstruments() {
   const data = await api('instruments');
   if (data) { instruments = data; renderInstruments(); }
+}
+
+function toggleNoteMap() {
+  const container = document.getElementById('noteMapContainer');
+  if (container.style.display === 'none') {
+    container.style.display = 'block';
+    renderNoteMap();
+  } else {
+    container.style.display = 'none';
+  }
+}
+
+function renderNoteMap() {
+  const container = document.getElementById('noteMapContainer');
+  // Build note → instrument map
+  const noteMap = {};
+  instruments.forEach(inst => { noteMap[inst.midiNote] = inst; });
+  // GM drum range: 27-81
+  let html = '<div class="card"><h3 style="margin-bottom:8px;">Carte MIDI Notes (27-81)</h3>';
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:3px;">';
+  for (let n = 27; n <= 81; n++) {
+    const inst = noteMap[n];
+    const gm = GM_DRUMS[n] || '';
+    if (inst) {
+      html += `<div style="padding:4px 6px;border-radius:4px;font-size:0.72em;background:var(--accent);color:#fff;cursor:pointer;line-height:1.3;" onclick="editInstrument(${inst.id})" title="${gm}">
+        <strong>${n}</strong> ${inst.name.substring(0,10)}${!inst.enabled ? ' [OFF]' : ''}</div>`;
+    } else if (gm) {
+      html += `<div style="padding:4px 6px;border-radius:4px;font-size:0.72em;background:var(--bg);color:var(--fg2);line-height:1.3;opacity:0.5;" title="${gm}">
+        <strong>${n}</strong> ${gm.substring(0,10)}</div>`;
+    } else {
+      html += `<div style="padding:4px 6px;border-radius:4px;font-size:0.72em;background:var(--bg);color:var(--fg2);line-height:1.3;opacity:0.3;">
+        <strong>${n}</strong></div>`;
+    }
+  }
+  html += '</div></div>';
+  container.innerHTML = html;
 }
 
 async function instrBulkOp(action) {

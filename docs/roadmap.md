@@ -218,6 +218,7 @@
 - [x] LED strips: compteur total LEDs dans le header
 - [x] Boucles: compteur notes dans la liste
 - [x] Piano: mode "Mes Instruments" (affiche uniquement les instruments configures)
+- [x] Note Map: creation batch de tous les instruments GM manquants en un clic
 
 ## Risques / dette technique
 - Couverture tests: script curl fonctionnel mais pas de CI automatise.

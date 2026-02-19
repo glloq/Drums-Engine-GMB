@@ -2219,7 +2219,12 @@ function renderNoteMap() {
   instruments.forEach(inst => { noteMap[inst.midiNote] = inst; });
   // GM drum range: 27-81
   const assignedCount = Object.keys(noteMap).length;
-  let html = '<div class="card"><h3 style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;"><span>Carte MIDI Notes (27-81)</span><span style="font-size:0.75em;font-weight:400;color:var(--fg2);">' + assignedCount + '/' + instruments.length + ' notes assignees</span></h3>';
+  const unassignedGm = [];
+  for (let n = 27; n <= 81; n++) {
+    if (!noteMap[n] && GM_DRUMS[n]) unassignedGm.push(n);
+  }
+  let html = '<div class="card"><h3 style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;"><span>Carte MIDI Notes (27-81)</span><div style="display:flex;gap:6px;align-items:center;"><span style="font-size:0.75em;font-weight:400;color:var(--fg2);">' + assignedCount + '/' + instruments.length + ' notes assignees</span>' +
+    (unassignedGm.length > 0 ? '<button class="btn btn-sm" style="background:var(--accent2);color:#fff;font-size:0.7em;" onclick="batchCreateFromNoteMap()">Creer ' + unassignedGm.length + ' manquants</button>' : '') + '</div></h3>';
   html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:3px;">';
   for (let n = 27; n <= 81; n++) {
     const inst = noteMap[n];
@@ -2237,6 +2242,38 @@ function renderNoteMap() {
   }
   html += '</div></div>';
   container.innerHTML = html;
+}
+
+async function batchCreateFromNoteMap() {
+  const noteMap = {};
+  instruments.forEach(inst => { noteMap[inst.midiNote] = true; });
+  const missing = [];
+  for (let n = 27; n <= 81; n++) {
+    if (!noteMap[n] && GM_DRUMS[n]) missing.push({note: n, name: GM_DRUMS[n]});
+  }
+  if (missing.length === 0) { toast('Toutes les notes GM sont deja assignees', 'success'); return; }
+  if (!confirm('Creer ' + missing.length + ' instruments GM manquants ?\n(Notes ' + missing[0].note + '-' + missing[missing.length-1].note + ')')) return;
+
+  const cymbals = [42,44,46,49,51,52,53,55,57,59,80,81];
+  const latin = [54,56,60,61,62,63,64,65,66,67,68,69,70,75,76,77,78,79];
+  let created = 0;
+  for (const m of missing) {
+    let cat = 'drums';
+    if (cymbals.includes(m.note)) cat = 'cymbals';
+    else if (latin.includes(m.note)) cat = 'latin';
+    const payload = {
+      name: m.name, midiNote: m.note, midiChannel: 10, category: cat,
+      enabled: true, retriggerMode: 0, actuatorIds: [255],
+      noteOnActions: [{actuatorId:255, commandType:0, valueSource:0, delayMs:0, durationMinMs:8, durationMaxMs:25, velocityCurve:0}],
+      noteOffActions: [], ccBindings: []
+    };
+    const res = await api('instruments', 'POST', payload);
+    if (res) created++;
+  }
+  await loadInstruments();
+  renderNoteMap();
+  toast(created + ' instruments GM crees', 'success');
+  markConfigDirty();
 }
 
 async function instrBulkOp(action) {

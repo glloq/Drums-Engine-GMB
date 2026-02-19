@@ -761,7 +761,7 @@ void WebServerManager::_handleValidateConfig(AsyncWebServerRequest* req) {
       const InstrumentConfig* instr = _instrMgr->getInstrument(i);
       if (!instr) continue;
       if (!instr->enabled) disabledInstr++;
-      if (instr->noteOnActionCount == 0) noActions++;
+      if (instr->noteOnCount == 0) noActions++;
       uint8_t ch = instr->midiChannel < 16 ? instr->midiChannel : 0;
       if (instr->midiNote < 128) noteCh[instr->midiNote][ch]++;
     }
@@ -798,10 +798,10 @@ void WebServerManager::_handleValidateConfig(AsyncWebServerRequest* req) {
       for (uint8_t i = 0; i < instrCount && !used; i++) {
         const InstrumentConfig* instr = _instrMgr->getInstrument(i);
         if (!instr) continue;
-        for (uint8_t j = 0; j < instr->noteOnActionCount && !used; j++) {
+        for (uint8_t j = 0; j < instr->noteOnCount && !used; j++) {
           if (instr->noteOnActions[j].actuator_id == actCfg.id) used = true;
         }
-        for (uint8_t j = 0; j < instr->noteOffActionCount && !used; j++) {
+        for (uint8_t j = 0; j < instr->noteOffCount && !used; j++) {
           if (instr->noteOffActions[j].actuator_id == actCfg.id) used = true;
         }
         for (uint8_t j = 0; j < instr->ccBindingCount && !used; j++) {

@@ -411,6 +411,7 @@ input[type=checkbox] { width: auto; }
           <label>Affichage</label>
           <select id="pianoLayout" onchange="renderPianoPads()">
             <option value="gm">GM Percussion (27-81)</option>
+            <option value="my">Mes Instruments</option>
             <option value="all">Toutes notes (0-127)</option>
           </select>
         </div>
@@ -4822,7 +4823,13 @@ function renderPianoPads() {
   });
 
   let notes = [];
-  if (layout === 'gm') {
+  if (layout === 'my') {
+    notes = instruments.filter(i => i.enabled !== false).map(i => i.midiNote).sort((a,b) => a-b);
+    if (notes.length === 0) {
+      grid.innerHTML = '<div class="hint">Aucun instrument configure. Creez des instruments d\'abord.</div>';
+      return;
+    }
+  } else if (layout === 'gm') {
     for (let n = 27; n <= 81; n++) notes.push(n);
   } else {
     for (let n = 0; n <= 127; n++) notes.push(n);
@@ -4831,8 +4838,13 @@ function renderPianoPads() {
   notes.forEach(n => {
     const pad = document.createElement('div');
     pad.className = 'piano-pad' + (pianoConfiguredNotes.has(n) ? ' configured' : '');
+    if (layout === 'my') pad.style.minWidth = '90px';
     pad.dataset.note = n;
-    const name = GM_DRUMS[n] || ('Note ' + n);
+    let name = GM_DRUMS[n] || ('Note ' + n);
+    if (layout === 'my') {
+      const inst = instruments.find(i => i.midiNote === n && i.enabled !== false);
+      if (inst) name = inst.name;
+    }
     pad.innerHTML = '<div class="pad-note">' + n + '</div><div class="pad-name">' + name + '</div>';
 
     pad.addEventListener('mousedown', (e) => { e.preventDefault(); pianoNoteOn(n, pad); });

@@ -217,6 +217,7 @@
 - [x] LED segments: apercu couleurs hit/idle avec swatches visuels + luminosite
 - [x] LED strips: compteur total LEDs dans le header
 - [x] Boucles: compteur notes dans la liste
+- [x] Piano: mode "Mes Instruments" (affiche uniquement les instruments configures)
 
 ## Risques / dette technique
 - Couverture tests: script curl fonctionnel mais pas de CI automatise.

@@ -708,3 +708,25 @@ void WebServerManager::_handleGetActiveNotes(AsyncWebServerRequest* req) {
   }
   _sendJson(req, 200, doc);
 }
+
+void WebServerManager::_handleFactoryReset(AsyncWebServerRequest* req) {
+  // Delete all configuration files
+  const char* files[] = {
+    CONFIG_FILE, ACTUATORS_FILE, INSTRUMENTS_FILE,
+    LEDS_FILE, THEMES_FILE, "/midi.json", "/loops.json",
+    "/error.log"
+  };
+  int deleted = 0;
+  for (const char* f : files) {
+    if (LittleFS.exists(f)) {
+      LittleFS.remove(f);
+      deleted++;
+    }
+  }
+  DBGF("[System] Factory reset: %d files deleted\n", deleted);
+  _sendError(req, 200, "Factory reset done, rebooting...");
+
+  // Delay then reboot
+  delay(500);
+  ESP.restart();
+}

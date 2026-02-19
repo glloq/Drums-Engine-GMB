@@ -107,6 +107,7 @@ private:
   void _handleGetAuthToken(AsyncWebServerRequest* req);
   void _handleGetMidiChannels(AsyncWebServerRequest* req);
   void _handleSetMidiChannels(AsyncWebServerRequest* req, uint8_t* data, size_t len);
+  void _handleFactoryReset(AsyncWebServerRequest* req);
 
   // LED Strips
   void _handleGetLedStrips(AsyncWebServerRequest* req);

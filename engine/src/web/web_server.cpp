@@ -296,6 +296,14 @@ void WebServerManager::_setupRoutes() {
   _server.on("/api/auth-token", HTTP_GET,
     [this](AsyncWebServerRequest* req) { _handleGetAuthToken(req); });
 
+  // --- Factory Reset ---
+  _server.on("/api/factory-reset", HTTP_POST,
+    [this](AsyncWebServerRequest* req) {
+      if (!_rateLimiter.checkRate(req)) return;
+      if (!_auth.checkAuth(req)) return;
+      _handleFactoryReset(req);
+    });
+
   // --- MIDI Channel Config ---
   _server.on("/api/midi/channels", HTTP_GET,
     [this](AsyncWebServerRequest* req) { _handleGetMidiChannels(req); });

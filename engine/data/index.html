@@ -869,6 +869,7 @@ input[type=checkbox] { width: auto; }
         <div class="transport">
           <button class="btn btn-success btn-sm" onclick="playCurrentLoop()">&#9654; Play</button>
           <button class="btn btn-danger btn-sm" onclick="stopLoop()">&#9632; Stop</button>
+          <button class="btn btn-secondary btn-sm" onclick="tapTempo()" title="Cliquez en rythme pour definir le BPM">Tap</button>
           <div class="bpm-display"><span id="loopBpmDisplay">120</span> BPM</div>
           <input type="range" id="loopBpmSlider" min="40" max="300" value="120"
                  oninput="updateLoopBpm(this.value)" style="flex:1;">
@@ -884,6 +885,14 @@ input[type=checkbox] { width: auto; }
                  oninput="document.getElementById('loopVelVal').textContent=this.value">
           <span class="loop-vel-label" id="loopVelVal">100</span>
           <button class="btn btn-sm btn-secondary" onclick="clearCurrentLoopEvents()" title="Effacer toutes les notes">Effacer</button>
+          <select id="loopPreset" onchange="applyLoopPreset(this.value);this.value=''" style="width:auto;font-size:0.8em;">
+            <option value="">Presets...</option>
+            <option value="rock_basic">Rock basique</option>
+            <option value="rock_ride">Rock + Ride</option>
+            <option value="funk">Funk</option>
+            <option value="bossa">Bossa Nova</option>
+            <option value="hats_8th">Hi-Hat 1/8</option>
+          </select>
           <span id="loopEventCount" style="font-size:0.75em;color:var(--fg2);margin-left:auto;"></span>
         </div>
         <div class="loop-grid" id="loopGrid"></div>
@@ -954,6 +963,7 @@ input[type=checkbox] { width: auto; }
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn btn-primary btn-sm" onclick="saveAll()">Sauvegarder config</button>
         <button class="btn btn-secondary btn-sm" onclick="scanI2C()">Scanner I2C</button>
+        <button class="btn btn-danger btn-sm" onclick="confirmFactoryReset()" title="Supprime toute la configuration et redemarre">Reset usine</button>
       </div>
       <div id="i2cInfo" style="margin-top:8px;font-size:0.85em;color:var(--fg2);"></div>
     </div>
@@ -3091,11 +3101,98 @@ async function clearCurrentLoopEvents() {
   toast('Notes effacees', 'success');
 }
 
+// Loop pattern presets — events defined in beats (0-indexed), auto-mapped to ticks
+// GM Percussion: 36=Kick, 38=Snare, 42=HiHat Closed, 46=HiHat Open, 51=Ride
+const loopPresets = {
+  rock_basic: {
+    // Kick on 1,3 / Snare on 2,4 / HiHat 8ths
+    events: function(ppq) {
+      const e = [];
+      for (let b = 0; b < 4; b++) { e.push([b * ppq, 42, 90, 10]); e.push([b * ppq + ppq/2, 42, 70, 10]); }
+      e.push([0, 36, 110, 10]); e.push([2 * ppq, 36, 100, 10]);
+      e.push([1 * ppq, 38, 100, 10]); e.push([3 * ppq, 38, 100, 10]);
+      return e;
+    }
+  },
+  rock_ride: {
+    events: function(ppq) {
+      const e = [];
+      for (let b = 0; b < 4; b++) { e.push([b * ppq, 51, 85, 10]); e.push([b * ppq + ppq/2, 51, 65, 10]); }
+      e.push([0, 36, 110, 10]); e.push([2 * ppq, 36, 100, 10]);
+      e.push([1 * ppq, 38, 100, 10]); e.push([3 * ppq, 38, 100, 10]);
+      return e;
+    }
+  },
+  funk: {
+    events: function(ppq) {
+      const e = [];
+      for (let b = 0; b < 4; b++) { e.push([b * ppq, 42, 90, 10]); e.push([b * ppq + ppq/2, 42, 70, 10]); }
+      e.push([0, 36, 110, 10]); e.push([ppq + ppq/2, 36, 90, 10]); e.push([2 * ppq + ppq/2, 36, 85, 10]);
+      e.push([1 * ppq, 38, 100, 10]); e.push([3 * ppq, 38, 100, 10]);
+      e.push([3 * ppq + ppq/2, 46, 80, 10]); // open hat before beat 1
+      return e;
+    }
+  },
+  bossa: {
+    events: function(ppq) {
+      const e = [];
+      // Cross-stick pattern
+      e.push([0, 36, 90, 10]); e.push([ppq + ppq/2, 36, 80, 10]); e.push([3 * ppq, 36, 85, 10]);
+      e.push([ppq, 38, 70, 10]); e.push([2 * ppq + ppq/2, 38, 65, 10]);
+      for (let b = 0; b < 4; b++) { e.push([b * ppq, 42, 75, 10]); e.push([b * ppq + ppq/2, 42, 55, 10]); }
+      return e;
+    }
+  },
+  hats_8th: {
+    events: function(ppq) {
+      const e = [];
+      for (let b = 0; b < 4; b++) { e.push([b * ppq, 42, 100, 10]); e.push([b * ppq + ppq/2, 42, 70, 10]); }
+      return e;
+    }
+  }
+};
+
+async function applyLoopPreset(presetId) {
+  if (!presetId || currentLoopIdx < 0 || !loops[currentLoopIdx]) return;
+  const preset = loopPresets[presetId];
+  if (!preset) return;
+  const loop = loops[currentLoopIdx];
+  const ppq = loop.ppq || 96;
+  const newEvents = preset.events(ppq);
+  // Merge with existing events (don't overwrite)
+  loop.events = (loop.events || []).concat(newEvents);
+  await api('loop?id=' + currentLoopIdx, 'PUT', loop);
+  renderCurrentLoopGrid();
+  toast('Preset applique (' + newEvents.length + ' notes)', 'success');
+}
+
 function updateLoopBpm(val) {
   document.getElementById('loopBpmDisplay').textContent = val;
   if (currentLoopIdx >= 0 && loops[currentLoopIdx]) {
     loops[currentLoopIdx].bpm = parseInt(val);
     api('loop?id=' + currentLoopIdx, 'PUT', loops[currentLoopIdx]);
+  }
+}
+
+// Tap Tempo
+let tapTempoTimes = [];
+function tapTempo() {
+  const now = performance.now();
+  tapTempoTimes.push(now);
+  // Keep only last 8 taps, discard taps older than 3s
+  tapTempoTimes = tapTempoTimes.filter(t => now - t < 3000);
+  if (tapTempoTimes.length < 2) return;
+  // Only use last 8
+  if (tapTempoTimes.length > 8) tapTempoTimes = tapTempoTimes.slice(-8);
+  let totalInterval = 0;
+  for (let i = 1; i < tapTempoTimes.length; i++) {
+    totalInterval += tapTempoTimes[i] - tapTempoTimes[i - 1];
+  }
+  const avgMs = totalInterval / (tapTempoTimes.length - 1);
+  const bpm = Math.round(60000 / avgMs);
+  if (bpm >= 40 && bpm <= 300) {
+    document.getElementById('loopBpmSlider').value = bpm;
+    updateLoopBpm(bpm);
   }
 }
 
@@ -3319,6 +3416,15 @@ async function scanI2C() {
 async function saveAll() {
   await api('save', 'POST');
   toast('Configuration sauvegardee', 'success');
+}
+
+function confirmFactoryReset() {
+  if (!confirm('ATTENTION: Ceci va supprimer TOUTE la configuration (actionneurs, instruments, LEDs, boucles, MIDI) et redemarrer l\'ESP32.\n\nExportez votre config d\'abord si necessaire.\n\nContinuer ?')) return;
+  if (!confirm('Confirmer le reset usine ? Cette action est irreversible.')) return;
+  api('factory-reset', 'POST').then(() => {
+    toast('Reset usine en cours... L\'appareil redemarre.', 'warn');
+    setTimeout(() => location.reload(), 5000);
+  });
 }
 
 async function updateGlobalVolume(val) {

@@ -42,6 +42,7 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .tab { padding: 10px 20px; cursor: pointer; color: var(--fg2); border-bottom: 2px solid transparent; transition: all 0.2s; font-size: 0.95em; white-space: nowrap; flex-shrink: 0; }
 .tab:hover { color: var(--fg); background: rgba(255,255,255,0.05); }
 .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-badge { font-size: 0.7em; background: var(--accent2); color: #fff; border-radius: 8px; padding: 1px 5px; margin-left: 2px; vertical-align: top; }
 
 .content { padding: 16px; }
 .panel { display: none; } .panel.active { display: block; }
@@ -257,8 +258,8 @@ input[type=checkbox] { width: auto; }
 </div>
 
 <div class="tabs">
-  <div class="tab active" data-tab="actuators">Actionneurs</div>
-  <div class="tab" data-tab="instruments">Instruments</div>
+  <div class="tab active" data-tab="actuators">Actionneurs <span id="tabBadgeAct" class="tab-badge"></span></div>
+  <div class="tab" data-tab="instruments">Instruments <span id="tabBadgeInstr" class="tab-badge"></span></div>
   <div class="tab" data-tab="leds">LEDs</div>
   <div class="tab" data-tab="mappings">Pipeline</div>
   <div class="tab" data-tab="piano">Piano</div>
@@ -271,8 +272,14 @@ input[type=checkbox] { width: auto; }
   <div class="panel active" id="tab-actuators">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
       <h2>Actionneurs (<span id="actCount">0</span>)</h2>
-      <div style="display:flex;gap:8px;align-items:center;">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <input type="text" id="actSearch" placeholder="Filtrer..." oninput="filterList('actuatorList',this.value)" style="width:120px;padding:6px 10px;font-size:0.85em;">
+        <select id="actSort" style="padding:6px;font-size:0.85em;" onchange="sortActuators(this.value)">
+          <option value="">Trier...</option>
+          <option value="name">Nom</option>
+          <option value="id">ID</option>
+          <option value="type">Type</option>
+        </select>
         <select style="padding:6px;font-size:0.85em;" onchange="actBulkOp(this.value);this.value='';">
           <option value="">Actions...</option>
           <option value="enableAll">Activer tous</option>
@@ -1677,6 +1684,8 @@ function applyActuatorPreset() {
 async function loadActuators() {
   const data = await api('actuators');
   if (data) { actuators = data; renderActuators(); }
+  const b = document.getElementById('tabBadgeAct');
+  if (b) b.textContent = actuators.length || '';
 }
 
 function renderActuators() {
@@ -1718,7 +1727,7 @@ function renderActuators() {
     const tIcon = typeIcons[a.type] || '?';
     const tColor = typeColors[a.type] || 'var(--fg2)';
     return `
-    <div class="list-item" style="border-left-color:${a.active?'var(--success)':'var(--accent2)'}">
+    <div class="list-item" style="border-left-color:${a.active?'var(--success)':'var(--accent2)'}" ondblclick="editActuator(${a.id})" title="Double-clic pour modifier">
       <div class="item-title">
         <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:${tColor};color:#000;font-weight:700;font-size:0.65em;margin-right:4px;">${tIcon}</span>
         <strong>${a.name}</strong>
@@ -1958,6 +1967,16 @@ async function testActuator(id) {
   toast('Test envoye', 'success');
 }
 
+function sortActuators(key) {
+  if (!key) return;
+  const cmp = {
+    name: (a,b) => (a.name||'').localeCompare(b.name||''),
+    id: (a,b) => (a.id||0) - (b.id||0),
+    type: (a,b) => (a.type||0) - (b.type||0)
+  };
+  if (cmp[key]) { actuators.sort(cmp[key]); renderActuators(); }
+}
+
 async function actBulkOp(action) {
   if (!action) return;
   if (action === 'stopAll') {
@@ -2148,6 +2167,8 @@ function populateHiHatNoteSelects() {
 async function loadInstruments() {
   const data = await api('instruments');
   if (data) { instruments = data; renderInstruments(); }
+  const b = document.getElementById('tabBadgeInstr');
+  if (b) b.textContent = instruments.length || '';
 }
 
 function quickCreateInstrument(note, gmName) {
@@ -2182,7 +2203,8 @@ function renderNoteMap() {
   const noteMap = {};
   instruments.forEach(inst => { noteMap[inst.midiNote] = inst; });
   // GM drum range: 27-81
-  let html = '<div class="card"><h3 style="margin-bottom:8px;">Carte MIDI Notes (27-81)</h3>';
+  const assignedCount = Object.keys(noteMap).length;
+  let html = '<div class="card"><h3 style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;"><span>Carte MIDI Notes (27-81)</span><span style="font-size:0.75em;font-weight:400;color:var(--fg2);">' + assignedCount + '/' + instruments.length + ' notes assignees</span></h3>';
   html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:3px;">';
   for (let n = 27; n <= 81; n++) {
     const inst = noteMap[n];
@@ -2262,7 +2284,7 @@ function renderInstruments() {
     const statusColor = !inst.enabled ? 'var(--fg2)' : (!hasActuator || onCount === 0) ? 'var(--warn)' : 'var(--success)';
     const catColor = catColors[inst.category] || 'var(--accent2)';
     return `
-    <div class="list-item" style="border-left-color:${catColor};">
+    <div class="list-item" style="border-left-color:${catColor};" ondblclick="editInstrument(${inst.id})" title="Double-clic pour modifier">
       <div class="item-title">
         <span style="color:${statusColor};font-size:0.9em;" title="${isComplete ? 'Complet' : !inst.enabled ? 'Desactive' : !hasActuator ? 'Sans actionneur' : 'Sans actions NoteOn'}">${statusIcon}</span>
         <strong>${inst.name}</strong>
@@ -3659,7 +3681,7 @@ function updateSettingsInfo(data) {
       m(data.firmware_version||'--', 'Firmware') +
       m(data.chip_model||'ESP32', 'Chip') +
       m((data.cpu_freq_mhz||240)+' MHz', 'CPU') +
-      m(((data.free_heap||0)/1024).toFixed(0)+' KB', 'RAM libre') +
+      m(((data.free_heap||0)/1024).toFixed(0)+' KB', 'RAM libre (' + Math.round((data.free_heap||0)/3200) + '%)') +
       m(((data.min_free_heap||0)/1024).toFixed(0)+' KB', 'RAM min') +
       m(((data.flash_size||0)/1048576).toFixed(1)+' MB', 'Flash') +
       m(uptimeH+'h'+uptimeM+'m', 'Uptime') +
@@ -3753,6 +3775,10 @@ function markConfigClean() {
   const dot = document.getElementById('saveDot');
   if (dot) dot.style.display = 'none';
 }
+
+window.addEventListener('beforeunload', (e) => {
+  if (configDirty) { e.preventDefault(); e.returnValue = ''; }
+});
 
 async function saveAll() {
   await api('save', 'POST');

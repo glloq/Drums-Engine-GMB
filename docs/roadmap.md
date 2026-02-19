@@ -204,6 +204,12 @@
 - [x] Diagnostics systeme: verification config (actionneurs inutilises, notes dupliquees, instruments incomplets)
 - [x] Indicateurs completude instrument (icone statut vert/orange/rouge)
 - [x] Kits rapides: creation en un clic de kits GM drums (Minimal/Standard/Complet)
+- [x] Tri actionneurs (nom/ID/type)
+- [x] Double-clic pour modifier actionneurs et instruments
+- [x] Avertissement perte de modifications non sauvegardees (beforeunload)
+- [x] Compteurs dans onglets (badges actionneurs/instruments)
+- [x] Compteur notes assignees dans la carte MIDI
+- [x] Pourcentage RAM utilise dans info systeme
 
 ## Risques / dette technique
 - Couverture tests: script curl fonctionnel mais pas de CI automatise.

@@ -139,7 +139,7 @@
 - [x] Guide de demarrage: instructions pour les nouveaux utilisateurs
 - [x] Fix TIME_RAMP: protection division par zero quand la duree est 0
 
-## Phase 13 — Editeur boucles, routage MIDI et calibration avancee
+## Phase 13 — Editeur boucles, routage MIDI et calibration avancee (52 features)
 **Statut: implementee**
 - [x] Loop editor: separateurs visuels mesures/temps (bordures accent, fonds alternes)
 - [x] Loop editor: visualisation velocity (opacite proportionnelle, tooltip)
@@ -187,6 +187,12 @@
 - [x] Note Map: detection automatique categorie (drums/cymbals/latin)
 - [x] Actionneurs: icones type (S/M/P/O) avec couleurs distinctes
 - [x] Loop grid: compteur notes par instrument dans les labels
+- [x] Indicateur modifications non sauvegardees (point orange dans l'en-tete)
+- [x] Raccourcis clavier globaux: Ctrl+S (sauvegarder), Escape (fermer modal)
+- [x] Clic sur backdrop pour fermer les modals
+- [x] Detection perte de connexion ESP32 + notification reconnexion
+- [x] API silencieuse pour polling (suppression toast spam)
+- [x] Servo quick positions: Min/Centre/Max dans calibration
 
 ## Risques / dette technique
 - Couverture tests: script curl fonctionnel mais pas de CI automatise.

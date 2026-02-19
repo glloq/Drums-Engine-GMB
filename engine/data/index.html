@@ -2343,9 +2343,14 @@ function actuatorOptions(selected) {
 function actionEditorRow(step, idx, type) {
   const act = actuators.find(a => a.id === step.actuatorId);
   const isSolenoid = act && act.type === 1;
+  const list = type === 'on' ? editNoteOnActions : editNoteOffActions;
   return `<div class="action-editor">
     <h4>Action ${idx+1}
-      <button class="btn btn-sm btn-danger" onclick="removeActionStep('${type}', ${idx})">X</button>
+      <span>
+        ${idx > 0 ? `<button class="btn btn-sm btn-secondary" onclick="moveActionStep('${type}',${idx},-1)" title="Monter">&uarr;</button>` : ''}
+        ${idx < list.length - 1 ? `<button class="btn btn-sm btn-secondary" onclick="moveActionStep('${type}',${idx},1)" title="Descendre">&darr;</button>` : ''}
+        <button class="btn btn-sm btn-danger" onclick="removeActionStep('${type}', ${idx})">X</button>
+      </span>
     </h4>
     <div class="editor-grid">
       <div><label>Actuateur</label><select class="small-select" onchange="updateActionField('${type}',${idx},'actuatorId',this.value);renderActionEditors()">${actuatorOptions(step.actuatorId)}</select></div>
@@ -2396,6 +2401,13 @@ function addActionStep(type) {
 function removeActionStep(type, idx) {
   if (type === 'on') editNoteOnActions.splice(idx, 1);
   else editNoteOffActions.splice(idx, 1);
+  renderActionEditors();
+}
+function moveActionStep(type, idx, dir) {
+  const list = type === 'on' ? editNoteOnActions : editNoteOffActions;
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= list.length) return;
+  [list[idx], list[newIdx]] = [list[newIdx], list[idx]];
   renderActionEditors();
 }
 function updateActionField(type, idx, field, value) {

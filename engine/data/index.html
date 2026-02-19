@@ -260,6 +260,12 @@ input[type=checkbox] { width: auto; }
       <h2>Actionneurs (<span id="actCount">0</span>)</h2>
       <div style="display:flex;gap:8px;align-items:center;">
         <input type="text" id="actSearch" placeholder="Filtrer..." oninput="filterList('actuatorList',this.value)" style="width:120px;padding:6px 10px;font-size:0.85em;">
+        <select style="padding:6px;font-size:0.85em;" onchange="actBulkOp(this.value);this.value='';">
+          <option value="">Actions...</option>
+          <option value="enableAll">Activer tous</option>
+          <option value="disableAll">Desactiver tous</option>
+          <option value="stopAll">Stop tous</option>
+        </select>
         <button class="btn btn-primary" onclick="showAddActuator()">+ Ajouter</button>
       </div>
     </div>
@@ -352,8 +358,15 @@ input[type=checkbox] { width: auto; }
     <div class="card">
       <h3>Piano Virtuel MIDI <span class="badge" id="pianoNoteBadge">GM Percussion</span>
         <span class="badge badge-green" id="pianoLiveBadge" style="display:none;">LIVE</span></h3>
-      <p class="hint" style="margin-bottom:12px;">Cliquez ou utilisez le clavier (A-P = notes 35-53, 1-8 = notes 27-34). Les pads verts = instruments configures.
-        <label style="margin-left:12px;cursor:pointer;"><input type="checkbox" id="pianoLiveToggle" onchange="togglePianoLive(this.checked)"> Temps reel</label></p>
+      <p class="hint" style="margin-bottom:12px;">Cliquez ou jouez sur le clavier. Les pads verts = instruments configures.
+        <label style="margin-left:12px;cursor:pointer;"><input type="checkbox" id="pianoLiveToggle" onchange="togglePianoLive(this.checked)"> Temps reel</label>
+        <button class="btn btn-sm btn-secondary" style="margin-left:8px;padding:2px 8px;font-size:0.75em;" onclick="document.getElementById('pianoHelp').style.display=document.getElementById('pianoHelp').style.display==='none'?'block':'none'">?</button></p>
+      <div id="pianoHelp" style="display:none;background:var(--bg);border-radius:var(--radius);padding:10px;margin-bottom:12px;font-size:0.8em;color:var(--fg2);line-height:1.8;">
+        <strong>Raccourcis clavier:</strong><br>
+        <code>A Z E R T Y U I O P</code> → BD, Snare, E.Snare, Lo Tom, Closed HH, Hi Tom, Lo Tom, Lo-Mid Tom, Hi-Mid Tom, Crash 1<br>
+        <code>Q S D F G H J K L</code> → Acoustic BD, Side Stick, Hand Clap, Pedal HH, Open HH, High Tom, Ride 1, Chinese Cym, Ride Bell<br>
+        <code>1 2 3 4 5 6 7 8</code> → High Q, Slap, Scratch Push/Pull, Sticks, Square Click, Metro Click, Metro Bell
+      </div>
       <div class="form-row" style="margin-bottom:12px;">
         <div class="form-group" style="max-width:120px;">
           <label>Velocity</label>
@@ -1876,6 +1889,26 @@ async function duplicateActuator(id) {
 async function testActuator(id) {
   await api('test/actuator', 'POST', {id: id, value: 80});
   toast('Test envoye', 'success');
+}
+
+async function actBulkOp(action) {
+  if (!action) return;
+  if (action === 'stopAll') {
+    for (const a of actuators) {
+      api('test/actuator', 'POST', {id: a.id, value: 0});
+    }
+    toast('STOP ALL - Tous arretes', 'warn');
+    return;
+  }
+  const enabled = action === 'enableAll';
+  let ok = 0;
+  for (const a of actuators) {
+    const cfg = Object.assign({}, a, {enabled});
+    const r = await api('actuator?id=' + a.id, 'PUT', cfg);
+    if (r) ok++;
+  }
+  toast((enabled ? 'Actives' : 'Desactives') + ': ' + ok + '/' + actuators.length, 'success');
+  await loadActuators();
 }
 
 // ====================================================================

@@ -154,6 +154,14 @@
 - [x] Calibration: affichage des actionneurs lies a chaque instrument
 - [x] LED segments: apercu couleurs temps reel dans l'editeur (hit/idle/luminosite)
 - [x] Status API enrichi: `loop_tick`, `loop_index`, `midi_channel_mask`
+- [x] MIDI Learn: assigner une note en jouant sur le controleur MIDI (via WebSocket)
+- [x] Carte MIDI Note Map: vue d'ensemble des 55 notes GM avec assignation couleur
+- [x] Affichage "utilise par" sur chaque actionneur (instrument reverse-lookup)
+- [x] Actions groupees instruments: activer/desactiver/tester tous
+- [x] Reordonnancement actions NoteOn/NoteOff (fleches haut/bas)
+- [x] Mobile responsive: taille tactile, modals scroll, header compact
+- [x] Derniere note MIDI recue dans l'en-tete (indicateur 2s)
+- [x] Storage generic: `saveJsonFile`/`loadJsonFile` pour configs simples
 
 ## Risques / dette technique
 - Couverture tests: script curl fonctionnel mais pas de CI automatise.

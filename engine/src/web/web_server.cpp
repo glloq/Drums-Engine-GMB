@@ -50,10 +50,10 @@ void WebServerManager::_broadcastNoteChanges() {
     bool wasActive = _wsNoteCache[i] > 0;
     bool isActive = current[i] > 0;
     if (wasActive != isActive) {
-      // Send individual note change via WebSocket
-      char buf[64];
-      snprintf(buf, sizeof(buf), "{\"type\":\"midi_note\",\"note\":%d,\"on\":%s}",
-               i, isActive ? "true" : "false");
+      // Send individual note change via WebSocket (includes velocity)
+      char buf[80];
+      snprintf(buf, sizeof(buf), "{\"type\":\"midi_note\",\"note\":%d,\"on\":%s,\"vel\":%d}",
+               i, isActive ? "true" : "false", current[i]);
       _ws.textAll(buf);
     }
   }

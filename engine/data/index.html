@@ -11,6 +11,18 @@
   --accent2: #533483; --success: #4caf50; --warn: #ff9800;
   --radius: 8px; --shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
+[data-theme="light"] {
+  --bg: #f0f2f5; --bg2: #ffffff; --bg3: #e3e8ef;
+  --fg: #1a1a2e; --fg2: #555570; --accent: #d63050;
+  --accent2: #8e6caf; --success: #388e3c; --warn: #f57c00;
+  --shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+[data-theme="light"] .tabs { border-bottom-color: #ccc; }
+[data-theme="light"] input, [data-theme="light"] select { border-color: #ccc; }
+[data-theme="light"] .btn-gear { border-color: #bbb; }
+[data-theme="light"] .btn-secondary { background: #e3e8ef; }
+[data-theme="light"] .btn-secondary:hover { background: #d0d8e4; }
+[data-theme="light"] .modal-overlay { background: rgba(0,0,0,0.3); }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--fg); min-height: 100vh; }
 
@@ -239,6 +251,7 @@ input[type=checkbox] { width: auto; }
       <span><span class="dot" id="wifiDot"></span><span id="wifiStatus">--</span></span>
       <span><span class="dot" id="midiDot"></span><span id="midiStatus">--</span><span class="midi-rx" id="midiRxDot" title="MIDI RX"></span><span id="lastNoteDisplay" style="font-size:0.85em;color:var(--accent);margin-left:4px;min-width:20px;"></span></span>
     </div>
+    <button class="btn-gear" onclick="toggleTheme()" title="Changer de theme" id="themeBtn" style="font-size:1em;">&#9790;</button>
     <button class="btn-gear" onclick="showModal('modalSettings')" title="Reglages">&#9881;</button>
   </div>
 </div>
@@ -4586,11 +4599,13 @@ function logMidiEvent(msg) {
   const noteName = GM_DRUMS[msg.note] || ('Note ' + msg.note);
   const color = msg.on ? 'var(--success)' : 'var(--fg2)';
   const label = msg.on ? 'ON ' : 'OFF';
+  const vel = msg.vel !== undefined ? msg.vel : '';
   const line = document.createElement('div');
   line.innerHTML = '<span style="color:var(--fg2);">' + ts + '</span> ' +
     '<span style="color:' + color + ';font-weight:600;">' + label + '</span> ' +
     '<span style="color:var(--accent);">' + msg.note + '</span> ' +
-    '<span style="color:var(--fg2);">' + noteName + '</span>';
+    '<span style="color:var(--fg2);">' + noteName + '</span>' +
+    (msg.on && vel ? ' <span style="color:var(--accent2);">vel:' + vel + '</span>' : '');
   log.appendChild(line);
   // Keep only last 100 entries
   while (log.children.length > 100) log.removeChild(log.firstChild);
@@ -4831,6 +4846,25 @@ async function midiPanic() {
   }
   toast('MIDI Panic - Notes et actionneurs arretes', 'warn');
 }
+
+// Theme toggle
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme');
+  const next = current === 'light' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', next === 'dark' ? '' : next);
+  if (next === 'dark') document.documentElement.removeAttribute('data-theme');
+  localStorage.setItem('theme', next);
+  document.getElementById('themeBtn').innerHTML = next === 'light' ? '&#9728;' : '&#9790;';
+}
+// Restore theme from localStorage (runs at page load)
+document.addEventListener('DOMContentLoaded', function() {
+  const t = localStorage.getItem('theme');
+  if (t === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+    const btn = document.getElementById('themeBtn');
+    if (btn) btn.innerHTML = '&#9728;';
+  }
+});
 
 window.addEventListener('load', init);
 </script>

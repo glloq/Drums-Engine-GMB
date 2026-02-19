@@ -1026,8 +1026,10 @@ input[type=checkbox] { width: auto; }
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn btn-primary btn-sm" onclick="saveAll()">Sauvegarder config</button>
         <button class="btn btn-secondary btn-sm" onclick="scanI2C()">Scanner I2C</button>
+        <button class="btn btn-sm" style="background:var(--accent2);color:#fff;" onclick="runDiagnostics()">Diagnostics</button>
         <button class="btn btn-danger btn-sm" onclick="confirmFactoryReset()" title="Supprime toute la configuration et redemarre">Reset usine</button>
       </div>
+      <div id="diagResults" style="display:none;margin-top:10px;font-size:0.85em;background:var(--bg);border-radius:var(--radius);padding:10px;max-height:300px;overflow-y:auto;"></div>
       <div id="i2cInfo" style="margin-top:8px;font-size:0.85em;color:var(--fg2);"></div>
     </div>
 
@@ -2235,7 +2237,12 @@ function renderInstruments() {
   const el = document.getElementById('instrumentList');
   document.getElementById('instrCount').textContent = instruments.length;
   if (instruments.length === 0) {
-    el.innerHTML = '<div class="empty-state"><p>Aucun instrument configure</p><p>Cliquez "+ Ajouter" pour commencer</p></div>';
+    el.innerHTML = '<div class="empty-state"><p>Aucun instrument configure</p><p>Cliquez "+ Ajouter" ou utilisez un kit rapide:</p>' +
+      '<div style="display:flex;gap:6px;justify-content:center;margin-top:8px;flex-wrap:wrap;">' +
+      '<button class="btn btn-sm btn-primary" onclick="quickStartKit(\'minimal\')">Kit Minimal (3)</button>' +
+      '<button class="btn btn-sm btn-primary" onclick="quickStartKit(\'standard\')">Kit Standard (6)</button>' +
+      '<button class="btn btn-sm btn-primary" onclick="quickStartKit(\'full\')">Kit Complet (10)</button>' +
+      '</div></div>';
     return;
   }
   const catColors = {drums:'#e94560', cymbals:'#ffd700', latin:'#4caf50', other:'#64b5f6'};
@@ -2249,10 +2256,15 @@ function renderInstruments() {
     const onCount = (inst.noteOnActions || []).length;
     const offCount = (inst.noteOffActions || []).length;
     const ccCount = (inst.ccBindings || []).length;
+    const hasActuator = (inst.actuatorIds || []).filter(id => id !== 255).length > 0;
+    const isComplete = inst.enabled && onCount > 0 && hasActuator;
+    const statusIcon = !inst.enabled ? '&#9940;' : (!hasActuator ? '&#9888;' : (onCount === 0 ? '&#9888;' : '&#10003;'));
+    const statusColor = !inst.enabled ? 'var(--fg2)' : (!hasActuator || onCount === 0) ? 'var(--warn)' : 'var(--success)';
     const catColor = catColors[inst.category] || 'var(--accent2)';
     return `
     <div class="list-item" style="border-left-color:${catColor};">
       <div class="item-title">
+        <span style="color:${statusColor};font-size:0.9em;" title="${isComplete ? 'Complet' : !inst.enabled ? 'Desactive' : !hasActuator ? 'Sans actionneur' : 'Sans actions NoteOn'}">${statusIcon}</span>
         <strong>${inst.name}</strong>
         <span class="badge" style="background:${catColor};color:#000;">${inst.category}</span>
         <span class="badge">${mNote}${noteName ? ' · ' + noteName : ''}</span>
@@ -2389,6 +2401,61 @@ async function showCreateInstrumentFromTemplate() {
   if (!created) return;
   await loadInstruments();
   toast('Instrument créé depuis template', 'success');
+}
+
+const quickKits = {
+  minimal: [
+    {name:'Kick', midiNote:36, category:'drums'},
+    {name:'Snare', midiNote:38, category:'drums'},
+    {name:'Hi-Hat Closed', midiNote:42, category:'cymbals'}
+  ],
+  standard: [
+    {name:'Kick', midiNote:36, category:'drums'},
+    {name:'Snare', midiNote:38, category:'drums'},
+    {name:'Hi-Hat Closed', midiNote:42, category:'cymbals'},
+    {name:'Hi-Hat Open', midiNote:46, category:'cymbals'},
+    {name:'Tom High', midiNote:48, category:'drums'},
+    {name:'Crash', midiNote:49, category:'cymbals'}
+  ],
+  full: [
+    {name:'Kick', midiNote:36, category:'drums'},
+    {name:'Snare', midiNote:38, category:'drums'},
+    {name:'Side Stick', midiNote:37, category:'drums'},
+    {name:'Hi-Hat Closed', midiNote:42, category:'cymbals'},
+    {name:'Hi-Hat Open', midiNote:46, category:'cymbals'},
+    {name:'Tom High', midiNote:48, category:'drums'},
+    {name:'Tom Mid', midiNote:47, category:'drums'},
+    {name:'Tom Low', midiNote:45, category:'drums'},
+    {name:'Crash', midiNote:49, category:'cymbals'},
+    {name:'Ride', midiNote:51, category:'cymbals'}
+  ]
+};
+
+async function quickStartKit(kitId) {
+  const kit = quickKits[kitId];
+  if (!kit) return;
+  if (!confirm('Creer ' + kit.length + ' instruments GM drums ?\nVous pourrez ensuite assigner les actionneurs.')) return;
+
+  let created = 0;
+  for (const def of kit) {
+    const payload = {
+      name: def.name,
+      midiNote: def.midiNote,
+      midiChannel: 10,
+      category: def.category,
+      enabled: true,
+      retriggerMode: 0,
+      actuatorIds: [255],
+      noteOnActions: [{actuatorId:255, commandType:0, valueSource:0, delayMs:0, durationMinMs:8, durationMaxMs:25, velocityCurve:0}],
+      noteOffActions: [],
+      ccBindings: []
+    };
+    const res = await api('instruments', 'POST', payload);
+    if (res) created++;
+  }
+  await loadInstruments();
+  toast(created + ' instruments crees. Assignez les actionneurs.', 'success');
+  markConfigDirty();
 }
 
 function showAddInstrument(template=null) {
@@ -3700,6 +3767,81 @@ function confirmFactoryReset() {
     toast('Reset usine en cours... L\'appareil redemarre.', 'warn');
     setTimeout(() => location.reload(), 5000);
   });
+}
+
+function runDiagnostics() {
+  const issues = [];
+  const warns = [];
+  const ok = [];
+
+  // Check actuators
+  if (actuators.length === 0) {
+    issues.push('Aucun actionneur configure');
+  } else {
+    const disabled = actuators.filter(a => !a.enabled);
+    if (disabled.length > 0) warns.push(disabled.length + ' actionneur(s) desactive(s): ' + disabled.map(a => a.name).join(', '));
+
+    const usedIds = new Set();
+    instruments.forEach(inst => {
+      (inst.actuatorIds || []).filter(id => id !== 255).forEach(id => usedIds.add(id));
+      (inst.noteOnActions || []).forEach(a => { if (a.actuatorId !== undefined) usedIds.add(a.actuatorId); });
+      (inst.noteOffActions || []).forEach(a => { if (a.actuatorId !== undefined) usedIds.add(a.actuatorId); });
+      (inst.ccBindings || []).forEach(b => { if (b.actuatorId !== undefined) usedIds.add(b.actuatorId); });
+    });
+    const unused = actuators.filter(a => !usedIds.has(a.id));
+    if (unused.length > 0) warns.push(unused.length + ' actionneur(s) inutilise(s): ' + unused.map(a => a.name).join(', '));
+    ok.push(actuators.length + ' actionneur(s) configure(s)');
+  }
+
+  // Check instruments
+  if (instruments.length === 0) {
+    issues.push('Aucun instrument configure');
+  } else {
+    const noActions = instruments.filter(i => (i.noteOnActions || []).length === 0);
+    if (noActions.length > 0) warns.push(noActions.length + ' instrument(s) sans actions NoteOn: ' + noActions.map(i => i.name).join(', '));
+
+    const noActuator = instruments.filter(i => {
+      const ids = (i.actuatorIds || []).filter(id => id !== 255);
+      return ids.length === 0;
+    });
+    if (noActuator.length > 0) warns.push(noActuator.length + ' instrument(s) sans actionneur: ' + noActuator.map(i => i.name).join(', '));
+
+    // Duplicate MIDI notes
+    const noteMap = {};
+    instruments.forEach(i => {
+      const k = i.midiNote + '-' + (i.midiChannel || 10);
+      (noteMap[k] = noteMap[k] || []).push(i.name);
+    });
+    const dupes = Object.entries(noteMap).filter(([,v]) => v.length > 1);
+    if (dupes.length > 0) {
+      dupes.forEach(([k, names]) => {
+        warns.push('Note MIDI ' + k.split('-')[0] + ' (ch.' + k.split('-')[1] + ') partagee: ' + names.join(', '));
+      });
+    }
+
+    const offInstr = instruments.filter(i => !i.enabled);
+    if (offInstr.length > 0) warns.push(offInstr.length + ' instrument(s) desactive(s)');
+    ok.push(instruments.length + ' instrument(s) configure(s)');
+  }
+
+  // Check loops
+  if (loops.length > 0) {
+    const emptyLoops = loops.filter(l => !l.events || l.events.length === 0);
+    if (emptyLoops.length > 0) warns.push(emptyLoops.length + ' boucle(s) vide(s)');
+    ok.push(loops.length + ' boucle(s) configuree(s)');
+  }
+
+  // Render results
+  const el = document.getElementById('diagResults');
+  let html = '<strong>Diagnostics</strong><br>';
+  if (issues.length === 0 && warns.length === 0) {
+    html += '<div style="color:var(--success);margin-top:6px;">&#10003; Aucun probleme detecte</div>';
+  }
+  issues.forEach(i => { html += '<div style="color:var(--accent);margin-top:4px;">&#10007; ' + i + '</div>'; });
+  warns.forEach(w => { html += '<div style="color:var(--warn);margin-top:4px;">&#9888; ' + w + '</div>'; });
+  ok.forEach(o => { html += '<div style="color:var(--success);margin-top:4px;">&#10003; ' + o + '</div>'; });
+  el.innerHTML = html;
+  el.style.display = 'block';
 }
 
 async function updateGlobalVolume(val) {

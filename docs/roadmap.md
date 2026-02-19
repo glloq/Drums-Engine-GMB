@@ -201,6 +201,9 @@
 - [x] UI enchainement: construction visuelle de la chaine + statut temps reel
 - [x] Copier/Coller actions entre instruments (NoteOn/NoteOff/CC)
 - [x] Filtre recherche page calibration (actionneurs + instruments)
+- [x] Diagnostics systeme: verification config (actionneurs inutilises, notes dupliquees, instruments incomplets)
+- [x] Indicateurs completude instrument (icone statut vert/orange/rouge)
+- [x] Kits rapides: creation en un clic de kits GM drums (Minimal/Standard/Complet)
 
 ## Risques / dette technique
 - Couverture tests: script curl fonctionnel mais pas de CI automatise.

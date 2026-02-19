@@ -17,6 +17,7 @@
 #include "../event/event_processor.h"
 #include "../event/pipeline_compiler.h"
 #include "../led/led_engine.h"
+#include "../hal/mic_inmp441.h"
 #include "api_auth.h"
 
 // ============================================================================
@@ -159,6 +160,14 @@ private:
   bool _validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg);
   bool _validateInstrumentConfig(InstrumentConfig& cfg, const char*& errMsg);
   void _recompileLookupFromInstruments();
+
+  // Microphone latency measurement
+  MicINMP441* _mic = nullptr;
+public:
+  void setMicrophone(MicINMP441* mic) { _mic = mic; }
+private:
+  void _handleGetMicStatus(AsyncWebServerRequest* req);
+  void _handleMeasureLatency(AsyncWebServerRequest* req, uint8_t* data, size_t len);
 };
 
 #endif // WEB_SERVER_H

@@ -46,6 +46,7 @@
 #include "hal/pca9685_driver.h"
 #include "hal/gpio_driver.h"
 #include "hal/ledc_driver.h"
+#include "hal/mic_inmp441.h"
 
 // Actuator
 #include "actuator/actuator_manager.h"
@@ -137,6 +138,9 @@ ActuatorFactory actuatorFactory(&actuatorManager,
 
 // LED Engine
 LedEngine ledEngine;
+
+// Microphone (INMP441 via I2S) — optional, detected at boot
+MicINMP441 mic;
 
 // Application
 InstrumentManager instrumentManager(&actuatorManager, &scheduler);
@@ -609,7 +613,15 @@ void initTask(void* param) {
     }
   }
 
+  // 8b. Microphone (INMP441) — optional, auto-detected
+  if (mic.begin()) {
+    DBGLN("[Setup] INMP441 microphone detected — latency measurement available");
+  } else {
+    DBGLN("[Setup] No INMP441 detected — latency measurement disabled");
+  }
+
   // 9. Web Server (includes auth, rate-limiting, WiFi API, logs API)
+  webServer.setMicrophone(&mic);
   webServer.setRecompileCallback(compilePipelines);
   webServer.begin();
   wifiManager.registerRoutes(&webServer.getServer());

@@ -214,6 +214,9 @@
 - [x] Flash MIDI temps reel sur les cartes instrument (via WebSocket)
 - [x] API validation config `GET /api/validate` (issues, warnings, pipeline/CC stats)
 - [x] Test sequentiel actionneurs en calibration (highlight visuel progressif)
+- [x] LED segments: apercu couleurs hit/idle avec swatches visuels + luminosite
+- [x] LED strips: compteur total LEDs dans le header
+- [x] Boucles: compteur notes dans la liste
 
 ## Risques / dette technique
 - Couverture tests: script curl fonctionnel mais pas de CI automatise.

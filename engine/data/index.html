@@ -3203,6 +3203,7 @@ function renderLoops() {
         <span class="badge">${loop.bpm} BPM</span>
         <span class="badge">${loop.beatsPerBar||4}/${loop.beatValue||4}</span>
         <span class="badge">${loop.bars||1} mes.</span>
+        <span class="badge">${(loop.events||[]).length} notes</span>
       </div>
       <div class="item-actions">
         <button class="btn btn-sm" style="background:var(--accent2);color:#fff;" onclick="addToChain(${i})" title="Ajouter a l'enchainement">+Chain</button>
@@ -4140,6 +4141,9 @@ function updateLedStatus() {
 
 function renderLedStrips() {
   const el = document.getElementById('ledStripList');
+  const totalLeds = ledStrips.reduce((sum, s) => sum + (s.ledCount || 0), 0);
+  const badge = document.getElementById('ledStripCountBadge');
+  if (badge) badge.textContent = ledStrips.length + ' strips · ' + totalLeds + ' LEDs';
   if (ledStrips.length === 0) {
     el.innerHTML = '<div class="empty-state">Aucun strip configure. Ajoutez un strip WS2812B.</div>';
     return;
@@ -4164,9 +4168,19 @@ function renderLedSegments() {
   el.innerHTML = ledSegments.map(s => {
     const inst = instruments.find(i => i.id === s.instrumentId);
     const instName = inst ? inst.name : (s.instrumentId === 255 ? 'Aucun' : '?');
-    return `<div class="list-item" style="border-left-color:rgb(${s.hitColor?.r||255},${s.hitColor?.g||255},${s.hitColor?.b||255});">
-      <div class="item-title"><strong>${s.name||'Segment'}</strong> <span class="badge">Strip #${s.stripId}</span> <span class="badge">${s.pixelStart}-${s.pixelStart+s.pixelCount-1}</span></div>
-      <div class="item-detail">Instrument: <b>${instName}</b> | Hit: ${hitAnimNames[s.hitAnimation]||'?'} (${s.hitFadeDurationMs}ms) | Idle: ${idleAnimNames[s.idleAnimation]||'?'}</div>
+    const hc = s.hitColor || {r:255,g:255,b:255};
+    const ic = s.idleColor || {r:40,g:40,b:40};
+    return `<div class="list-item" style="border-left-color:rgb(${hc.r},${hc.g},${hc.b});">
+      <div class="item-title"><strong>${s.name||'Segment'}</strong> <span class="badge">Strip #${s.stripId}</span> <span class="badge">${s.pixelStart}-${s.pixelStart+s.pixelCount-1}</span> <span class="badge">${s.pixelCount} LEDs</span></div>
+      <div style="display:flex;gap:4px;align-items:center;margin:4px 0;">
+        <span style="display:inline-block;width:18px;height:18px;border-radius:3px;background:rgb(${hc.r},${hc.g},${hc.b});border:1px solid rgba(255,255,255,0.2);" title="Hit: rgb(${hc.r},${hc.g},${hc.b})"></span>
+        <span style="font-size:0.75em;color:var(--fg2);">Hit</span>
+        <span style="display:inline-block;width:18px;height:18px;border-radius:3px;background:rgb(${ic.r},${ic.g},${ic.b});border:1px solid rgba(255,255,255,0.2);" title="Idle: rgb(${ic.r},${ic.g},${ic.b})"></span>
+        <span style="font-size:0.75em;color:var(--fg2);">Idle</span>
+        <span style="flex:1;"></span>
+        <span style="font-size:0.75em;color:var(--fg2);">Instrument: <b>${instName}</b></span>
+      </div>
+      <div class="item-detail">Hit: ${hitAnimNames[s.hitAnimation]||'?'} (${s.hitFadeDurationMs}ms) | Idle: ${idleAnimNames[s.idleAnimation]||'?'} | Luminosite: ${s.brightness !== undefined ? s.brightness : 255}</div>
       <div class="item-actions">
         <button class="btn btn-sm btn-secondary" onclick="testLedSegment(${s.id})">Test</button>
         <button class="btn btn-sm btn-secondary" onclick="editLedSegment(${s.id})">Editer</button>

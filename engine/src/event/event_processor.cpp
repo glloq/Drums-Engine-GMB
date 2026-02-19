@@ -97,13 +97,7 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
     if (pipeline.note_off_count > 0) {
       _scheduler->scheduleActionSteps(pipeline.note_off_actions, pipeline.note_off_count,
                                       ev.data2, ev.timestamp, _state->raw().variables);
-      portENTER_CRITICAL(&_noteActiveMux);
-      _noteActive[ev.data1] = 0;
-      portEXIT_CRITICAL(&_noteActiveMux);
-      return;
-    }
-
-    if (pipeline.output_actuator_id != 0xFF) {
+    } else if (pipeline.output_actuator_id != 0xFF) {
       ActuatorCommand cmd;
       cmd.actuator_id = pipeline.output_actuator_id;
       cmd.command_type = (uint8_t)CommandType::OFF;
@@ -111,6 +105,16 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
       cmd.duration = 0;
       cmd.execute_at = ev.timestamp;
       _scheduler->scheduleCommand(cmd);
+    }
+
+    // Push LED NoteOff event (fade out animation)
+    if (_ledQueue) {
+      LedEvent ledEv;
+      ledEv.midiNote = ev.data1;
+      ledEv.velocity = ev.data2;
+      ledEv.noteOn = false;
+      ledEv.segmentId = 0xFF;
+      _ledQueue->push(ledEv);
     }
     portENTER_CRITICAL(&_noteActiveMux);
     _noteActive[ev.data1] = 0;
@@ -301,9 +305,12 @@ int16_t EventProcessor::_processConditionBlock(const CompiledBlock& block, uint8
 
     case COND_RANDOM: {
       // param2 = probability percentage (0-100)
-      // Uses micros() low bits as cheap PRNG (sufficient for musical randomness)
+      // XOR micros with value and pipelineIdx for better distribution
       uint8_t chance = block.param2 & 0xFF;
-      uint8_t roll = (uint8_t)(micros() & 0xFF) % 100;
+      uint32_t seed = micros();
+      seed ^= (seed >> 16);
+      seed ^= ((uint32_t)value << 8) ^ ((uint32_t)pipelineIdx << 4);
+      uint8_t roll = (uint8_t)(seed & 0xFF) % 100;
       return (roll < chance) ? value : -1;
     }
 

@@ -124,6 +124,21 @@
 - [x] Status API enrichi: chip_model, cpu_freq_mhz, flash_size, min_free_heap, sdk_version, firmware_version
 - [x] Tabs scrollables pour mobile (overflow-x auto, 6 onglets)
 
+## Phase 12 — Outils et productivite
+**Statut: implementee**
+- [x] MIDI Monitor: log temps reel des notes via WebSocket dans les Reglages
+- [x] Journal systeme: lecture/effacement des logs moteur depuis l'UI
+- [x] Import/Export configuration: sauvegarde JSON complte (actionneurs + instruments)
+- [x] MIDI RX indicator: flash jaune dans l'en-tete a chaque note recue
+- [x] Emergency STOP ALL: arret immediat de tous les actionneurs (calibration)
+- [x] Duplication: cloner un actionneur ou un instrument en un clic
+- [x] Filtres de recherche: champs texte pour filtrer actionneurs et instruments
+- [x] Help contextuel: aide par type d'actionneur dans le formulaire de creation
+- [x] Validation formulaires: nom requis, bornes min/max, avertissement note MIDI dupliquee
+- [x] Piano clavier: raccourcis clavier (A-P, 1-8) pour jouer les notes
+- [x] Guide de demarrage: instructions pour les nouveaux utilisateurs
+- [x] Fix TIME_RAMP: protection division par zero quand la duree est 0
+
 ## Risques / dette technique
 - Couverture tests: script curl fonctionnel mais pas de CI automatise.
 - Dependance environnement outillage (`pio`) pour validation complete firmware.

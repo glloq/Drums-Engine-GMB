@@ -325,8 +325,8 @@ input[type=checkbox] { width: auto; }
     <div class="card">
       <h3>Piano Virtuel MIDI <span class="badge" id="pianoNoteBadge">GM Percussion</span>
         <span class="badge badge-green" id="pianoLiveBadge" style="display:none;">LIVE</span></h3>
-      <p class="hint" style="margin-bottom:12px;">Cliquez sur un pad pour envoyer un NoteOn. Les pads verts correspondent aux instruments configures.
-        <label style="margin-left:12px;cursor:pointer;"><input type="checkbox" id="pianoLiveToggle" onchange="togglePianoLive(this.checked)"> Affichage temps reel</label></p>
+      <p class="hint" style="margin-bottom:12px;">Cliquez ou utilisez le clavier (A-P = notes 35-53, 1-8 = notes 27-34). Les pads verts = instruments configures.
+        <label style="margin-left:12px;cursor:pointer;"><input type="checkbox" id="pianoLiveToggle" onchange="togglePianoLive(this.checked)"> Temps reel</label></p>
       <div class="form-row" style="margin-bottom:12px;">
         <div class="form-group" style="max-width:120px;">
           <label>Velocity</label>
@@ -1546,7 +1546,15 @@ function renderActuators() {
   const el = document.getElementById('actuatorList');
   document.getElementById('actCount').textContent = actuators.length;
   if (actuators.length === 0) {
-    el.innerHTML = '<div class="empty-state"><p>Aucun actionneur configure</p><p>Cliquez "+ Ajouter" pour commencer</p></div>';
+    el.innerHTML = '<div class="empty-state">' +
+      '<p style="font-size:1.1em;margin-bottom:12px;">Bienvenue dans Drums Engine !</p>' +
+      '<div class="help-box" style="text-align:left;max-width:400px;margin:0 auto;">' +
+      '<p style="margin-bottom:8px;"><strong>Pour commencer:</strong></p>' +
+      '<p>1. Cliquez <strong>+ Ajouter</strong> pour creer un actionneur</p>' +
+      '<p>2. Choisissez un <strong>preset rapide</strong> ou configurez manuellement</p>' +
+      '<p>3. Passez a l\'onglet <strong>Instruments</strong> pour lier l\'actionneur a une note MIDI</p>' +
+      '<p>4. Connectez-vous en <strong>rtpMIDI</strong> (port 5004) et jouez !</p>' +
+      '</div></div>';
     return;
   }
   el.innerHTML = actuators.map(a => {
@@ -3938,6 +3946,35 @@ async function sendTestCC() {
   const r = await api('test/cc', 'POST', {cc, value:val});
   if (r) toast('CC#' + cc + ' = ' + val + ' envoye', 'success');
 }
+
+// Keyboard-to-MIDI note mapping for piano page
+const KEYBOARD_MAP = {
+  'a':36, 'z':38, 'e':40, 'r':41, 't':42, 'y':43, 'u':45, 'i':47, 'o':48, 'p':49,
+  'q':35, 's':37, 'd':39, 'f':44, 'g':46, 'h':50, 'j':51, 'k':52, 'l':53,
+  '1':27, '2':28, '3':29, '4':30, '5':31, '6':32, '7':33, '8':34
+};
+const keyboardHeld = {};
+
+document.addEventListener('keydown', (e) => {
+  if (e.repeat || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+  const panel = document.getElementById('tab-piano');
+  if (!panel || !panel.classList.contains('active')) return;
+  const note = KEYBOARD_MAP[e.key.toLowerCase()];
+  if (note === undefined || keyboardHeld[note]) return;
+  keyboardHeld[note] = true;
+  const grid = document.getElementById('pianoPadGrid');
+  const pad = grid && grid.querySelector('[data-note="'+note+'"]');
+  if (pad) pianoNoteOn(note, pad);
+});
+
+document.addEventListener('keyup', (e) => {
+  const note = KEYBOARD_MAP[e.key.toLowerCase()];
+  if (note === undefined || !keyboardHeld[note]) return;
+  keyboardHeld[note] = false;
+  const grid = document.getElementById('pianoPadGrid');
+  const pad = grid && grid.querySelector('[data-note="'+note+'"]');
+  if (pad) pianoNoteOff(note, pad);
+});
 
 // Real-time MIDI activity display
 let pianoLiveInterval = null;

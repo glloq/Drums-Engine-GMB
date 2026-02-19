@@ -1727,7 +1727,9 @@ function onActBehaviorChange() {
     endStop2.style.display = '';
     invertRow.style.display = '';
     if (behavior === 6) {
-      // Optical: sensor pin required, end stops optional
+      // Optical: requires GPIO_DIRECT bus, sensor pin required
+      document.getElementById('actBus').value = '2';
+      onActBusChange();
       sensorRow.querySelector('label').textContent = 'Pin capteur optique (GPIO)';
       sensorRow.querySelector('.hint').textContent = 'Requis: GPIO du capteur pour comptage edges.';
     } else if (behavior === 10) {
@@ -1888,7 +1890,7 @@ function renderActuators() {
     if (a.type===1 && a.behavior===0) details += ' · Temps: '+a.paramMin+'-'+a.paramMax+'ms';
     if (a.type===1 && a.behavior===1) details += ' · PWM: act='+a.paramMin+' hold='+a.paramMax+' tMax='+a.paramDefault+'ms';
     if (a.type===0) details += ' · Angle: '+a.paramMin+'\u00b0-'+a.paramMax+'\u00b0' + (a.behavior===2 ? ' (repos:'+a.paramDefault+'\u00b0)' : '');
-    if (a.type===2) {
+    if (a.type===2 || a.type===3) {
       details += ' · PWM: '+a.paramMin+'%-'+a.paramMax+'%';
       if (a.behavior===6) details += ' · Rotation optique' + (a.hwAddress>0 ? ' Capteur:GPIO'+a.hwAddress : '');
       else if (a.behavior===10) details += ' · Chrono (duree)';
@@ -1984,8 +1986,10 @@ function editActuator(id) {
   document.getElementById('editActId').value = id;
   document.getElementById('actName').value = a.name;
   document.getElementById('actId').value = a.id;
-  document.getElementById('actType').value = a.type;
-  rebuildBehaviorSelect(a.type, a.behavior);
+  // Backend type=3 (MOTOR_OPTICAL) maps to frontend type=2 (Moteur)
+  const frontendType = (a.type === 3) ? 2 : a.type;
+  document.getElementById('actType').value = frontendType;
+  rebuildBehaviorSelect(frontendType, a.behavior);
   document.getElementById('actBus').value = a.bus;
 
   // Reconstruct pin display
@@ -2013,8 +2017,8 @@ function editActuator(id) {
     document.getElementById('actAngleClosed').value = a.paramMin;
     document.getElementById('actAngleOpen').value = a.paramMax;
     document.getElementById('actAngleDefault').value = a.paramDefault;
-  } else if (a.type === 2) {
-    // Motor: hwAddress = sensor pin
+  } else if (a.type === 2 || a.type === 3) {
+    // Motor / Motor Optical: hwAddress = sensor pin
     document.getElementById('actMotorPwmMin').value = a.paramMin;
     document.getElementById('actMotorPwmMax').value = a.paramMax;
     document.getElementById('actMotorSensorPin').value = a.hwAddress || 0;
@@ -2031,8 +2035,12 @@ function editActuator(id) {
 
 async function saveActuator() {
   const editId = document.getElementById('editActId').value;
-  const type = parseInt(document.getElementById('actType').value);
+  let type = parseInt(document.getElementById('actType').value);
   const behavior = parseInt(document.getElementById('actBehavior').value);
+
+  // Backend distingue PWM_MOTOR (type=2) et MOTOR_OPTICAL (type=3)
+  // Le frontend affiche les 2 sous "Moteur" (type=2), on corrige ici
+  if (type === 2 && behavior === 6) type = 3;
 
   let paramMin, paramMax, paramDefault, cooldownUs;
   if (type === 1 && behavior === 0) {
@@ -2056,17 +2064,23 @@ async function saveActuator() {
     paramDefault = (behavior === 2) ? parseInt(document.getElementById('actAngleDefault').value) : paramMin;
     cooldownUs = 50;
   } else if (type === 2) {
-    // Motor: paramDefault = drive speed for optical, cooldownUs not used for motor
+    // PWM Motor: paramDefault must be inside [paramMin, paramMax]
     paramMin = parseInt(document.getElementById('actMotorPwmMin').value);
     paramMax = parseInt(document.getElementById('actMotorPwmMax').value);
-    paramDefault = 128; // default drive speed for optical tracking
+    paramDefault = Math.floor((paramMin + paramMax) / 2);
+    cooldownUs = 0;
+  } else if (type === 3) {
+    // Motor Optical: paramDefault = drive speed, different validation rules
+    paramMin = parseInt(document.getElementById('actMotorPwmMin').value);
+    paramMax = parseInt(document.getElementById('actMotorPwmMax').value);
+    paramDefault = paramMax; // drive speed = max PWM
     cooldownUs = 0;
   } else {
     paramMin = 20; paramMax = 100; paramDefault = 0; cooldownUs = 100;
   }
 
   // Motor: hwAddress stores sensor pin GPIO, not I2C address
-  const hwAddr = (type === 2) ?
+  const hwAddr = (type === 2 || type === 3) ?
     parseInt(document.getElementById('actMotorSensorPin').value) || 0 :
     parseInt(document.getElementById('actAddr').value);
 
@@ -2083,9 +2097,9 @@ async function saveActuator() {
     paramDefault: paramDefault,
     cooldownUs: cooldownUs,
     enabled: document.getElementById('actEnabled').checked,
-    inverted: (type === 2) ? document.getElementById('actMotorInverted').checked : false,
-    endStopPin1: (type === 2) ? parseInt(document.getElementById('actMotorEndStop1').value) : 255,
-    endStopPin2: (type === 2) ? parseInt(document.getElementById('actMotorEndStop2').value) : 255
+    inverted: (type === 2 || type === 3) ? document.getElementById('actMotorInverted').checked : false,
+    endStopPin1: (type === 2 || type === 3) ? parseInt(document.getElementById('actMotorEndStop1').value) : 255,
+    endStopPin2: (type === 2 || type === 3) ? parseInt(document.getElementById('actMotorEndStop2').value) : 255
   };
 
   // Validations
@@ -2094,7 +2108,11 @@ async function saveActuator() {
     return;
   }
   if (data.type === 0 && data.bus !== 1) {
-    toast('Servo: le bus PCA9685 est requis', 'error');
+    toast('Servo: le bus Carte PWM I2C est requis', 'error');
+    return;
+  }
+  if (data.type === 3 && data.bus !== 2) {
+    toast('Moteur optique: le bus Pin directe ESP32 est requis', 'error');
     return;
   }
   if (data.type === 1 && data.behavior === 0 && data.paramMin >= data.paramMax) {

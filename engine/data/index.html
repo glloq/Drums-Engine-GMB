@@ -1402,6 +1402,13 @@ async function init() {
   setInterval(refreshStatus, 5000);
   // Auto-connect WebSocket for MIDI RX indicator
   connectWebSocket();
+
+  // Click overlay backdrop to close modals
+  document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) overlay.classList.remove('show');
+    });
+  });
 }
 
 async function loadMidiNotes() {
@@ -4545,6 +4552,22 @@ document.addEventListener('keyup', (e) => {
   const grid = document.getElementById('pianoPadGrid');
   const pad = grid && grid.querySelector('[data-note="'+note+'"]');
   if (pad) pianoNoteOff(note, pad);
+});
+
+// Global keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.key === 's') {
+    e.preventDefault();
+    saveAll();
+  }
+  if (e.key === 'Escape') {
+    // Close topmost open modal
+    const modals = document.querySelectorAll('.modal-overlay.show');
+    if (modals.length > 0) {
+      const last = modals[modals.length - 1];
+      last.classList.remove('show');
+    }
+  }
 });
 
 // Real-time MIDI activity display

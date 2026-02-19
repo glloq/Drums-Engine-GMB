@@ -23,8 +23,9 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .btn-gear { background: none; border: 1px solid #555; border-radius: 50%; width: 34px; height: 34px; font-size: 1.2em; color: var(--fg2); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
 .btn-gear:hover { color: var(--fg); border-color: var(--accent); background: rgba(233,69,96,0.1); }
 
-.tabs { display: flex; background: var(--bg2); border-bottom: 1px solid #333; }
-.tab { padding: 10px 20px; cursor: pointer; color: var(--fg2); border-bottom: 2px solid transparent; transition: all 0.2s; font-size: 0.95em; }
+.tabs { display: flex; background: var(--bg2); border-bottom: 1px solid #333; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab { padding: 10px 20px; cursor: pointer; color: var(--fg2); border-bottom: 2px solid transparent; transition: all 0.2s; font-size: 0.95em; white-space: nowrap; flex-shrink: 0; }
 .tab:hover { color: var(--fg); background: rgba(255,255,255,0.05); }
 .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 
@@ -176,6 +177,12 @@ input[type=checkbox] { width: auto; }
 .piano-pad.configured:active, .piano-pad.configured.active { background: var(--success); color: #fff; }
 .piano-pad .pad-note { font-size: 1.1em; font-weight: 700; }
 .piano-pad .pad-name { font-size: 0.85em; line-height: 1.1; overflow: hidden; text-overflow: ellipsis; max-width: 58px; }
+.piano-pad.ext-active { box-shadow: 0 0 8px 2px var(--accent); border-color: var(--accent); }
+.piano-pad.configured.ext-active { box-shadow: 0 0 8px 2px var(--success); }
+@keyframes pad-flash { 0% { opacity: 1; } 100% { opacity: 0; } }
+.piano-pad .pad-flash { position: absolute; inset: 0; border-radius: 4px; background: rgba(233,69,96,0.3); animation: pad-flash 0.3s ease-out forwards; pointer-events: none; }
+.piano-pad.configured .pad-flash { background: rgba(76,175,80,0.3); }
+.piano-pad { position: relative; overflow: hidden; }
 
 /* Calibration */
 .calib-item { background: var(--bg); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 8px; border-left: 3px solid var(--accent2); }
@@ -309,8 +316,10 @@ input[type=checkbox] { width: auto; }
   <!-- ====== VIRTUAL PIANO TAB ====== -->
   <div class="panel" id="tab-piano">
     <div class="card">
-      <h3>Piano Virtuel MIDI <span class="badge" id="pianoNoteBadge">GM Percussion</span></h3>
-      <p class="hint" style="margin-bottom:12px;">Cliquez sur un pad pour envoyer un NoteOn. Les pads verts correspondent aux instruments configures.</p>
+      <h3>Piano Virtuel MIDI <span class="badge" id="pianoNoteBadge">GM Percussion</span>
+        <span class="badge badge-green" id="pianoLiveBadge" style="display:none;">LIVE</span></h3>
+      <p class="hint" style="margin-bottom:12px;">Cliquez sur un pad pour envoyer un NoteOn. Les pads verts correspondent aux instruments configures.
+        <label style="margin-left:12px;cursor:pointer;"><input type="checkbox" id="pianoLiveToggle" onchange="togglePianoLive(this.checked)"> Affichage temps reel</label></p>
       <div class="form-row" style="margin-bottom:12px;">
         <div class="form-group" style="max-width:120px;">
           <label>Velocity</label>
@@ -879,10 +888,10 @@ input[type=checkbox] { width: auto; }
       <div id="midiInfo" style="font-size:0.85em;color:var(--fg2);line-height:1.8;"></div>
     </div>
 
-    <!-- System Actions -->
+    <!-- System Info -->
     <div class="card" style="margin-top:12px;">
       <h3>Systeme</h3>
-      <div id="systemInfo" style="font-size:0.85em;color:var(--fg2);line-height:1.8;margin-bottom:10px;"></div>
+      <div class="monitor-grid" id="sysInfoGrid" style="margin-bottom:10px;"></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn btn-primary btn-sm" onclick="saveAll()">Sauvegarder config</button>
         <button class="btn btn-secondary btn-sm" onclick="scanI2C()">Scanner I2C</button>
@@ -2823,13 +2832,22 @@ function updateSettingsInfo(data) {
       '<br>Port rtpMIDI: 5004' +
       '<br>Session: MidiPercussion';
   }
-  const sys = document.getElementById('systemInfo');
-  if (sys) {
-    sys.innerHTML =
-      'Uptime: ' + Math.floor((data.uptime_s||0)/3600) + 'h' + Math.floor(((data.uptime_s||0)%3600)/60) + 'm' +
-      '<br>Memoire libre: ' + ((data.free_heap||0)/1024).toFixed(1) + ' KB' +
-      '<br>Stockage: ' + (data.storage || '--') +
-      '<br>Actionneurs: ' + (data.actuator_configs||0) + ' / Instruments: ' + (data.instrument_count||0);
+  const sg = document.getElementById('sysInfoGrid');
+  if (sg) {
+    const m = (v,l) => `<div class="monitor-item"><div class="mv">${v}</div><div class="ml">${l}</div></div>`;
+    const uptimeH = Math.floor((data.uptime_s||0)/3600);
+    const uptimeM = Math.floor(((data.uptime_s||0)%3600)/60);
+    sg.innerHTML =
+      m(data.firmware_version||'--', 'Firmware') +
+      m(data.chip_model||'ESP32', 'Chip') +
+      m((data.cpu_freq_mhz||240)+' MHz', 'CPU') +
+      m(((data.free_heap||0)/1024).toFixed(0)+' KB', 'RAM libre') +
+      m(((data.min_free_heap||0)/1024).toFixed(0)+' KB', 'RAM min') +
+      m(((data.flash_size||0)/1048576).toFixed(1)+' MB', 'Flash') +
+      m(uptimeH+'h'+uptimeM+'m', 'Uptime') +
+      m(data.storage||'--', 'Stockage') +
+      m((data.actuator_configs||0)+' / '+(data.instrument_count||0), 'Act. / Instr.') +
+      m(data.pipeline_count||0, 'Pipelines');
   }
 }
 
@@ -2902,6 +2920,11 @@ document.querySelectorAll('.tab').forEach(tab => {
     if (tab.dataset.tab === 'leds') loadLedData();
     if (tab.dataset.tab === 'piano') renderPianoPads();
     if (tab.dataset.tab === 'calibration') loadCalibrationData();
+    // Stop piano live polling when leaving piano tab
+    if (tab.dataset.tab !== 'piano' && pianoLiveActive) {
+      document.getElementById('pianoLiveToggle').checked = false;
+      togglePianoLive(false);
+    }
   });
 });
 
@@ -3633,6 +3656,7 @@ function renderPianoPads() {
   notes.forEach(n => {
     const pad = document.createElement('div');
     pad.className = 'piano-pad' + (pianoConfiguredNotes.has(n) ? ' configured' : '');
+    pad.dataset.note = n;
     const name = GM_DRUMS[n] || ('Note ' + n);
     pad.innerHTML = '<div class="pad-note">' + n + '</div><div class="pad-name">' + name + '</div>';
 
@@ -3665,6 +3689,92 @@ async function sendTestCC() {
   const val = parseInt(document.getElementById('testCcValue').value) || 64;
   const r = await api('test/cc', 'POST', {cc, value:val});
   if (r) toast('CC#' + cc + ' = ' + val + ' envoye', 'success');
+}
+
+// Real-time MIDI activity display
+let pianoLiveInterval = null;
+let pianoLiveActive = false;
+let pianoLastActive = new Set();
+
+function togglePianoLive(enabled) {
+  pianoLiveActive = enabled;
+  const badge = document.getElementById('pianoLiveBadge');
+  if (enabled) {
+    badge.style.display = '';
+    pianoLiveInterval = setInterval(pollActiveNotes, 150);
+    connectWebSocket();
+  } else {
+    badge.style.display = 'none';
+    if (pianoLiveInterval) { clearInterval(pianoLiveInterval); pianoLiveInterval = null; }
+    // Clear all ext-active indicators
+    document.querySelectorAll('.piano-pad.ext-active').forEach(p => p.classList.remove('ext-active'));
+    pianoLastActive.clear();
+  }
+}
+
+async function pollActiveNotes() {
+  if (!pianoLiveActive) return;
+  const data = await api('notes/active');
+  if (!data) return;
+  const activeSet = new Set(data.active || []);
+  const grid = document.getElementById('pianoPadGrid');
+  if (!grid) return;
+
+  // Find newly active notes (trigger flash)
+  activeSet.forEach(n => {
+    if (!pianoLastActive.has(n)) {
+      const pad = grid.querySelector('[data-note="'+n+'"]');
+      if (pad && !pad.classList.contains('active')) {
+        pad.classList.add('ext-active');
+        // Flash effect
+        const flash = document.createElement('div');
+        flash.className = 'pad-flash';
+        pad.appendChild(flash);
+        setTimeout(() => flash.remove(), 300);
+      }
+    }
+  });
+
+  // Find notes that stopped
+  pianoLastActive.forEach(n => {
+    if (!activeSet.has(n)) {
+      const pad = grid.querySelector('[data-note="'+n+'"]');
+      if (pad) pad.classList.remove('ext-active');
+    }
+  });
+
+  pianoLastActive = activeSet;
+}
+
+// WebSocket connection for real-time updates
+let ws = null;
+function connectWebSocket() {
+  if (ws && ws.readyState <= 1) return; // already open/connecting
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(proto + '//' + location.host + '/ws');
+  ws.onmessage = (evt) => {
+    try {
+      const msg = JSON.parse(evt.data);
+      if (msg.type === 'midi_note' && pianoLiveActive) {
+        const grid = document.getElementById('pianoPadGrid');
+        if (!grid) return;
+        const pad = grid.querySelector('[data-note="'+msg.note+'"]');
+        if (!pad) return;
+        if (msg.on) {
+          pad.classList.add('ext-active');
+          const flash = document.createElement('div');
+          flash.className = 'pad-flash';
+          pad.appendChild(flash);
+          setTimeout(() => flash.remove(), 300);
+        } else {
+          pad.classList.remove('ext-active');
+        }
+      }
+    } catch(e) {}
+  };
+  ws.onclose = () => {
+    if (pianoLiveActive) setTimeout(connectWebSocket, 2000);
+  };
 }
 
 // ============================================================================

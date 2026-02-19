@@ -81,6 +81,7 @@ private:
   void _handleTestInstrumentAction(AsyncWebServerRequest* req, uint8_t* data, size_t len);
   void _handleTestCC(AsyncWebServerRequest* req, uint8_t* data, size_t len);
   void _handleTestNote(AsyncWebServerRequest* req, uint8_t* data, size_t len);
+  void _handleGetActiveNotes(AsyncWebServerRequest* req);
 
   // Loops
   void _handleGetLoops(AsyncWebServerRequest* req);
@@ -143,6 +144,11 @@ private:
   void _sendError(AsyncWebServerRequest* req, int code, const char* msg);
   uint8_t _extractId(AsyncWebServerRequest* req, const char* param);
   void _wsBroadcast(const char* type, const JsonObject& data);
+
+  // WebSocket MIDI note activity broadcast
+  uint8_t _wsNoteCache[128] = {};
+  uint32_t _wsLastBroadcastUs = 0;
+  void _broadcastNoteChanges();
 
   bool _validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg);
   bool _validateInstrumentConfig(InstrumentConfig& cfg, const char*& errMsg);

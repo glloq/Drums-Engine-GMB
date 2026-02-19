@@ -11,6 +11,12 @@ EventProcessor::EventProcessor(Scheduler* scheduler, EngineState* state)
   _ccStats = {};
 }
 
+void EventProcessor::getNoteActive(uint8_t* out) const {
+  portENTER_CRITICAL(&_noteActiveMux);
+  memcpy(out, _noteActive, 128);
+  portEXIT_CRITICAL(&_noteActiveMux);
+}
+
 void EventProcessor::processMidiEvent(const MidiEvent& ev) {
   if (ev.type == MIDI_EVT_NOTE_ON && ev.data2 > 0) {
     uint8_t pipelineIdx = _lookup.note_to_pipeline[ev.data1];

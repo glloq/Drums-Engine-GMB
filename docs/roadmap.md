@@ -115,6 +115,15 @@
 - [x] Tab Pipeline renomme (Mappings → Pipeline)
 - [x] Block schema COND_NOTE_RANGE: description corrigee ("note MIDI source")
 
+## Phase 11 — Temps reel et UX
+**Statut: implementee**
+- [x] API `GET /api/notes/active` — notes MIDI actuellement actives (snapshot thread-safe)
+- [x] WebSocket broadcast des changements de notes MIDI (~30ms polling)
+- [x] Piano Virtuel: mode temps reel avec indicateurs visuels des notes actives (flash + glow)
+- [x] Settings modal: grid systeme (firmware, chip, CPU, RAM, flash, uptime, stockage)
+- [x] Status API enrichi: chip_model, cpu_freq_mhz, flash_size, min_free_heap, sdk_version, firmware_version
+- [x] Tabs scrollables pour mobile (overflow-x auto, 6 onglets)
+
 ## Risques / dette technique
 - Couverture tests: script curl fonctionnel mais pas de CI automatise.
 - Dependance environnement outillage (`pio`) pour validation complete firmware.

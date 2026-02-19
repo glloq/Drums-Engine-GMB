@@ -31,6 +31,41 @@ bool WebServerManager::begin() {
 
 void WebServerManager::update() {
   _ws.cleanupClients();
+  // Broadcast MIDI note changes via WebSocket (~every 30ms)
+  if (_ws.count() > 0) {
+    uint32_t now = micros();
+    if (now - _wsLastBroadcastUs >= 30000) {
+      _wsLastBroadcastUs = now;
+      _broadcastNoteChanges();
+    }
+  }
+}
+
+void WebServerManager::_broadcastNoteChanges() {
+  uint8_t current[128];
+  _eventProc->getNoteActive(current);
+
+  // Build compact JSON with only changes
+  String msg;
+  bool hasChanges = false;
+  for (uint8_t i = 0; i < 128; i++) {
+    bool wasActive = _wsNoteCache[i] > 0;
+    bool isActive = current[i] > 0;
+    if (wasActive != isActive) {
+      if (!hasChanges) {
+        msg.reserve(64);
+        hasChanges = true;
+      }
+      // Send individual note change
+      String noteMsg = "{\"type\":\"midi_note\",\"note\":";
+      noteMsg += String(i);
+      noteMsg += ",\"on\":";
+      noteMsg += isActive ? "true" : "false";
+      noteMsg += "}";
+      _ws.textAll(noteMsg);
+    }
+  }
+  memcpy(_wsNoteCache, current, 128);
 }
 
 void WebServerManager::_setupRoutes() {
@@ -162,6 +197,10 @@ void WebServerManager::_setupRoutes() {
         _handleTestNote(req, data, len);
       }
     });
+
+  // Active notes (for real-time piano display)
+  _server.on("/api/notes/active", HTTP_GET,
+    [this](AsyncWebServerRequest* req) { _handleGetActiveNotes(req); });
 
   // --- Loops API ---
   _server.on("/api/loops", HTTP_GET,

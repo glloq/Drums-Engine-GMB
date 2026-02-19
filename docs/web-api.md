@@ -25,6 +25,9 @@ Base URL: `http://<ip-esp32>/`
 - `POST /api/test/note` — envoyer une note MIDI brute (piano virtuel)
 - `POST /api/test/cc` — envoyer un CC MIDI
 
+### Notes actives (temps reel)
+- `GET /api/notes/active` — retourne les notes MIDI actuellement actives
+
 ### Loops
 - `GET /api/loops`
 - `GET /api/loop?id=<id>`
@@ -162,6 +165,8 @@ Expose un snapshot runtime, incluant diagnostics CC:
 ## WebSocket
 - Endpoint: `/ws`
 - Usage: diffusion d'état et supervision temps réel côté UI.
+- Messages emis par le serveur:
+  - `{"type":"midi_note","note":<0-127>,"on":true/false}` — changement d'état d'une note MIDI (polling ~30ms)
 
 ## Authentification et securite
 

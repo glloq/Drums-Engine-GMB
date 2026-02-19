@@ -48,6 +48,9 @@ public:
   const PipelineLookup& getLookup() const { return _lookup; }
   const CcDispatchStats& getCcDispatchStats() const { return _ccStats; }
 
+  // Get active note states (thread-safe snapshot)
+  void getNoteActive(uint8_t* out) const;
+
   // Recharger/compiler les tables
   void recompileLookup();
 

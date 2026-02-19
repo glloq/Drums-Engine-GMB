@@ -58,8 +58,14 @@ void WebServerManager::_handleGetStatus(AsyncWebServerRequest* req) {
 
   // System
   obj["free_heap"] = ESP.getFreeHeap();
+  obj["min_free_heap"] = ESP.getMinFreeHeap();
   obj["uptime_s"] = millis() / 1000;
   obj["storage"] = _storage->formatInfo();
+  obj["chip_model"] = ESP.getChipModel();
+  obj["cpu_freq_mhz"] = ESP.getCpuFreqMHz();
+  obj["flash_size"] = ESP.getFlashChipSize();
+  obj["sdk_version"] = ESP.getSdkVersion();
+  obj["firmware_version"] = "1.0.0-beta";
 
   _sendJson(req, 200, doc);
 }
@@ -642,4 +648,17 @@ void WebServerManager::_handleTestNote(AsyncWebServerRequest* req, uint8_t* data
   }
 
   _sendError(req, 200, noteOff ? "NoteOff sent" : "NoteOn sent");
+}
+
+void WebServerManager::_handleGetActiveNotes(AsyncWebServerRequest* req) {
+  uint8_t notes[128];
+  _eventProc->getNoteActive(notes);
+
+  // Return compact array of active note numbers (lightweight for polling)
+  JsonDocument doc;
+  JsonArray arr = doc["active"].to<JsonArray>();
+  for (uint8_t i = 0; i < 128; i++) {
+    if (notes[i] > 0) arr.add(i);
+  }
+  _sendJson(req, 200, doc);
 }

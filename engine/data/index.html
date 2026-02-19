@@ -488,7 +488,11 @@ input[type=checkbox] { width: auto; }
           <option value="servo_strike">Servo - Strike</option>
           <option value="solenoid_mute">Solenoide - Mute</option>
           <option value="servo_hihat">Servo - Pedale Hi-Hat</option>
-          <option value="motor_turn">Moteur - Rotation</option>
+          <option value="motor_turn">Moteur - Rotation optique</option>
+          <option value="motor_timed">Moteur - Chrono (duree)</option>
+          <option value="motor_speed">Moteur - Vitesse continue</option>
+          <option value="motor_sweep">Moteur - Balayage</option>
+          <option value="motor_alternate">Moteur - Alternance</option>
         </select>
       </div>
     </div>
@@ -839,11 +843,23 @@ input[type=checkbox] { width: auto; }
 
     <!-- Motor mode -->
     <div id="instrMotorConfig" style="display:none;">
-      <div class="form-group">
-        <label>Actionneur moteur</label>
-        <select id="instrMotorAct"></select>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Actionneur moteur</label>
+          <select id="instrMotorAct"></select>
+        </div>
+        <div class="form-group">
+          <label>Comportement</label>
+          <select id="instrMotorBehavior" onchange="onInstrMotorBehaviorChange()">
+            <option value="speed">Vitesse continue</option>
+            <option value="timed">Chrono (duree)</option>
+            <option value="optical">Rotation optique</option>
+            <option value="sweep">Balayage (sweep)</option>
+            <option value="alternate">Alternance</option>
+          </select>
+        </div>
       </div>
-      <div class="hint">NoteOn: moteur tourne (vitesse = velocite). NoteOff: moteur stoppe. Les fins de course sont configurees dans l'actionneur.</div>
+      <div id="instrMotorHint" class="hint">NoteOn: moteur tourne (vitesse = velocite). NoteOff: moteur stoppe.</div>
     </div>
 
     <!-- Custom mode: full editor -->
@@ -1500,7 +1516,7 @@ function populateMidiNoteSelect() {
 const BEHAVIOR_MAP = {
   1: [{v:0,t:'Strike'},{v:1,t:'Hold (PWM)'},{v:9,t:'Mute'}],
   0: [{v:2,t:'Position'},{v:3,t:'Strike'},{v:4,t:'Comb/Brush'},{v:5,t:'Pitch Bend'},{v:7,t:'Hi-Hat Controller'},{v:8,t:'Mute'}],
-  2: [{v:6,t:'Rotation'}]
+  2: [{v:6,t:'Rotation (optique)'},{v:10,t:'Chrono (duree)'},{v:11,t:'Vitesse continue'},{v:12,t:'Balayage (sweep)'},{v:13,t:'Alternance'}]
 };
 
 function rebuildBehaviorSelect(type, selected) {
@@ -1545,7 +1561,7 @@ function onActTypeChange() {
   const helps = {
     0: 'Servo moteur: controle un bras en position angulaire. Utilisez PCA9685 pour le bus. Comportements: position (mute), frappe (aller-retour rapide), pitch bend, hi-hat.',
     1: 'Solenoide: electro-aimant pour frappes percussives. Bus MCP23017 ou GPIO. Strike = frappe simple, Hold = maintien PWM, Mute = toggle on/off.',
-    2: 'Moteur DC: rotation continue ou oscillation. Utilisez LEDC PWM. Ideal pour shakers, brosses, roues a billes.'
+    2: 'Moteur DC: rotation, balayage ou alternance. Utilisez LEDC PWM. Ideal pour shakers, brosses, roues a billes. Choisir le comportement adapte.'
   };
   helpBox.textContent = helps[type] || '';
   helpBox.style.display = helps[type] ? '' : 'none';
@@ -1646,10 +1662,14 @@ function updateActuatorHelp() {
     3: 'Strike servo: frappe avec angle configurable. Pas besoin d\'angle de repos.',
     4: 'Comb/Brush: necessite 2 servos lies dans l\'instrument (un pour descendre le systeme, un pour la brosse). Pas besoin d\'angle de repos.',
     5: 'Pitch Bend: angle repos = pas de bend, angle max = deviation maximale. Pas besoin d\'angle de repos separe.',
-    6: 'Rotation: moteur a vitesse variable. Configurer les pins end stop pour les limites mecaniques.',
+    6: 'Rotation optique: moteur avec capteur optique (comptage edges). paramMin/Max = edges min/max, paramDefault = vitesse drive. Pin capteur dans hwAddress.',
     7: 'Hi-Hat Controller: pilote par CC#4 avec detection splash. Pas besoin d\'angle de repos.',
     8: 'Mute servo: angle mute = etouffe, angle libre = son. Volume global ferme proportionnellement. Pas besoin d\'angle de repos.',
-    9: 'Mute solenoide: ON/OFF pour mute. Peut etre active via MCP sur NoteOff. Pas de parametres de temps.'
+    9: 'Mute solenoide: ON/OFF pour mute. Peut etre active via MCP sur NoteOff. Pas de parametres de temps.',
+    10: 'Moteur chrono: active pour une duree puis arret auto. paramMin/Max = PWM min/max (%). Duree definie par la commande.',
+    11: 'Vitesse continue: velocite MIDI = vitesse moteur (PWM proportionnel). paramMin/Max = PWM min/max (%). NoteOff = arret.',
+    12: 'Balayage (sweep): aller simple (1 end stop) ou aller-retour (2 end stops + pin direction). paramMin/Max = PWM min/max (%).',
+    13: 'Alternance: alterne la direction entre 2 end stops a chaque NoteOn. paramMin/Max = PWM min/max (%). Necessite hwAddress = dirPin + 2 end stops.'
   };
   help.textContent = msgs[behavior] || '';
 }
@@ -1688,7 +1708,24 @@ function applyActuatorPreset() {
     N.value = N.value || 'HiHat Pedal';
   } else if (preset === 'motor_turn') {
     T.value = '2'; onActTypeChange();
-    N.value = N.value || 'Motor';
+    document.getElementById('actBehavior').value = '6';
+    N.value = N.value || 'Motor Optical';
+  } else if (preset === 'motor_timed') {
+    T.value = '2'; onActTypeChange();
+    document.getElementById('actBehavior').value = '10';
+    N.value = N.value || 'Motor Timed';
+  } else if (preset === 'motor_speed') {
+    T.value = '2'; onActTypeChange();
+    document.getElementById('actBehavior').value = '11';
+    N.value = N.value || 'Motor Speed';
+  } else if (preset === 'motor_sweep') {
+    T.value = '2'; onActTypeChange();
+    document.getElementById('actBehavior').value = '12';
+    N.value = N.value || 'Motor Sweep';
+  } else if (preset === 'motor_alternate') {
+    T.value = '2'; onActTypeChange();
+    document.getElementById('actBehavior').value = '13';
+    N.value = N.value || 'Motor Alternate';
   }
   onActBusChange();
   onActBehaviorChange();
@@ -2195,6 +2232,18 @@ function onMidiNoteChange() {
   if (noteInfo && (!nameEl.value || midiNotes.some(n => n.name === nameEl.value))) {
     nameEl.value = noteInfo.name;
   }
+}
+
+function onInstrMotorBehaviorChange() {
+  const mode = document.getElementById('instrMotorBehavior').value;
+  const hints = {
+    speed: 'Vitesse continue: NoteOn = moteur tourne (velocite → PWM). NoteOff = arret.',
+    timed: 'Chrono: NoteOn = moteur active pour la duree configuree puis arret auto.',
+    optical: 'Rotation optique: moteur avec capteur (comptage edges). Configure les edges dans l\'actionneur.',
+    sweep: 'Balayage: NoteOn = aller jusqu\'au end stop. Necessite end stop(s) configures dans l\'actionneur.',
+    alternate: 'Alternance: chaque NoteOn inverse la direction. Necessite 2 end stops + pin direction dans l\'actionneur.'
+  };
+  document.getElementById('instrMotorHint').textContent = hints[mode] || '';
 }
 
 function onInstrTypeChange() {
@@ -2873,9 +2922,17 @@ async function saveInstrument() {
 
   } else if (instrType === 'motor') {
     const motorId = parseInt(document.getElementById('instrMotorAct').value);
+    const motorMode = document.getElementById('instrMotorBehavior').value;
     actIds = [motorId];
-    noteOn = [mkPwm(motorId, 0)];
-    noteOff = [mkOff(motorId)];
+    if (motorMode === 'timed') {
+      // Timed: PULSE command, duration comes from actuator config
+      noteOn = [{actuatorId: motorId, commandType: 0, valueSource: 0, valueFixed: 0, ccIndex: 0, delayMs: 0, durationMinMs: 0, durationMaxMs: 0, velocityCurve: 0}];
+      noteOff = [];
+    } else {
+      // Speed, optical, sweep, alternate: PWM on NoteOn, OFF on NoteOff
+      noteOn = [mkPwm(motorId, 0)];
+      noteOff = [mkOff(motorId)];
+    }
 
   } else {
     // Custom mode
@@ -3083,7 +3140,11 @@ const BEHAVIOR_VERBS = {
   6: ['Rotation','Moteur'],     // MOTOR_OPTICAL_TRACK
   7: ['Pedale','Pedale HH'],    // HIHAT_CONTROLLER
   8: ['Mute','Mute servo'],     // SERVO_MUTE
-  9: ['Mute','Mute solenoide']  // SOLENOID_MUTE
+  9: ['Mute','Mute solenoide'], // SOLENOID_MUTE
+  10: ['Chrono','Moteur chrono'],    // MOTOR_TIMED
+  11: ['Vitesse','Moteur vitesse'],  // MOTOR_SPEED
+  12: ['Balayer','Moteur sweep'],    // MOTOR_SWEEP
+  13: ['Alterner','Moteur altern.']  // MOTOR_ALTERNATE
 };
 
 function actInfo(id) {

@@ -878,7 +878,9 @@ input[type=checkbox] { width: auto; }
           <select id="loopQuantize" onchange="renderCurrentLoopGrid()" style="width:70px;" title="Resolution grille">
             <option value="4">1/4</option>
             <option value="8" selected>1/8</option>
+            <option value="12">1/8T</option>
             <option value="16">1/16</option>
+            <option value="24">1/16T</option>
           </select>
           <span style="color:var(--fg2);font-size:0.8em;">Vel:</span>
           <input type="range" id="loopVelocity" min="1" max="127" value="100" style="width:80px;"
@@ -2935,6 +2937,7 @@ function renderLoops() {
       </div>
       <div class="item-actions">
         <button class="btn btn-sm btn-success" onclick="openLoopEditor(${i})">Editer</button>
+        <button class="btn btn-sm btn-secondary" onclick="duplicateLoop(${i})">Dupliquer</button>
         <button class="btn btn-sm btn-danger" onclick="confirmDelete(this, () => deleteLoopItem(${i}))">Suppr</button>
       </div>
     </div>
@@ -2959,6 +2962,17 @@ async function createLoop() {
 async function deleteLoopItem(idx) {
   await api('loop?id=' + idx, 'DELETE');
   await loadLoops();
+}
+
+async function duplicateLoop(idx) {
+  const loop = loops[idx];
+  if (!loop) return;
+  const copy = JSON.parse(JSON.stringify(loop));
+  copy.name = (copy.name || 'Loop') + ' (copie)';
+  delete copy.id;
+  await api('loops', 'POST', copy);
+  await loadLoops();
+  toast('Boucle dupliquee', 'success');
 }
 
 function openLoopEditor(idx) {
@@ -3339,6 +3353,7 @@ function updateSettingsInfo(data) {
       m(((data.flash_size||0)/1048576).toFixed(1)+' MB', 'Flash') +
       m(uptimeH+'h'+uptimeM+'m', 'Uptime') +
       m(data.storage||'--', 'Stockage') +
+      m(data.sdk_version||'--', 'SDK') +
       m((data.actuator_configs||0)+' / '+(data.instrument_count||0), 'Act. / Instr.') +
       m(data.pipeline_count||0, 'Pipelines');
   }
@@ -3349,11 +3364,15 @@ async function loadWifiSettings() {
   if (!data) return;
   const info = document.getElementById('wifiInfo');
   if (data.mode === 'ap') {
-    info.innerHTML = 'Mode: <strong>Point d\'acces</strong> (AP) - SSID: ' + data.ap_ssid + '<br>IP: ' + data.ip;
+    info.innerHTML = 'Mode: <strong>Point d\'acces</strong> (AP) - SSID: ' + data.ap_ssid + '<br>IP: <strong>' + data.ip + '</strong>';
   } else {
+    const rssi = data.rssi || 0;
+    const sigQual = rssi >= -50 ? 'Excellent' : rssi >= -60 ? 'Bon' : rssi >= -70 ? 'Moyen' : 'Faible';
+    const sigColor = rssi >= -50 ? 'var(--success)' : rssi >= -60 ? 'var(--accent)' : rssi >= -70 ? 'var(--warn)' : 'var(--accent)';
     info.innerHTML = 'Mode: <strong>Station</strong> - ' + (data.connected ? 'Connecte' : 'Deconnecte') +
-      '<br>SSID: ' + (data.ssid||'--') + ' / IP: ' + (data.ip||'--') +
-      (data.rssi ? ' / Signal: ' + data.rssi + ' dBm' : '');
+      '<br>SSID: ' + (data.ssid||'--') + ' &middot; IP: <strong>' + (data.ip||'--') + '</strong>' +
+      (data.rssi ? ' &middot; Signal: <span style="color:' + sigColor + ';font-weight:600;">' + rssi + ' dBm (' + sigQual + ')</span>' : '') +
+      (data.hostname ? '<br>mDNS: <strong>' + data.hostname + '.local</strong>' : '');
   }
   document.getElementById('settWifiSsid').value = data.ssid || '';
   document.getElementById('settWifiHostname').value = data.hostname || 'midipercussion';

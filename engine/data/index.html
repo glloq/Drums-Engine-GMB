@@ -2102,6 +2102,7 @@ function renderInstruments() {
     el.innerHTML = '<div class="empty-state"><p>Aucun instrument configure</p><p>Cliquez "+ Ajouter" pour commencer</p></div>';
     return;
   }
+  const catColors = {drums:'#e94560', cymbals:'#ffd700', latin:'#4caf50', other:'#64b5f6'};
   el.innerHTML = instruments.map(inst => {
     const mNote = parseInt(inst.midiNote);
     const noteInfo = midiNotes.find(n => parseInt(n.note) === mNote);
@@ -2112,11 +2113,12 @@ function renderInstruments() {
     const onCount = (inst.noteOnActions || []).length;
     const offCount = (inst.noteOffActions || []).length;
     const ccCount = (inst.ccBindings || []).length;
+    const catColor = catColors[inst.category] || 'var(--accent2)';
     return `
-    <div class="list-item">
+    <div class="list-item" style="border-left-color:${catColor};">
       <div class="item-title">
         <strong>${inst.name}</strong>
-        <span class="badge">${inst.category}</span>
+        <span class="badge" style="background:${catColor};color:#000;">${inst.category}</span>
         <span class="badge">${mNote}${noteName ? ' · ' + noteName : ''}</span>
         <span class="badge badge-green">On:${onCount}</span>
         <span class="badge badge-warn">Off:${offCount}</span>

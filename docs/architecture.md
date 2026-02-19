@@ -8,11 +8,11 @@ Le moteur suit une architecture 6 couches descendantes, executee sur ESP32 dual-
 Core 1 (RT 1kHz)                    Core 0 (App)
 ┌────────────────────┐              ┌──────────────────┐
 │ 1. MIDI Layer      │              │ Web Server REST  │
-│ 2. Event Processor │              │ Loop Engine      │
-│ 3. Scheduler       │              │ WiFi Manager     │
-│ 4. Actuator Mgr    │              │ Storage LittleFS │
-│ 5. HAL Drivers     │              └──────────────────┘
-└────────────────────┘
+│ 2. Event Processor │──LedEvent──→ │ LED Engine 60fps │
+│ 3. Scheduler       │  (lock-free) │ Loop Engine      │
+│ 4. Actuator Mgr    │              │ WiFi Manager     │
+│ 5. HAL Drivers     │              │ Storage LittleFS │
+└────────────────────┘              └──────────────────┘
 ```
 
 ## Couches logiques
@@ -47,6 +47,16 @@ MIDI PitchBend → map 14-bit → 0-127 → route via CC#126 virtuel → cc_rout
 LoopEngine::update() → tick fractionnaire → _dispatchEvent() → EventProcessor → pipeline
 ```
 
+### LED Engine (WS2812B)
+```
+EventProcessor ──→ LedEventQueue (SPSC lock-free) ──→ LedEngine (Core 0, 60fps)
+                                                        ├─ Poll events
+                                                        ├─ Hit animations (flash/pulse/ripple)
+                                                        ├─ Idle/theme (static/breathing/rainbow)
+                                                        ├─ Blend hit + idle → couleur finale
+                                                        └─ LedStripDriver → RMT → WS2812B
+```
+
 ## Structures cles
 
 ### InstrumentConfig
@@ -72,7 +82,7 @@ LoopEngine::update() → tick fractionnaire → _dispatchEvent() → EventProces
 
 ### Dual-core FreeRTOS
 - **Core 1 (RT)** : MIDI + Scheduler + Watchdog (tache pinnee)
-- **Core 0 (App)** : Web server + Loop Engine + WiFi
+- **Core 0 (App)** : Web server + Loop Engine + LED Engine + WiFi
 
 ### Protections concurrence
 - `portENTER_CRITICAL` spinlock sur `_noteActive[128]` (partage Core 0 / Core 1)
@@ -108,6 +118,8 @@ LoopEngine::update() → tick fractionnaire → _dispatchEvent() → EventProces
 ```
 /actuators.json     — Configuration des actionneurs
 /instruments.json   — Configuration des instruments
+/leds.json          — Configuration LED (strips, segments, brightness)
+/themes.json        — Themes LED (palettes, animations)
 /wifi.json          — Credentials WiFi
 /auth.json          — Token API
 /error.log          — Logs persistants (8KB max, rotation auto)
@@ -147,9 +159,35 @@ engine/src/
 ├── scheduler/      Ordonnanceur temps reel (queue statique, timer hardware)
 ├── event/          Pipeline compile, traitement MIDI runtime, spinlock _noteActive
 ├── instrument/     Gestion instruments, templates, factory actionneurs
+├── led/            LED WS2812B: strip driver (RMT), event queue, engine 60fps, themes
 ├── midi/           Moteur rtpMIDI (AppleMIDI)
 ├── loop/           Sequenceur boucles (tick fractionnaire, quantize, persistence)
 ├── storage/        LittleFS (ecriture atomique, migration v4)
 ├── wifi/           WiFi STA/AP + portail captif (vTaskDelay non-bloquant)
-└── web/            Serveur REST (5 modules) + UI gzip + auth + rate-limiting
+└── web/            Serveur REST (6 modules) + UI gzip + auth + rate-limiting
 ```
+
+## Systeme LED (WS2812B)
+
+### Architecture
+- **4 strips max** via 4 canaux RMT ESP32 (GPIO 4, 5, 16, 17 par defaut)
+- **16 segments max** : portion de strip assignee a un instrument
+- **8 themes max** : palettes couleurs + modes animation globaux
+- **Communication** : SPSC lock-free ring buffer (LedEventQueue) Core 1 → Core 0
+
+### Pipeline de rendu (60 fps sur Core 0)
+1. Poll `LedEventQueue` : events NoteOn/NoteOff du Core 1
+2. Mise a jour animations hit actives (fade out progressif)
+3. Calcul couleurs idle/theme par segment
+4. Blend hit (prioritaire) + idle → couleur finale
+5. Ecriture pixels via `LedStripDriver` → RMT hardware → WS2812B
+
+### Animations
+- **Hit** : FLASH (instantane + fade), PULSE (montee/descente), RIPPLE (propagation centre→bords)
+- **Idle** : OFF, STATIC (fixe), BREATHING (sinusoide 3s), RAINBOW (arc-en-ciel defilant)
+- Le hit a priorite sur l'idle via alpha blending
+
+### Hardware
+- Level shifter SN74HCT125 recommande (3.3V ESP32 → 5V WS2812B)
+- Alimentation 5V externe pour les strips (ne pas alimenter via le 5V ESP32)
+- Condensateur 1000µF sur l'alimentation 5V

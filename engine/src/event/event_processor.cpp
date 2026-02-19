@@ -46,6 +46,15 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
       _scheduler->scheduleActionSteps(pipeline.note_on_actions, pipeline.note_on_count,
                                       ev.data2, ev.timestamp, _state->raw().variables,
                                       activeGroup);
+      // Push LED event (Core 1 → Core 0, lock-free)
+      if (_ledQueue) {
+        LedEvent ledEv;
+        ledEv.midiNote = ev.data1;
+        ledEv.velocity = ev.data2;
+        ledEv.noteOn = true;
+        ledEv.segmentId = 0xFF; // Broadcast: LedEngine will resolve via note lookup
+        _ledQueue->push(ledEv);
+      }
       portENTER_CRITICAL(&_noteActiveMux);
       if (_noteActive[ev.data1] < 255) _noteActive[ev.data1]++;
       portEXIT_CRITICAL(&_noteActiveMux);
@@ -53,6 +62,15 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
     }
 
     _executePipeline(pipelineIdx, ev.data2, ev.timestamp);
+    // Push LED event for pipeline-path notes too
+    if (_ledQueue) {
+      LedEvent ledEv;
+      ledEv.midiNote = ev.data1;
+      ledEv.velocity = ev.data2;
+      ledEv.noteOn = true;
+      ledEv.segmentId = 0xFF;
+      _ledQueue->push(ledEv);
+    }
     portENTER_CRITICAL(&_noteActiveMux);
     if (_noteActive[ev.data1] < 255) _noteActive[ev.data1]++;
     portEXIT_CRITICAL(&_noteActiveMux);

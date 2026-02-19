@@ -73,6 +73,9 @@
 // WiFi
 #include "wifi/wifi_manager.h"
 
+// LED
+#include "led/led_engine.h"
+
 // Web
 #include "web/web_server.h"
 
@@ -83,6 +86,8 @@ void initHardware();
 void loadConfiguration();
 void compilePipelines();
 void loadLoops();
+void loadLedConfig();
+void rebuildLedNoteLookup();
 void setupSchedulerTimer();
 void initTask(void* param);
 void rtCoreTask(void* param);
@@ -130,6 +135,9 @@ ActuatorFactory actuatorFactory(&actuatorManager,
                                  pcaDrivers, 0,
                                  &gpioDriver, &ledcDriver);
 
+// LED Engine
+LedEngine ledEngine;
+
 // Application
 InstrumentManager instrumentManager(&actuatorManager, &scheduler);
 MidiEngine midiEngine(&eventProcessor, &instrumentManager);
@@ -146,7 +154,7 @@ static volatile bool _bootBtnHandled = false;
 WebServerManager webServer(&instrumentManager, &actuatorManager,
                             &actuatorFactory,
                             &loopEngine, &midiEngine, &storage,
-                            &scheduler, &eventProcessor);
+                            &scheduler, &eventProcessor, &ledEngine);
 
 // ============================================================================
 // Hardware Timer pour Scheduler (Option B - adaptatif)
@@ -219,6 +227,9 @@ void appCoreTask(void* param) {
 
     // LED de statut
     statusLed.update();
+
+    // LED strips (WS2812B, 60 fps)
+    ledEngine.update();
 
     // Bouton BOOT (GPIO 0) - detection appui long 3s
     bool btnPressed = (digitalRead(BOOT_BUTTON_PIN) == LOW);
@@ -492,6 +503,50 @@ void loadLoops() {
 }
 
 // ============================================================================
+// Charger la configuration LED depuis LittleFS
+// ============================================================================
+void loadLedConfig() {
+  ledEngine.begin();
+
+  if (storage.loadLedConfig(ledEngine)) {
+    DBGF("[Config] Loaded LED config: %d segments on %d strips\n",
+         ledEngine.getSegmentCount(), ledEngine.getActiveStripCount());
+  } else {
+    DBGLN("[Config] No LED config found");
+  }
+
+  if (storage.loadLedThemes(ledEngine)) {
+    DBGF("[Config] Loaded %d LED themes (active: %d)\n",
+         ledEngine.getThemeCount(), ledEngine.getActiveThemeId());
+  }
+
+  rebuildLedNoteLookup();
+}
+
+// ============================================================================
+// Reconstruire le lookup note MIDI → segments LED
+// ============================================================================
+void rebuildLedNoteLookup() {
+  // Reset le lookup interne du LedEngine
+  ledEngine.rebuildNoteLookup();
+
+  // Pour chaque segment, trouver l'instrument associe et mapper sa note MIDI
+  for (uint8_t s = 0; s < ledEngine.getSegmentCount(); s++) {
+    LedSegmentConfig* seg = ledEngine.getSegmentByIndex(s);
+    if (!seg || seg->instrumentId == 0xFF || !seg->enabled) continue;
+
+    // Trouver l'instrument pour obtenir sa note MIDI
+    InstrumentConfig* inst = instrumentManager.getInstrument(seg->instrumentId);
+    if (!inst || !inst->enabled) continue;
+
+    // Enregistrer le mapping note MIDI → segment LED
+    ledEngine.registerNoteSegment(inst->midiNote, s);
+  }
+
+  DBGF("[LED] Note lookup rebuilt for %d segments\n", ledEngine.getSegmentCount());
+}
+
+// ============================================================================
 // Init Task - initialisation lourde dans une tache avec 32KB de stack
 // (le loopTask Arduino n'a que 8KB, insuffisant pour WiFi+JSON+Web+MIDI)
 // ============================================================================
@@ -523,6 +578,10 @@ void initTask(void* param) {
 
   // 5. Connecter le LoopEngine au pipeline system
   loopEngine.setEventProcessor(&eventProcessor);
+
+  // 5b. LED configuration
+  loadLedConfig();
+  eventProcessor.setLedEventQueue(&ledEngine.getEventQueue());
 
   // 6. Hardware timer pour scheduler precis
   setupSchedulerTimer();
@@ -571,6 +630,9 @@ void initTask(void* param) {
   DBGF("  LED statut:   GPIO %d (%s)\n", STATUS_LED_PIN,
        wifiManager.isAPMode() ? "clignotement lent = AP" : "fixe = connecte");
   DBGF("  Bouton BOOT:  GPIO %d (3s = hotspot)\n", BOOT_BUTTON_PIN);
+  DBGF("  LED strips:   %d active, %d segments, %d themes\n",
+       ledEngine.getActiveStripCount(), ledEngine.getSegmentCount(),
+       ledEngine.getThemeCount());
   DBGF("  Free heap:    %d bytes\n", ESP.getFreeHeap());
   DBGLN("============================================");
 

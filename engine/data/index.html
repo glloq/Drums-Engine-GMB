@@ -172,6 +172,7 @@ input[type=checkbox] { width: auto; }
 <div class="tabs">
   <div class="tab active" data-tab="actuators">Actionneurs</div>
   <div class="tab" data-tab="instruments">Instruments</div>
+  <div class="tab" data-tab="leds">LEDs</div>
   <div class="tab" data-tab="mappings">Mappings</div>
 </div>
 
@@ -196,6 +197,52 @@ input[type=checkbox] { width: auto; }
       </div>
     </div>
     <div id="instrumentList"></div>
+  </div>
+
+  <!-- ====== LEDS TAB ====== -->
+  <div class="panel" id="tab-leds">
+
+    <!-- LED Master Controls -->
+    <div class="card">
+      <h3>Controle LED <span class="badge" id="ledStripCountBadge">0 strips</span></h3>
+      <div class="form-row">
+        <div class="form-group" style="flex:2;">
+          <label>Luminosite master</label>
+          <input type="range" id="ledMasterBrightness" min="0" max="255" value="128" oninput="setLedBrightness(this.value)">
+        </div>
+        <div class="form-group">
+          <label>Theme actif</label>
+          <select id="ledActiveTheme" onchange="setActiveTheme(this.value)">
+            <option value="255">Aucun</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- LED Strips Configuration -->
+    <div class="card">
+      <h3>Strips physiques
+        <button class="btn btn-primary btn-sm" onclick="showAddStrip()">+ Strip</button>
+      </h3>
+      <div id="ledStripList"></div>
+    </div>
+
+    <!-- LED Segments -->
+    <div class="card">
+      <h3>Segments (<span id="ledSegCount">0</span>)
+        <button class="btn btn-primary btn-sm" onclick="showAddSegment()">+ Segment</button>
+      </h3>
+      <p class="hint" style="margin-bottom:10px;">Chaque segment = une portion de strip assignee a un instrument.</p>
+      <div id="ledSegmentList"></div>
+    </div>
+
+    <!-- LED Themes -->
+    <div class="card">
+      <h3>Themes (<span id="ledThemeCount">0</span>)
+        <button class="btn btn-primary btn-sm" onclick="showAddTheme()">+ Theme</button>
+      </h3>
+      <div id="ledThemeList"></div>
+    </div>
   </div>
 
   <!-- ====== MAPPINGS TAB ====== -->
@@ -754,6 +801,191 @@ input[type=checkbox] { width: auto; }
   </div>
 </div>
 
+<!-- ====== MODAL: LED Strip ====== -->
+<div class="modal-overlay" id="modalLedStrip">
+  <div class="modal">
+    <h2>Configurer Strip LED</h2>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Strip #</label>
+        <select id="ledStripId">
+          <option value="0">Strip 0</option>
+          <option value="1">Strip 1</option>
+          <option value="2">Strip 2</option>
+          <option value="3">Strip 3</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>GPIO Pin</label>
+        <select id="ledStripPin">
+          <option value="4">GPIO 4</option>
+          <option value="5">GPIO 5</option>
+          <option value="16">GPIO 16</option>
+          <option value="17">GPIO 17</option>
+          <option value="18">GPIO 18</option>
+          <option value="19">GPIO 19</option>
+          <option value="23">GPIO 23</option>
+          <option value="25">GPIO 25</option>
+          <option value="26">GPIO 26</option>
+          <option value="27">GPIO 27</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Nombre de LEDs</label>
+        <input type="number" id="ledStripCount" min="1" max="256" value="30">
+      </div>
+      <div class="form-group">
+        <label>Luminosite max</label>
+        <input type="range" id="ledStripBrightness" min="1" max="255" value="128">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="hideModal('modalLedStrip')">Annuler</button>
+      <button class="btn btn-primary" onclick="saveLedStrip()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ====== MODAL: LED Segment ====== -->
+<div class="modal-overlay" id="modalLedSegment">
+  <div class="modal">
+    <h2 id="modalLedSegTitle">Nouveau Segment LED</h2>
+    <input type="hidden" id="editLedSegId" value="">
+    <div class="form-group">
+      <label>Nom</label>
+      <input type="text" id="ledSegName" placeholder="ex: Kick Ring, Snare Glow...">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Strip</label>
+        <select id="ledSegStrip"></select>
+      </div>
+      <div class="form-group">
+        <label>Instrument</label>
+        <select id="ledSegInstrument">
+          <option value="255">Aucun</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Pixel debut</label>
+        <input type="number" id="ledSegStart" min="0" max="255" value="0">
+      </div>
+      <div class="form-group">
+        <label>Nombre pixels</label>
+        <input type="number" id="ledSegCount" min="1" max="256" value="8">
+      </div>
+    </div>
+    <h4 style="margin:12px 0 8px;font-size:0.9em;color:var(--accent);">Hit (declenchement)</h4>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Couleur hit</label>
+        <input type="color" id="ledSegHitColor" value="#ffffff">
+      </div>
+      <div class="form-group">
+        <label>Animation</label>
+        <select id="ledSegHitAnim">
+          <option value="0">Flash</option>
+          <option value="1">Pulse</option>
+          <option value="2">Ripple</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Fade (ms)</label>
+        <input type="number" id="ledSegFade" min="50" max="2000" value="300">
+      </div>
+    </div>
+    <div class="form-group">
+      <label><input type="checkbox" id="ledSegVelBri" checked> Velocity → luminosite</label>
+    </div>
+    <h4 style="margin:12px 0 8px;font-size:0.9em;color:var(--accent2);">Idle (ambiance)</h4>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Couleur idle</label>
+        <input type="color" id="ledSegIdleColor" value="#141428">
+      </div>
+      <div class="form-group">
+        <label>Animation</label>
+        <select id="ledSegIdleAnim">
+          <option value="0">Off</option>
+          <option value="1">Static</option>
+          <option value="2">Breathing</option>
+          <option value="3">Rainbow</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Luminosite idle</label>
+        <input type="range" id="ledSegIdleBri" min="0" max="255" value="30">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="hideModal('modalLedSegment')">Annuler</button>
+      <button class="btn btn-primary" onclick="saveLedSegment()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ====== MODAL: LED Theme ====== -->
+<div class="modal-overlay" id="modalLedTheme">
+  <div class="modal">
+    <h2 id="modalLedThemeTitle">Nouveau Theme LED</h2>
+    <input type="hidden" id="editLedThemeId" value="">
+    <div class="form-group">
+      <label>Nom</label>
+      <input type="text" id="ledThemeName" placeholder="ex: Concert, Studio, Nuit...">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Mode idle</label>
+        <select id="ledThemeIdle">
+          <option value="0">Off</option>
+          <option value="1">Static</option>
+          <option value="2">Breathing</option>
+          <option value="3">Rainbow</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Mode hit</label>
+        <select id="ledThemeHit">
+          <option value="0">Flash</option>
+          <option value="1">Pulse</option>
+          <option value="2">Ripple</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Luminosite</label>
+        <input type="range" id="ledThemeBri" min="0" max="255" value="128">
+      </div>
+      <div class="form-group">
+        <label>Vitesse fade</label>
+        <input type="range" id="ledThemeSpeed" min="1" max="10" value="5">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Palette (8 couleurs)</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <input type="color" class="led-palette-color" value="#e94560">
+        <input type="color" class="led-palette-color" value="#533483">
+        <input type="color" class="led-palette-color" value="#4caf50">
+        <input type="color" class="led-palette-color" value="#ff9800">
+        <input type="color" class="led-palette-color" value="#2196f3">
+        <input type="color" class="led-palette-color" value="#ffffff">
+        <input type="color" class="led-palette-color" value="#00bcd4">
+        <input type="color" class="led-palette-color" value="#ffeb3b">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="hideModal('modalLedTheme')">Annuler</button>
+      <button class="btn btn-primary" onclick="saveLedTheme()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -769,6 +1001,10 @@ let currentLoopIdx = -1;
 let capabilities = null;
 let apiToken = '';
 let hideUsedActuators = localStorage.getItem('hideUsedAct') !== '0';
+let ledStrips = [];
+let ledSegments = [];
+let ledThemes = [];
+let ledStatus = {};
 
 // ====================================================================
 // API helper
@@ -803,7 +1039,7 @@ async function init() {
   if (authData && authData.token) apiToken = authData.token;
 
   populateMidiSelects();
-  await Promise.all([loadMidiNotes(), loadCapabilities(), loadActuators(), loadInstruments(), loadLoops()]);
+  await Promise.all([loadMidiNotes(), loadCapabilities(), loadActuators(), loadInstruments(), loadLoops(), loadLedData()]);
   refreshStatus();
   setInterval(refreshStatus, 5000);
 }
@@ -2468,6 +2704,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
     // Refresh mappings when switching to that tab
     if (tab.dataset.tab === 'mappings') refreshMappings();
+    if (tab.dataset.tab === 'leds') loadLedData();
   });
 });
 
@@ -2501,6 +2738,281 @@ function toast(msg, type='success') {
 }
 
 // Event listeners are now inline (onchange) on the HTML elements
+
+// ====================================================================
+// LED Management
+// ====================================================================
+const hitAnimNames = ['Flash', 'Pulse', 'Ripple'];
+const idleAnimNames = ['Off', 'Static', 'Breathing', 'Rainbow'];
+
+async function loadLedData() {
+  const [stripsData, segData, themeData, statusData] = await Promise.all([
+    api('led/strips'), api('led/segments'), api('led/themes'), api('led/status')
+  ]);
+  if (stripsData) ledStrips = stripsData.strips || [];
+  if (segData) ledSegments = segData.segments || [];
+  if (themeData) { ledThemes = themeData.themes || []; }
+  if (statusData) ledStatus = statusData;
+
+  renderLedStrips();
+  renderLedSegments();
+  renderLedThemes();
+  updateLedStatus();
+}
+
+function updateLedStatus() {
+  document.getElementById('ledStripCountBadge').textContent = (ledStatus.stripCount||0) + ' strips';
+  document.getElementById('ledSegCount').textContent = ledSegments.length;
+  document.getElementById('ledThemeCount').textContent = ledThemes.length;
+  if (ledStatus.masterBrightness !== undefined) {
+    document.getElementById('ledMasterBrightness').value = ledStatus.masterBrightness;
+  }
+  // Populate theme selector
+  const sel = document.getElementById('ledActiveTheme');
+  sel.innerHTML = '<option value="255">Aucun</option>';
+  ledThemes.forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t.id;
+    opt.textContent = t.name || ('Theme #' + t.id);
+    if (t.id === (ledStatus.activeThemeId || 255)) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+function renderLedStrips() {
+  const el = document.getElementById('ledStripList');
+  if (ledStrips.length === 0) {
+    el.innerHTML = '<div class="empty-state">Aucun strip configure. Ajoutez un strip WS2812B.</div>';
+    return;
+  }
+  el.innerHTML = ledStrips.map(s =>
+    `<div class="list-item">
+      <div class="item-title"><strong>Strip #${s.id}</strong> <span class="badge">${s.ledCount} LEDs</span> <span class="badge">GPIO ${s.gpioPin}</span> ${s.enabled?'<span class="badge badge-green">ON</span>':''}</div>
+      <div class="item-actions">
+        <button class="btn btn-sm btn-secondary" onclick="testLedStrip(${s.id})">Test</button>
+        <button class="btn btn-sm btn-danger" onclick="confirmDelete(this,()=>deleteLedStrip(${s.id}))">Supprimer</button>
+      </div>
+    </div>`
+  ).join('');
+}
+
+function renderLedSegments() {
+  const el = document.getElementById('ledSegmentList');
+  if (ledSegments.length === 0) {
+    el.innerHTML = '<div class="empty-state">Aucun segment. Creez des segments et assignez-les a des instruments.</div>';
+    return;
+  }
+  el.innerHTML = ledSegments.map(s => {
+    const inst = instruments.find(i => i.id === s.instrumentId);
+    const instName = inst ? inst.name : (s.instrumentId === 255 ? 'Aucun' : '?');
+    return `<div class="list-item" style="border-left-color:rgb(${s.hitColor?.r||255},${s.hitColor?.g||255},${s.hitColor?.b||255});">
+      <div class="item-title"><strong>${s.name||'Segment'}</strong> <span class="badge">Strip #${s.stripId}</span> <span class="badge">${s.pixelStart}-${s.pixelStart+s.pixelCount-1}</span></div>
+      <div class="item-detail">Instrument: <b>${instName}</b> | Hit: ${hitAnimNames[s.hitAnimation]||'?'} (${s.hitFadeDurationMs}ms) | Idle: ${idleAnimNames[s.idleAnimation]||'?'}</div>
+      <div class="item-actions">
+        <button class="btn btn-sm btn-secondary" onclick="testLedSegment(${s.id})">Test</button>
+        <button class="btn btn-sm btn-secondary" onclick="editLedSegment(${s.id})">Editer</button>
+        <button class="btn btn-sm btn-danger" onclick="confirmDelete(this,()=>deleteLedSegment(${s.id}))">Supprimer</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderLedThemes() {
+  const el = document.getElementById('ledThemeList');
+  if (ledThemes.length === 0) {
+    el.innerHTML = '<div class="empty-state">Aucun theme. Creez un theme pour gerer les couleurs globalement.</div>';
+    return;
+  }
+  el.innerHTML = ledThemes.map(t => {
+    const isActive = t.id === (ledStatus.activeThemeId || 255);
+    const paletteHtml = (t.palette||[]).map(c => `<span style="display:inline-block;width:16px;height:16px;border-radius:3px;background:rgb(${c.r},${c.g},${c.b});"></span>`).join('');
+    return `<div class="list-item" ${isActive?'style="border-left-color:var(--success);"':''}>
+      <div class="item-title"><strong>${t.name||'Theme'}</strong> ${isActive?'<span class="badge badge-green">Actif</span>':''} <span class="badge">${idleAnimNames[t.idleMode]||'?'}</span></div>
+      <div class="item-detail" style="display:flex;gap:3px;align-items:center;margin-bottom:4px;">${paletteHtml}</div>
+      <div class="item-actions">
+        ${!isActive?`<button class="btn btn-sm btn-success" onclick="setActiveTheme(${t.id})">Activer</button>`:''}
+        <button class="btn btn-sm btn-secondary" onclick="editLedTheme(${t.id})">Editer</button>
+        <button class="btn btn-sm btn-danger" onclick="confirmDelete(this,()=>deleteLedTheme(${t.id}))">Supprimer</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// --- Strip actions ---
+function showAddStrip() { showModal('modalLedStrip'); }
+
+async function saveLedStrip() {
+  const data = {
+    id: parseInt(document.getElementById('ledStripId').value),
+    gpioPin: parseInt(document.getElementById('ledStripPin').value),
+    ledCount: parseInt(document.getElementById('ledStripCount').value),
+    maxBrightness: parseInt(document.getElementById('ledStripBrightness').value),
+    chipType: 0, colorOrder: 0, enabled: true
+  };
+  const r = await api('led/strips', 'POST', data);
+  if (r) { toast('Strip configure'); hideModal('modalLedStrip'); await loadLedData(); }
+}
+
+async function deleteLedStrip(id) {
+  const r = await api('led/strip?id='+id, 'DELETE');
+  if (r) { toast('Strip supprime'); await loadLedData(); }
+}
+
+async function testLedStrip(id) {
+  await api('led/strip/test', 'POST', {id});
+  toast('Test strip '+id);
+}
+
+// --- Segment actions ---
+function showAddSegment() {
+  document.getElementById('modalLedSegTitle').textContent = 'Nouveau Segment LED';
+  document.getElementById('editLedSegId').value = '';
+  document.getElementById('ledSegName').value = '';
+  document.getElementById('ledSegStart').value = '0';
+  document.getElementById('ledSegCount').value = '8';
+  document.getElementById('ledSegHitColor').value = '#ffffff';
+  document.getElementById('ledSegHitAnim').value = '0';
+  document.getElementById('ledSegFade').value = '300';
+  document.getElementById('ledSegVelBri').checked = true;
+  document.getElementById('ledSegIdleColor').value = '#141428';
+  document.getElementById('ledSegIdleAnim').value = '0';
+  document.getElementById('ledSegIdleBri').value = '30';
+  // Populate strip select
+  const stripSel = document.getElementById('ledSegStrip');
+  stripSel.innerHTML = ledStrips.map(s => `<option value="${s.id}">Strip #${s.id} (${s.ledCount} LEDs)</option>`).join('');
+  // Populate instrument select
+  const instSel = document.getElementById('ledSegInstrument');
+  instSel.innerHTML = '<option value="255">Aucun</option>';
+  instruments.forEach(i => { instSel.innerHTML += `<option value="${i.id}">${i.name} (note ${i.midiNote})</option>`; });
+  showModal('modalLedSegment');
+}
+
+function editLedSegment(id) {
+  const seg = ledSegments.find(s => s.id === id);
+  if (!seg) return;
+  showAddSegment();
+  document.getElementById('modalLedSegTitle').textContent = 'Editer Segment LED';
+  document.getElementById('editLedSegId').value = id;
+  document.getElementById('ledSegName').value = seg.name || '';
+  document.getElementById('ledSegStrip').value = seg.stripId;
+  document.getElementById('ledSegInstrument').value = seg.instrumentId;
+  document.getElementById('ledSegStart').value = seg.pixelStart;
+  document.getElementById('ledSegCount').value = seg.pixelCount;
+  if (seg.hitColor) document.getElementById('ledSegHitColor').value = rgbToHex(seg.hitColor);
+  document.getElementById('ledSegHitAnim').value = seg.hitAnimation;
+  document.getElementById('ledSegFade').value = seg.hitFadeDurationMs;
+  document.getElementById('ledSegVelBri').checked = seg.velocityToBrightness;
+  if (seg.idleColor) document.getElementById('ledSegIdleColor').value = rgbToHex(seg.idleColor);
+  document.getElementById('ledSegIdleAnim').value = seg.idleAnimation;
+  document.getElementById('ledSegIdleBri').value = seg.idleBrightness;
+}
+
+function rgbToHex(c) {
+  return '#' + [c.r,c.g,c.b].map(v => v.toString(16).padStart(2,'0')).join('');
+}
+function hexToRgb(hex) {
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return {r,g,b};
+}
+
+async function saveLedSegment() {
+  const editId = document.getElementById('editLedSegId').value;
+  const data = {
+    name: document.getElementById('ledSegName').value || 'Segment',
+    stripId: parseInt(document.getElementById('ledSegStrip').value),
+    instrumentId: parseInt(document.getElementById('ledSegInstrument').value),
+    pixelStart: parseInt(document.getElementById('ledSegStart').value),
+    pixelCount: parseInt(document.getElementById('ledSegCount').value),
+    hitColor: hexToRgb(document.getElementById('ledSegHitColor').value),
+    hitBrightness: 255,
+    hitFadeDurationMs: parseInt(document.getElementById('ledSegFade').value),
+    hitAnimation: parseInt(document.getElementById('ledSegHitAnim').value),
+    idleColor: hexToRgb(document.getElementById('ledSegIdleColor').value),
+    idleBrightness: parseInt(document.getElementById('ledSegIdleBri').value),
+    idleAnimation: parseInt(document.getElementById('ledSegIdleAnim').value),
+    velocityToBrightness: document.getElementById('ledSegVelBri').checked,
+    enabled: true
+  };
+  let r;
+  if (editId) {
+    r = await api('led/segment?id=' + editId, 'PUT', data);
+  } else {
+    r = await api('led/segments', 'POST', data);
+  }
+  if (r) { toast(editId ? 'Segment mis a jour' : 'Segment cree'); hideModal('modalLedSegment'); await loadLedData(); }
+}
+
+async function deleteLedSegment(id) {
+  const r = await api('led/segment?id='+id, 'DELETE');
+  if (r) { toast('Segment supprime'); await loadLedData(); }
+}
+
+async function testLedSegment(id) {
+  await api('led/segment/test', 'POST', {id, brightness: 255});
+  toast('Test segment');
+}
+
+// --- Theme actions ---
+function showAddTheme() {
+  document.getElementById('modalLedThemeTitle').textContent = 'Nouveau Theme LED';
+  document.getElementById('editLedThemeId').value = '';
+  document.getElementById('ledThemeName').value = '';
+  document.getElementById('ledThemeIdle').value = '2';
+  document.getElementById('ledThemeHit').value = '0';
+  document.getElementById('ledThemeBri').value = '128';
+  document.getElementById('ledThemeSpeed').value = '5';
+  showModal('modalLedTheme');
+}
+
+function editLedTheme(id) {
+  const theme = ledThemes.find(t => t.id === id);
+  if (!theme) return;
+  showAddTheme();
+  document.getElementById('modalLedThemeTitle').textContent = 'Editer Theme';
+  document.getElementById('editLedThemeId').value = id;
+  document.getElementById('ledThemeName').value = theme.name || '';
+  document.getElementById('ledThemeIdle').value = theme.idleMode;
+  document.getElementById('ledThemeHit').value = theme.hitMode;
+  document.getElementById('ledThemeBri').value = theme.globalBrightness;
+  document.getElementById('ledThemeSpeed').value = theme.fadeSpeed;
+  const pickers = document.querySelectorAll('.led-palette-color');
+  (theme.palette||[]).forEach((c, i) => { if (pickers[i]) pickers[i].value = rgbToHex(c); });
+}
+
+async function saveLedTheme() {
+  const editId = document.getElementById('editLedThemeId').value;
+  const pickers = document.querySelectorAll('.led-palette-color');
+  const palette = Array.from(pickers).map(p => hexToRgb(p.value));
+  const data = {
+    name: document.getElementById('ledThemeName').value || 'Theme',
+    idleMode: parseInt(document.getElementById('ledThemeIdle').value),
+    hitMode: parseInt(document.getElementById('ledThemeHit').value),
+    globalBrightness: parseInt(document.getElementById('ledThemeBri').value),
+    fadeSpeed: parseInt(document.getElementById('ledThemeSpeed').value),
+    palette, enabled: true
+  };
+  let r;
+  if (editId) {
+    r = await api('led/theme?id=' + editId, 'PUT', data);
+  } else {
+    r = await api('led/themes', 'POST', data);
+  }
+  if (r) { toast(editId ? 'Theme mis a jour' : 'Theme cree'); hideModal('modalLedTheme'); await loadLedData(); }
+}
+
+async function deleteLedTheme(id) {
+  const r = await api('led/theme?id='+id, 'DELETE');
+  if (r) { toast('Theme supprime'); await loadLedData(); }
+}
+
+async function setActiveTheme(id) {
+  const r = await api('led/theme/active', 'POST', {id: parseInt(id)});
+  if (r) { toast('Theme active'); await loadLedData(); }
+}
+
+async function setLedBrightness(val) {
+  await api('led/brightness', 'POST', {brightness: parseInt(val)});
+}
 
 window.addEventListener('load', init);
 </script>

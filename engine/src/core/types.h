@@ -417,4 +417,128 @@ const MidiNoteInfo GM_DRUM_NOTES[] = {
 };
 constexpr uint8_t GM_DRUM_NOTES_COUNT = sizeof(GM_DRUM_NOTES) / sizeof(GM_DRUM_NOTES[0]);
 
+// ============================================================================
+// LED Strip Types (WS2812B via ESP32 RMT)
+// ============================================================================
+
+// --- Couleur RGB compacte ---
+struct RgbColor {
+  uint8_t r, g, b;
+  RgbColor() : r(0), g(0), b(0) {}
+  RgbColor(uint8_t r_, uint8_t g_, uint8_t b_) : r(r_), g(g_), b(b_) {}
+};
+
+// --- Type de LED supportes ---
+enum class LedChipType : uint8_t {
+  WS2812B = 0,
+  SK6812,       // RGBW
+  WS2811
+};
+
+// --- Animations de hit (declenchees par MIDI) ---
+enum class LedHitAnimation : uint8_t {
+  FLASH = 0,    // Allumage instantane + fade out
+  PULSE,        // Montee + descente douce
+  RIPPLE        // Propagation depuis le centre du segment
+};
+
+// --- Animations idle (continues, ambiance) ---
+enum class LedIdleAnimation : uint8_t {
+  OFF = 0,
+  STATIC,       // Couleur fixe
+  BREATHING,    // Pulsation lente
+  RAINBOW       // Arc-en-ciel defilant
+};
+
+// --- Configuration physique d'un strip ---
+struct LedStripConfig {
+  uint8_t id;              // 0-3
+  uint8_t gpioPin;         // GPIO data pin
+  uint16_t ledCount;       // Nombre total de LEDs sur ce strip
+  uint8_t chipType;        // LedChipType
+  uint8_t colorOrder;      // 0=GRB (WS2812B default), 1=RGB, 2=BRG
+  uint8_t maxBrightness;   // Limite globale 0-255 (protection alimentation)
+  bool enabled;
+
+  LedStripConfig()
+    : id(0), gpioPin(LED_DEFAULT_PIN_0), ledCount(0),
+      chipType((uint8_t)LedChipType::WS2812B), colorOrder(0),
+      maxBrightness(128), enabled(false) {}
+};
+
+// --- Segment LED assigne a un instrument ---
+struct LedSegmentConfig {
+  uint8_t id;              // ID unique
+  char name[24];
+  uint8_t stripId;         // Quel strip physique (0-3)
+  uint16_t pixelStart;     // Premier pixel du segment
+  uint16_t pixelCount;     // Nombre de pixels
+
+  uint8_t instrumentId;    // ID instrument associe (0xFF = aucun)
+
+  // Hit (declenchement MIDI)
+  RgbColor hitColor;
+  uint8_t hitBrightness;   // 0-255
+  uint16_t hitFadeDurationMs;  // Duree fade out (50-2000ms)
+  uint8_t hitAnimation;    // LedHitAnimation
+
+  // Idle (ambiance continue)
+  RgbColor idleColor;
+  uint8_t idleBrightness;  // 0-255
+  uint8_t idleAnimation;   // LedIdleAnimation
+
+  bool velocityToBrightness;  // true = velocity controle luminosite hit
+  bool enabled;
+
+  LedSegmentConfig()
+    : id(0), stripId(0), pixelStart(0), pixelCount(0),
+      instrumentId(0xFF),
+      hitBrightness(255), hitFadeDurationMs(300),
+      hitAnimation((uint8_t)LedHitAnimation::FLASH),
+      idleBrightness(30),
+      idleAnimation((uint8_t)LedIdleAnimation::OFF),
+      velocityToBrightness(true), enabled(true) {
+    name[0] = '\0';
+    hitColor = RgbColor(255, 255, 255);
+    idleColor = RgbColor(20, 20, 40);
+  }
+};
+
+// --- Theme LED global ---
+struct LedThemeConfig {
+  uint8_t id;
+  char name[24];
+  uint8_t globalBrightness; // 0-255 master
+  uint8_t idleMode;         // LedIdleAnimation (applique a tous les segments)
+  uint8_t hitMode;          // LedHitAnimation (applique a tous les segments)
+  RgbColor palette[LED_THEME_PALETTE_SIZE];
+  uint8_t fadeSpeed;        // 1-10 (vitesse transitions)
+  bool enabled;
+
+  LedThemeConfig()
+    : id(0), globalBrightness(128),
+      idleMode((uint8_t)LedIdleAnimation::BREATHING),
+      hitMode((uint8_t)LedHitAnimation::FLASH),
+      fadeSpeed(5), enabled(true) {
+    name[0] = '\0';
+    // Default warm palette
+    palette[0] = RgbColor(233, 69, 96);   // Rouge accent
+    palette[1] = RgbColor(83, 52, 131);   // Violet
+    palette[2] = RgbColor(76, 175, 80);   // Vert
+    palette[3] = RgbColor(255, 152, 0);   // Orange
+    palette[4] = RgbColor(33, 150, 243);  // Bleu
+    palette[5] = RgbColor(255, 255, 255); // Blanc
+    palette[6] = RgbColor(0, 188, 212);   // Cyan
+    palette[7] = RgbColor(255, 235, 59);  // Jaune
+  }
+};
+
+// --- Evenement LED (Core 1 → Core 0 via ring buffer lock-free) ---
+struct LedEvent {
+  uint8_t segmentId;       // 0xFF = broadcast a tous les segments
+  uint8_t velocity;        // 0-127
+  uint8_t midiNote;        // Note source
+  bool noteOn;             // true = note on, false = note off
+};
+
 #endif // ENGINE_TYPES_H

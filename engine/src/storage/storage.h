@@ -9,6 +9,9 @@
 #include "../instrument/instrument_manager.h"
 #include "../actuator/actuator_factory.h"
 
+// Forward declarations
+class LedEngine;
+
 // ============================================================================
 // Storage - Persistance LittleFS
 // ============================================================================
@@ -45,6 +48,14 @@ public:
   bool loadLoop(uint8_t id, JsonObject& loop);
   bool deleteLoop(uint8_t id);
   bool listLoops(JsonArray& arr);
+
+  // LED configuration
+  bool saveLedConfig(const LedEngine& engine);
+  bool loadLedConfig(LedEngine& engine);
+
+  // LED themes
+  bool saveLedThemes(const LedEngine& engine);
+  bool loadLedThemes(LedEngine& engine);
 
   // Utility
   size_t totalBytes();

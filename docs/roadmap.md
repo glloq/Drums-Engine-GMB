@@ -70,7 +70,25 @@
 - [x] STACK retrigger compteur uint8_t (au lieu de bool)
 - [x] NoteOff velocity passthrough
 
+## Phase 8 — Systeme LED WS2812B
+**Statut: implementee**
+- [x] Types LED: `LedStripConfig`, `LedSegmentConfig`, `LedThemeConfig`, `LedEvent`, `RgbColor`
+- [x] Driver WS2812B via ESP32 RMT (`LedStripDriver`) — 4 strips max, buffer RGB
+- [x] Queue lock-free SPSC (`LedEventQueue`) — communication Core 1 → Core 0
+- [x] Moteur LED 60fps (`LedEngine`) — hit animations + idle/theme + alpha blend
+- [x] Animations hit: FLASH, PULSE, RIPPLE (declenchees par MIDI velocity)
+- [x] Animations idle: OFF, STATIC, BREATHING (sin 3s), RAINBOW (HSV defilant)
+- [x] Themes LED: palettes 8 couleurs, modes globaux, activation dynamique
+- [x] Integration EventProcessor: push `LedEvent` sur NoteOn (lock-free)
+- [x] Lookup note MIDI → segments LED (rebuild depuis InstrumentManager)
+- [x] REST API complete: `/api/led/strips`, `/api/led/segments`, `/api/led/themes`, `/api/led/status`
+- [x] Persistance LittleFS: `/leds.json` (strips + segments), `/themes.json`
+- [x] UI web: onglet LEDs avec CRUD strips/segments/themes, color pickers, test live
+- [x] Config: `LED_MAX_STRIPS=4`, `LED_MAX_SEGMENTS=16`, `LED_MAX_THEMES=8`, `LED_FPS=60`
+- [x] GPIO par defaut: 4, 5, 16, 17 (SN74HCT125 level shifter recommande)
+
 ## Risques / dette technique
 - Couverture tests: script curl fonctionnel mais pas de CI automatise.
 - Dependance environnement outillage (`pio`) pour validation complete firmware.
 - Pipeline editor UI non implemente (vision long terme).
+- LED: FastLED non utilise (RMT natif via espShow), a evaluer si besoin de plus d'animations.

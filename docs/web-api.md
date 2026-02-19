@@ -32,6 +32,30 @@ Base URL: `http://<ip-esp32>/`
 - `POST /api/loop/play?id=<id>`
 - `POST /api/loop/stop`
 
+### LED Strips
+- `GET /api/led/strips` — liste des strips configures
+- `POST /api/led/strips` — configurer un strip
+- `DELETE /api/led/strip?id=<id>` — supprimer un strip
+- `POST /api/led/strip/test` — tester un strip (allume blanc)
+
+### LED Segments
+- `GET /api/led/segments` — liste des segments
+- `POST /api/led/segments` — creer un segment
+- `PUT /api/led/segment?id=<id>` — modifier un segment
+- `DELETE /api/led/segment?id=<id>` — supprimer un segment
+- `POST /api/led/segment/test` — tester un segment
+
+### LED Themes
+- `GET /api/led/themes` — liste des themes + theme actif
+- `POST /api/led/themes` — creer un theme
+- `PUT /api/led/theme?id=<id>` — modifier un theme
+- `DELETE /api/led/theme?id=<id>` — supprimer un theme
+- `POST /api/led/theme/active` — activer un theme
+
+### LED Status
+- `GET /api/led/status` — status LED (brightness, counts, overflow)
+- `POST /api/led/brightness` — regler la luminosite master
+
 ### Système / debug
 - `GET /api/status`
 - `GET /api/scan-i2c`

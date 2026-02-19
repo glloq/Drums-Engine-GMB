@@ -5,6 +5,7 @@
 #include "../core/config.h"
 #include "../core/global_state.h"
 #include "../scheduler/scheduler.h"
+#include "../led/led_event_queue.h"
 
 // ============================================================================
 // EventProcessor - Moteur de traitement des evenements MIDI
@@ -48,7 +49,11 @@ public:
   // Recharger/compiler les tables
   void recompileLookup();
 
+  // LED event queue (Core 1 → Core 0)
+  void setLedEventQueue(LedEventQueue* queue) { _ledQueue = queue; }
+
 private:
+  LedEventQueue* _ledQueue = nullptr;
   Scheduler* _scheduler;
   EngineState* _state;
   PipelineLookup _lookup;

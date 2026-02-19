@@ -5,12 +5,12 @@ WebServerManager::WebServerManager(InstrumentManager* instrMgr, ActuatorManager*
                                     ActuatorFactory* actFactory,
                                     LoopEngine* loopEngine, MidiEngine* midiEngine,
                                     Storage* storage, Scheduler* scheduler,
-                                    EventProcessor* eventProc)
+                                    EventProcessor* eventProc, LedEngine* ledEngine)
   : _server(WEB_PORT), _ws(WS_PATH),
     _instrMgr(instrMgr), _actMgr(actMgr), _actFactory(actFactory),
     _loopEngine(loopEngine),
     _midiEngine(midiEngine), _storage(storage), _scheduler(scheduler),
-    _eventProc(eventProc) {}
+    _eventProc(eventProc), _ledEngine(ledEngine) {}
 
 bool WebServerManager::begin() {
   // Initialize authentication (load or generate API token)
@@ -251,6 +251,133 @@ void WebServerManager::_setupRoutes() {
   // --- Auth token API (local access only) ---
   _server.on("/api/auth-token", HTTP_GET,
     [this](AsyncWebServerRequest* req) { _handleGetAuthToken(req); });
+
+  // --- LED Strips API ---
+  _server.on("/api/led/strips", HTTP_GET,
+    [this](AsyncWebServerRequest* req) { _handleGetLedStrips(req); });
+
+  _server.on("/api/led/strips", HTTP_POST,
+    [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) {
+        if (!_auth.checkAuth(req)) return;
+        _handleConfigureLedStrip(req, data, len);
+      }
+    });
+
+  _server.on("/api/led/strip", HTTP_DELETE,
+    [this](AsyncWebServerRequest* req) {
+      if (!_rateLimiter.checkRate(req)) return;
+      if (!_auth.checkAuth(req)) return;
+      _handleDeleteLedStrip(req);
+    });
+
+  _server.on("/api/led/strip/test", HTTP_POST,
+    [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) {
+        if (!_auth.checkAuth(req)) return;
+        _handleTestLedStrip(req, data, len);
+      }
+    });
+
+  // --- LED Segments API ---
+  _server.on("/api/led/segments", HTTP_GET,
+    [this](AsyncWebServerRequest* req) { _handleGetLedSegments(req); });
+
+  _server.on("/api/led/segments", HTTP_POST,
+    [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) {
+        if (!_auth.checkAuth(req)) return;
+        _handleCreateLedSegment(req, data, len);
+      }
+    });
+
+  _server.on("/api/led/segment", HTTP_PUT,
+    [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) {
+        if (!_auth.checkAuth(req)) return;
+        _handleUpdateLedSegment(req, data, len);
+      }
+    });
+
+  _server.on("/api/led/segment", HTTP_DELETE,
+    [this](AsyncWebServerRequest* req) {
+      if (!_rateLimiter.checkRate(req)) return;
+      if (!_auth.checkAuth(req)) return;
+      _handleDeleteLedSegment(req);
+    });
+
+  _server.on("/api/led/segment/test", HTTP_POST,
+    [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) {
+        if (!_auth.checkAuth(req)) return;
+        _handleTestLedSegment(req, data, len);
+      }
+    });
+
+  // --- LED Themes API ---
+  _server.on("/api/led/themes", HTTP_GET,
+    [this](AsyncWebServerRequest* req) { _handleGetLedThemes(req); });
+
+  _server.on("/api/led/themes", HTTP_POST,
+    [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) {
+        if (!_auth.checkAuth(req)) return;
+        _handleCreateLedTheme(req, data, len);
+      }
+    });
+
+  _server.on("/api/led/theme", HTTP_PUT,
+    [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) {
+        if (!_auth.checkAuth(req)) return;
+        _handleUpdateLedTheme(req, data, len);
+      }
+    });
+
+  _server.on("/api/led/theme", HTTP_DELETE,
+    [this](AsyncWebServerRequest* req) {
+      if (!_rateLimiter.checkRate(req)) return;
+      if (!_auth.checkAuth(req)) return;
+      _handleDeleteLedTheme(req);
+    });
+
+  _server.on("/api/led/theme/active", HTTP_POST,
+    [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) {
+        if (!_auth.checkAuth(req)) return;
+        _handleSetActiveLedTheme(req, data, len);
+      }
+    });
+
+  // --- LED Status / Brightness ---
+  _server.on("/api/led/status", HTTP_GET,
+    [this](AsyncWebServerRequest* req) { _handleGetLedStatus(req); });
+
+  _server.on("/api/led/brightness", HTTP_POST,
+    [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) {
+        if (!_auth.checkAuth(req)) return;
+        _handleSetLedBrightness(req, data, len);
+      }
+    });
 
   _server.onNotFound([](AsyncWebServerRequest* req) {
     req->send(404, "application/json", "{\"error\":\"Not found\"}");

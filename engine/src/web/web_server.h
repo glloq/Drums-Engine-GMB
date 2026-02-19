@@ -16,6 +16,7 @@
 #include "../scheduler/scheduler.h"
 #include "../event/event_processor.h"
 #include "../event/pipeline_compiler.h"
+#include "../led/led_engine.h"
 #include "api_auth.h"
 
 // ============================================================================
@@ -28,7 +29,7 @@ public:
                    ActuatorFactory* actFactory,
                    LoopEngine* loopEngine, MidiEngine* midiEngine,
                    Storage* storage, Scheduler* scheduler,
-                   EventProcessor* eventProc);
+                   EventProcessor* eventProc, LedEngine* ledEngine);
 
   bool begin();
   void update();
@@ -57,6 +58,7 @@ private:
   Storage* _storage;
   Scheduler* _scheduler;
   EventProcessor* _eventProc;
+  LedEngine* _ledEngine;
 
   void _setupRoutes();
 
@@ -100,6 +102,30 @@ private:
   void _handleGetLogs(AsyncWebServerRequest* req);
   void _handleClearLogs(AsyncWebServerRequest* req);
   void _handleGetAuthToken(AsyncWebServerRequest* req);
+
+  // LED Strips
+  void _handleGetLedStrips(AsyncWebServerRequest* req);
+  void _handleConfigureLedStrip(AsyncWebServerRequest* req, uint8_t* data, size_t len);
+  void _handleDeleteLedStrip(AsyncWebServerRequest* req);
+  void _handleTestLedStrip(AsyncWebServerRequest* req, uint8_t* data, size_t len);
+
+  // LED Segments
+  void _handleGetLedSegments(AsyncWebServerRequest* req);
+  void _handleCreateLedSegment(AsyncWebServerRequest* req, uint8_t* data, size_t len);
+  void _handleUpdateLedSegment(AsyncWebServerRequest* req, uint8_t* data, size_t len);
+  void _handleDeleteLedSegment(AsyncWebServerRequest* req);
+  void _handleTestLedSegment(AsyncWebServerRequest* req, uint8_t* data, size_t len);
+
+  // LED Themes
+  void _handleGetLedThemes(AsyncWebServerRequest* req);
+  void _handleCreateLedTheme(AsyncWebServerRequest* req, uint8_t* data, size_t len);
+  void _handleUpdateLedTheme(AsyncWebServerRequest* req, uint8_t* data, size_t len);
+  void _handleDeleteLedTheme(AsyncWebServerRequest* req);
+  void _handleSetActiveLedTheme(AsyncWebServerRequest* req, uint8_t* data, size_t len);
+
+  // LED Master
+  void _handleGetLedStatus(AsyncWebServerRequest* req);
+  void _handleSetLedBrightness(AsyncWebServerRequest* req, uint8_t* data, size_t len);
 
   // WebSocket
   void _onWsEvent(AsyncWebSocket* server, AsyncWebSocketClient* client,

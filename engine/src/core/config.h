@@ -68,10 +68,27 @@
 #define MAX_CONCURRENT_ACTIVE    8         // Max simultaneously active actuators
 #define WATCHDOG_CHECK_US        100000    // Check watchdog every 100ms
 
+// --- LED Strips (WS2812B via RMT) ---
+#define LED_MAX_STRIPS       4          // Max physical LED strips (1 RMT channel each)
+#define LED_MAX_SEGMENTS     16         // Max LED segments (assigned to instruments)
+#define LED_MAX_PIXELS       256        // Max total pixels across all strips
+#define LED_MAX_THEMES       8          // Max saved themes
+#define LED_THEME_PALETTE_SIZE 8        // Colors per theme palette
+#define LED_FPS              60         // LED engine refresh rate
+#define LED_EVENT_QUEUE_SIZE 32         // Lock-free event queue Core1→Core0
+
+// Default LED GPIO pins (SN74HCT125 level shifter recommended)
+#define LED_DEFAULT_PIN_0    4          // Strip 0 data pin
+#define LED_DEFAULT_PIN_1    5          // Strip 1 data pin
+#define LED_DEFAULT_PIN_2    16         // Strip 2 data pin
+#define LED_DEFAULT_PIN_3    17         // Strip 3 data pin
+
 // --- Storage ---
 #define CONFIG_FILE       "/config.json"
 #define ACTUATORS_FILE    "/actuators.json"
 #define INSTRUMENTS_FILE  "/instruments.json"
+#define LEDS_FILE         "/leds.json"
+#define THEMES_FILE       "/themes.json"
 #define LOOPS_DIR         "/loops"
 
 // --- Debug ---

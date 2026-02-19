@@ -5138,6 +5138,14 @@ document.addEventListener('keydown', (e) => {
       last.classList.remove('show');
     }
   }
+  // Space = play/pause in loop editor (only when no input focused)
+  if (e.code === 'Space' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'BUTTON') {
+    const loopEditor = document.getElementById('loopEditor');
+    if (loopEditor && loopEditor.style.display !== 'none') {
+      e.preventDefault();
+      if (loopPlayheadTimer) { togglePauseLoop(); } else { playCurrentLoop(); }
+    }
+  }
 });
 
 // Real-time MIDI activity display

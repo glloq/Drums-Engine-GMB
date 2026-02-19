@@ -789,12 +789,57 @@ void WebServerManager::_handleValidateConfig(AsyncWebServerRequest* req) {
     ok.add(buf);
   }
 
+  // Check for unused actuators
+  if (actCfgCount > 0 && instrCount > 0) {
+    uint8_t usedActuators = 0;
+    for (uint8_t a = 0; a < actCfgCount; a++) {
+      const ActuatorConfig& actCfg = _actFactory->getConfig(a);
+      bool used = false;
+      for (uint8_t i = 0; i < instrCount && !used; i++) {
+        const InstrumentConfig* instr = _instrMgr->getInstrument(i);
+        if (!instr) continue;
+        for (uint8_t j = 0; j < instr->noteOnActionCount && !used; j++) {
+          if (instr->noteOnActions[j].actuator_id == actCfg.id) used = true;
+        }
+        for (uint8_t j = 0; j < instr->noteOffActionCount && !used; j++) {
+          if (instr->noteOffActions[j].actuator_id == actCfg.id) used = true;
+        }
+        for (uint8_t j = 0; j < instr->ccBindingCount && !used; j++) {
+          if (instr->ccBindings[j].actuator_id == actCfg.id) used = true;
+        }
+      }
+      if (used) usedActuators++;
+    }
+    uint8_t unusedCount = actCfgCount - usedActuators;
+    if (unusedCount > 0) {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%d actuator(s) not used by any instrument", unusedCount);
+      warnings.add(buf);
+    }
+  }
+
   // Memory check
   uint32_t freeHeap = ESP.getFreeHeap();
   if (freeHeap < 20000) {
     char buf[64];
     snprintf(buf, sizeof(buf), "Low memory: %d KB free", freeHeap / 1024);
     issues.add(buf);
+  } else if (freeHeap < 50000) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "Memory moderate: %d KB free", freeHeap / 1024);
+    warnings.add(buf);
+  }
+
+  // Scheduler health
+  if (_scheduler->getOverflowCount() > 0) {
+    char buf[80];
+    snprintf(buf, sizeof(buf), "Scheduler overflow detected (%lu events dropped)", _scheduler->getOverflowCount());
+    warnings.add(buf);
+  }
+  if (_scheduler->getMaxJitterUs() > 1000) {
+    char buf[80];
+    snprintf(buf, sizeof(buf), "High timing jitter: %lu us max", _scheduler->getMaxJitterUs());
+    warnings.add(buf);
   }
 
   // Pipeline check

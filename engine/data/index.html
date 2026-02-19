@@ -139,6 +139,34 @@ input[type=checkbox] { width: auto; }
 .monitor-item .mv { font-size: 1.05em; font-weight: bold; color: var(--accent); }
 .monitor-item .ml { font-size: 0.7em; color: var(--fg2); }
 
+/* Pipeline Editor */
+.pe-block-list { display: flex; flex-direction: column; gap: 4px; }
+.pe-block { display: flex; align-items: center; gap: 8px; background: var(--bg); border-radius: var(--radius); padding: 8px 10px; border-left: 4px solid #555; }
+.pe-block.condition { border-left-color: #e94560; }
+.pe-block.transform { border-left-color: #533483; }
+.pe-block.time { border-left-color: #4CAF50; }
+.pe-block.output { border-left-color: #FF9800; }
+.pe-block-icon { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.85em; font-weight: bold; color: #fff; flex-shrink: 0; }
+.pe-block-icon.condition { background: #e94560; }
+.pe-block-icon.transform { background: #533483; }
+.pe-block-icon.time { background: #4CAF50; }
+.pe-block-icon.output { background: #FF9800; }
+.pe-block-info { flex: 1; min-width: 0; }
+.pe-block-info .pe-label { font-size: 0.9em; font-weight: 600; }
+.pe-block-info .pe-params { font-size: 0.78em; color: var(--fg2); }
+.pe-block-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.pe-arrow { text-align: center; color: var(--fg2); font-size: 0.85em; padding: 2px 0; }
+.pe-add-block { border: 2px dashed #444; border-radius: var(--radius); padding: 8px; text-align: center; color: var(--fg2); cursor: pointer; transition: all 0.2s; font-size: 0.85em; }
+.pe-add-block:hover { border-color: var(--accent); color: var(--accent); background: rgba(233,69,96,0.05); }
+.pe-section { margin-bottom: 12px; }
+.pe-section h4 { font-size: 0.9em; margin-bottom: 6px; color: var(--fg2); display: flex; align-items: center; gap: 6px; }
+.pe-section h4 .pe-dot { width: 10px; height: 10px; border-radius: 50%; }
+.pe-flow { display: flex; align-items: center; gap: 4px; padding: 4px 8px; background: rgba(255,255,255,0.03); border-radius: 4px; font-size: 0.78em; color: var(--fg2); margin-bottom: 8px; }
+.pe-flow span { padding: 2px 8px; border-radius: 3px; font-weight: 600; }
+.pe-flow .pe-vel { background: rgba(156,39,176,0.2); color: #ce93d8; }
+.pe-flow .pe-blocks { background: rgba(76,175,80,0.2); color: #81c784; }
+.pe-flow .pe-out { background: rgba(255,152,0,0.2); color: #ffb74d; }
+
 @media (max-width: 600px) {
   .content { padding: 8px; }
   .header { padding: 6px 10px; }
@@ -245,14 +273,16 @@ input[type=checkbox] { width: auto; }
     </div>
   </div>
 
-  <!-- ====== MAPPINGS TAB ====== -->
+  <!-- ====== PIPELINE EDITOR TAB ====== -->
   <div class="panel" id="tab-mappings">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-      <h2>Pipelines MIDI</h2>
-      <button class="btn btn-secondary" onclick="refreshMappings()">Actualiser</button>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+      <h2>Pipeline Editor</h2>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-secondary" onclick="refreshMappings()">Actualiser</button>
+      </div>
     </div>
     <p style="font-size:0.85em;color:var(--fg2);margin-bottom:16px;">
-      Pipelines compiles automatiquement depuis les instruments. Chaque note MIDI est mappee vers un pipeline de traitement.
+      Chaque instrument est lie a un pipeline de traitement MIDI. Cliquez sur un instrument pour editer son pipeline visuellement.
     </p>
     <div id="mappingList"></div>
   </div>
@@ -842,7 +872,7 @@ input[type=checkbox] { width: auto; }
       </div>
     </div>
     <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="hideModal('modalLedStrip')">Annuler</button>
+      <button class="btn btn-secondary" onclick="closeModal('modalLedStrip')">Annuler</button>
       <button class="btn btn-primary" onclick="saveLedStrip()">Enregistrer</button>
     </div>
   </div>
@@ -922,7 +952,7 @@ input[type=checkbox] { width: auto; }
       </div>
     </div>
     <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="hideModal('modalLedSegment')">Annuler</button>
+      <button class="btn btn-secondary" onclick="closeModal('modalLedSegment')">Annuler</button>
       <button class="btn btn-primary" onclick="saveLedSegment()">Enregistrer</button>
     </div>
   </div>
@@ -980,8 +1010,94 @@ input[type=checkbox] { width: auto; }
       </div>
     </div>
     <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="hideModal('modalLedTheme')">Annuler</button>
+      <button class="btn btn-secondary" onclick="closeModal('modalLedTheme')">Annuler</button>
       <button class="btn btn-primary" onclick="saveLedTheme()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ====== MODAL: Pipeline Block Editor ====== -->
+<div class="modal-overlay" id="modalPipelineEditor">
+  <div class="modal" style="max-width:650px;">
+    <h2 id="pipeEditorTitle">Pipeline Editor</h2>
+    <input type="hidden" id="pipeEditInstrId" value="">
+
+    <!-- Flow overview -->
+    <div class="pe-flow">
+      MIDI In &rarr; <span class="pe-vel">Velocity</span> &rarr; <span class="pe-blocks">Blocks</span> &rarr; <span class="pe-out">Actuateur</span>
+    </div>
+
+    <!-- Pipeline Blocks -->
+    <div class="pe-section">
+      <h4><span class="pe-dot" style="background:#4CAF50;"></span> Blocs Pipeline <span class="badge" id="peBlockCount">0</span></h4>
+      <div id="peBlockList" class="pe-block-list"></div>
+      <div class="pe-add-block" onclick="peAddBlock()" style="margin-top:6px;">+ Ajouter un bloc</div>
+    </div>
+
+    <!-- Output Actuator -->
+    <div class="pe-section">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Actionneur de sortie par defaut</label>
+          <select id="peOutputActuator"></select>
+        </div>
+        <div class="form-group">
+          <label>Retrigger Mode</label>
+          <select id="peRetriggerMode">
+            <option value="0">Ignore</option>
+            <option value="1">Reset</option>
+            <option value="2">Stack</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- NoteOn Actions -->
+    <div class="pe-section">
+      <h4><span class="pe-dot" style="background:#9C27B0;"></span> NoteOn Actions <button class="btn btn-sm btn-secondary" onclick="peAddAction('on')">+ Action</button></h4>
+      <div id="peNoteOnActions"></div>
+    </div>
+
+    <!-- NoteOff Actions -->
+    <div class="pe-section">
+      <h4><span class="pe-dot" style="background:#FF9800;"></span> NoteOff Actions <button class="btn btn-sm btn-secondary" onclick="peAddAction('off')">+ Action</button></h4>
+      <div id="peNoteOffActions"></div>
+    </div>
+
+    <!-- CC Bindings -->
+    <div class="pe-section">
+      <h4><span class="pe-dot" style="background:#2196F3;"></span> CC Bindings <button class="btn btn-sm btn-secondary" onclick="peAddCcBinding()">+ CC</button></h4>
+      <div id="peCcBindings"></div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-success btn-sm" onclick="peTestPipeline()" style="margin-right:auto;">Test</button>
+      <button class="btn btn-secondary" onclick="closeModal('modalPipelineEditor')">Annuler</button>
+      <button class="btn btn-primary" onclick="peSavePipeline()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ====== MODAL: Add Pipeline Block ====== -->
+<div class="modal-overlay" id="modalAddBlock">
+  <div class="modal" style="max-width:420px;">
+    <h2>Ajouter un bloc</h2>
+    <div id="blockTypePicker" style="display:flex;flex-direction:column;gap:8px;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('modalAddBlock')">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- ====== MODAL: Edit Pipeline Block ====== -->
+<div class="modal-overlay" id="modalEditBlock">
+  <div class="modal" style="max-width:420px;">
+    <h2 id="editBlockTitle">Configurer le bloc</h2>
+    <input type="hidden" id="editBlockIdx" value="">
+    <div id="editBlockForm"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('modalEditBlock')">Annuler</button>
+      <button class="btn btn-primary" onclick="peApplyBlockEdit()">OK</button>
     </div>
   </div>
 </div>
@@ -2373,7 +2489,7 @@ function renderPipelineCard(inst) {
 
   if (!rows) rows = '<div class="hint">Aucune action configuree</div>';
 
-  return `<div class="card pipe-card"><h3><span>${inst.name} ${badges}</span></h3>${rows}</div>`;
+  return `<div class="card pipe-card"><h3><span>${inst.name} ${badges}</span><button class="btn btn-sm btn-secondary" onclick="peOpenEditor(${inst.id})">Edit Pipeline</button></h3>${rows}</div>`;
 }
 
 async function refreshMappings() {
@@ -2850,7 +2966,7 @@ async function saveLedStrip() {
     chipType: 0, colorOrder: 0, enabled: true
   };
   const r = await api('led/strips', 'POST', data);
-  if (r) { toast('Strip configure'); hideModal('modalLedStrip'); await loadLedData(); }
+  if (r) { toast('Strip configure'); closeModal('modalLedStrip'); await loadLedData(); }
 }
 
 async function deleteLedStrip(id) {
@@ -2939,7 +3055,7 @@ async function saveLedSegment() {
   } else {
     r = await api('led/segments', 'POST', data);
   }
-  if (r) { toast(editId ? 'Segment mis a jour' : 'Segment cree'); hideModal('modalLedSegment'); await loadLedData(); }
+  if (r) { toast(editId ? 'Segment mis a jour' : 'Segment cree'); closeModal('modalLedSegment'); await loadLedData(); }
 }
 
 async function deleteLedSegment(id) {
@@ -2997,7 +3113,7 @@ async function saveLedTheme() {
   } else {
     r = await api('led/themes', 'POST', data);
   }
-  if (r) { toast(editId ? 'Theme mis a jour' : 'Theme cree'); hideModal('modalLedTheme'); await loadLedData(); }
+  if (r) { toast(editId ? 'Theme mis a jour' : 'Theme cree'); closeModal('modalLedTheme'); await loadLedData(); }
 }
 
 async function deleteLedTheme(id) {
@@ -3012,6 +3128,384 @@ async function setActiveTheme(id) {
 
 async function setLedBrightness(val) {
   await api('led/brightness', 'POST', {brightness: parseInt(val)});
+}
+
+// ====================================================================
+// PIPELINE EDITOR
+// ====================================================================
+let peBlockSchema = null;
+let peBlocks = [];
+let peNoteOnActions = [];
+let peNoteOffActions = [];
+let peCcBindings = [];
+let peInstrId = null;
+
+async function peLoadSchema() {
+  if (peBlockSchema) return;
+  peBlockSchema = await api('pipeline/block-schema');
+}
+
+function peSchemaType(typeStr) {
+  if (!peBlockSchema) return null;
+  return peBlockSchema.find(t => t.type === typeStr);
+}
+
+function peSchemaSubtype(typeStr, subtypeId) {
+  const t = peSchemaType(typeStr);
+  if (!t) return null;
+  return (t.subtypes || []).find(s => s.subtype === subtypeId);
+}
+
+const PE_TYPE_ICONS = {condition:'?', transform:'T', time:'t', output:'O'};
+const PE_TYPE_NAMES = {condition:'Condition', transform:'Transform', time:'Temps', output:'Sortie'};
+
+function peBlockLabel(block) {
+  const schema = peSchemaSubtype(block.type, block.subtype);
+  return schema ? schema.label : `${PE_TYPE_NAMES[block.type]||block.type} #${block.subtype}`;
+}
+
+function peBlockDesc(block) {
+  const schema = peSchemaSubtype(block.type, block.subtype);
+  if (!schema) return `p1=${block.param1} p2=${block.param2}`;
+  let parts = [];
+  (schema.params || []).forEach(p => {
+    if (p.max === 0 && p.min === 0) return; // reserved
+    const val = (p.name === 'param1') ? block.param1 : block.param2;
+    if (p.type === 'enum') {
+      const opt = (p.options || []).find(o => o.value === val);
+      parts.push(opt ? opt.label : val);
+    } else if (p.type === 'actuator_id') {
+      const act = actInfo(val);
+      parts.push(act ? act.name : '#'+val);
+    } else {
+      parts.push(`${p.label.split('(')[0].trim()}: ${val}`);
+    }
+  });
+  return parts.join(' · ');
+}
+
+function peRenderBlocks() {
+  const el = document.getElementById('peBlockList');
+  document.getElementById('peBlockCount').textContent = peBlocks.length;
+  if (peBlocks.length === 0) {
+    el.innerHTML = '<div class="hint">Aucun bloc. Le pipeline transmettra la velocite directement a l\'actionneur de sortie.</div>';
+    return;
+  }
+  el.innerHTML = peBlocks.map((b, i) => {
+    const cls = b.type;
+    const icon = PE_TYPE_ICONS[b.type] || '?';
+    const label = peBlockLabel(b);
+    const desc = peBlockDesc(b);
+    const terminal = peSchemaSubtype(b.type, b.subtype)?.terminal;
+    return `
+    ${i > 0 ? '<div class="pe-arrow">&darr;</div>' : ''}
+    <div class="pe-block ${cls}">
+      <div class="pe-block-icon ${cls}">${icon}</div>
+      <div class="pe-block-info">
+        <div class="pe-label">${label}${terminal ? ' <small style="color:var(--warn);">(terminal)</small>':''}</div>
+        <div class="pe-params">${desc}</div>
+      </div>
+      <div class="pe-block-actions">
+        ${i > 0 ? `<button class="btn btn-sm btn-secondary" onclick="peMoveBlock(${i},-1)">&uarr;</button>` : ''}
+        ${i < peBlocks.length-1 ? `<button class="btn btn-sm btn-secondary" onclick="peMoveBlock(${i},1)">&darr;</button>` : ''}
+        <button class="btn btn-sm btn-secondary" onclick="peEditBlock(${i})">&#9998;</button>
+        <button class="btn btn-sm btn-danger" onclick="peRemoveBlock(${i})">&times;</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function peMoveBlock(idx, dir) {
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= peBlocks.length) return;
+  [peBlocks[idx], peBlocks[newIdx]] = [peBlocks[newIdx], peBlocks[idx]];
+  peRenderBlocks();
+}
+
+function peRemoveBlock(idx) {
+  peBlocks.splice(idx, 1);
+  peRenderBlocks();
+}
+
+async function peAddBlock() {
+  await peLoadSchema();
+  if (!peBlockSchema) { toast('Schema indisponible', 'error'); return; }
+
+  const el = document.getElementById('blockTypePicker');
+  el.innerHTML = peBlockSchema.map(t => {
+    const subtypeHtml = (t.subtypes || []).map(s =>
+      `<div class="list-item" style="cursor:pointer;border-left-color:${t.color};" onclick="peInsertBlock('${t.type}',${s.subtype});closeModal('modalAddBlock');">
+        <strong>${s.label}</strong>
+        <div class="hint">${s.description || ''}</div>
+      </div>`
+    ).join('');
+    return `<div>
+      <h4 style="color:${t.color};margin-bottom:4px;">${t.label}</h4>
+      ${subtypeHtml}
+    </div>`;
+  }).join('');
+
+  showModal('modalAddBlock');
+}
+
+function peInsertBlock(typeStr, subtypeId) {
+  const schema = peSchemaSubtype(typeStr, subtypeId);
+  const block = { type: typeStr, subtype: subtypeId, param1: 0, param2: 0 };
+  if (schema && schema.params) {
+    schema.params.forEach(p => {
+      if (p.name === 'param1') block.param1 = p.default || 0;
+      if (p.name === 'param2') block.param2 = p.default || 0;
+    });
+  }
+  peBlocks.push(block);
+  peRenderBlocks();
+}
+
+function peEditBlock(idx) {
+  const block = peBlocks[idx];
+  const schema = peSchemaSubtype(block.type, block.subtype);
+  document.getElementById('editBlockIdx').value = idx;
+  document.getElementById('editBlockTitle').textContent = peBlockLabel(block);
+
+  let html = '';
+  if (schema && schema.params) {
+    schema.params.forEach(p => {
+      if (p.max === 0 && p.min === 0) return; // reserved
+      const val = (p.name === 'param1') ? block.param1 : block.param2;
+      html += `<div class="form-group"><label>${p.label}</label>`;
+      if (p.type === 'enum') {
+        html += `<select id="eb_${p.name}">`;
+        (p.options || []).forEach(o => {
+          html += `<option value="${o.value}" ${val===o.value?'selected':''}>${o.label}</option>`;
+        });
+        html += '</select>';
+      } else if (p.type === 'actuator_id') {
+        html += `<select id="eb_${p.name}">`;
+        actuators.forEach(a => {
+          html += `<option value="${a.id}" ${val===a.id?'selected':''}>${a.name} (${a.id})</option>`;
+        });
+        html += '</select>';
+      } else {
+        html += `<input type="number" id="eb_${p.name}" value="${val}" min="${p.min||0}" max="${p.max||65535}">`;
+      }
+      html += '</div>';
+    });
+  }
+  if (!html) html = '<div class="hint">Ce bloc n\'a pas de parametres configurables.</div>';
+  document.getElementById('editBlockForm').innerHTML = html;
+  showModal('modalEditBlock');
+}
+
+function peApplyBlockEdit() {
+  const idx = parseInt(document.getElementById('editBlockIdx').value);
+  const block = peBlocks[idx];
+  const schema = peSchemaSubtype(block.type, block.subtype);
+  if (schema && schema.params) {
+    schema.params.forEach(p => {
+      if (p.max === 0 && p.min === 0) return;
+      const el = document.getElementById('eb_'+p.name);
+      if (!el) return;
+      const val = parseInt(el.value) || 0;
+      if (p.name === 'param1') block.param1 = val;
+      if (p.name === 'param2') block.param2 = val;
+    });
+  }
+  closeModal('modalEditBlock');
+  peRenderBlocks();
+}
+
+// --- PE Action/CC rendering ---
+function peActSelect(id, selId) {
+  return `<select id="${id}" class="small-select">${actuators.map(a=>
+    `<option value="${a.id}" ${a.id===selId?'selected':''}>${a.name}</option>`).join('')}
+    <option value="255" ${selId===255?'selected':''}>---</option></select>`;
+}
+
+function peRenderActions() {
+  const onEl = document.getElementById('peNoteOnActions');
+  const offEl = document.getElementById('peNoteOffActions');
+  const ccEl = document.getElementById('peCcBindings');
+
+  onEl.innerHTML = peNoteOnActions.length === 0 ? '<div class="hint">Aucune action NoteOn</div>' :
+    peNoteOnActions.map((a, i) => peActionRow(a, i, 'on')).join('');
+
+  offEl.innerHTML = peNoteOffActions.length === 0 ? '<div class="hint">Aucune action NoteOff</div>' :
+    peNoteOffActions.map((a, i) => peActionRow(a, i, 'off')).join('');
+
+  ccEl.innerHTML = peCcBindings.length === 0 ? '<div class="hint">Aucun binding CC</div>' :
+    peCcBindings.map((b, i) => peCcRow(b, i)).join('');
+}
+
+function peActionRow(step, idx, evType) {
+  const cmdOpts = [{v:0,l:'PULSE'},{v:1,l:'POSITION'},{v:2,l:'PWM'},{v:3,l:'OFF'}];
+  const srcOpts = [{v:0,l:'Velocity'},{v:1,l:'Fixe'},{v:2,l:'CC Var'},{v:3,l:'Inv. Vel'}];
+  const curveOpts = [{v:0,l:'Lin'},{v:1,l:'Expo'},{v:2,l:'Log'}];
+  return `<div class="action-editor">
+    <h4>Action #${idx+1} <button class="btn btn-sm btn-danger" onclick="peRemoveAction('${evType}',${idx})">&times;</button></h4>
+    <div class="editor-grid">
+      <div class="form-group"><label>Actionneur</label>${peActSelect('pea_'+evType+'_act_'+idx, step.actuatorId)}</div>
+      <div class="form-group"><label>Commande</label><select id="pea_${evType}_cmd_${idx}" class="small-select">${cmdOpts.map(o=>`<option value="${o.v}" ${step.commandType===o.v?'selected':''}>${o.l}</option>`).join('')}</select></div>
+      <div class="form-group"><label>Source</label><select id="pea_${evType}_src_${idx}" class="small-select">${srcOpts.map(o=>`<option value="${o.v}" ${step.valueSource===o.v?'selected':''}>${o.l}</option>`).join('')}</select></div>
+      <div class="form-group"><label>Fixe</label><input type="number" id="pea_${evType}_fix_${idx}" class="small-input" value="${step.valueFixed||0}" min="0" max="127"></div>
+      <div class="form-group"><label>Delai ms</label><input type="number" id="pea_${evType}_del_${idx}" class="small-input" value="${step.delayMs||0}" min="0" max="5000"></div>
+      <div class="form-group"><label>Dur min</label><input type="number" id="pea_${evType}_dmin_${idx}" class="small-input" value="${step.durationMinMs||0}" min="0" max="5000"></div>
+      <div class="form-group"><label>Dur max</label><input type="number" id="pea_${evType}_dmax_${idx}" class="small-input" value="${step.durationMaxMs||0}" min="0" max="5000"></div>
+      <div class="form-group"><label>Courbe</label><select id="pea_${evType}_crv_${idx}" class="small-select">${curveOpts.map(o=>`<option value="${o.v}" ${step.velocityCurve===o.v?'selected':''}>${o.l}</option>`).join('')}</select></div>
+      <div class="form-group"><label>Grp altern</label><input type="number" id="pea_${evType}_grp_${idx}" class="small-input" value="${step.alternateGroup||0}" min="0" max="8"></div>
+    </div>
+  </div>`;
+}
+
+function peCcRow(bind, idx) {
+  const cmdOpts = [{v:0,l:'PULSE'},{v:1,l:'POSITION'},{v:2,l:'PWM'},{v:3,l:'OFF'}];
+  const curveOpts = [{v:0,l:'Lin'},{v:1,l:'Expo'},{v:2,l:'Log'}];
+  return `<div class="binding-editor">
+    <h4>CC Binding #${idx+1} <button class="btn btn-sm btn-danger" onclick="peRemoveCc(${idx})">&times;</button></h4>
+    <div class="editor-grid">
+      <div class="form-group"><label>CC#</label><input type="number" id="pec_cc_${idx}" class="small-input" value="${bind.ccNumber}" min="0" max="127"></div>
+      <div class="form-group"><label>Actionneur</label>${peActSelect('pec_act_'+idx, bind.actuatorId)}</div>
+      <div class="form-group"><label>Commande</label><select id="pec_cmd_${idx}" class="small-select">${cmdOpts.map(o=>`<option value="${o.v}" ${bind.commandType===o.v?'selected':''}>${o.l}</option>`).join('')}</select></div>
+      <div class="form-group"><label>Range min</label><input type="number" id="pec_rmin_${idx}" class="small-input" value="${bind.rangeMin}" min="0" max="255"></div>
+      <div class="form-group"><label>Range max</label><input type="number" id="pec_rmax_${idx}" class="small-input" value="${bind.rangeMax}" min="0" max="255"></div>
+      <div class="form-group"><label>Courbe</label><select id="pec_crv_${idx}" class="small-select">${curveOpts.map(o=>`<option value="${o.v}" ${bind.curve===o.v?'selected':''}>${o.l}</option>`).join('')}</select></div>
+      <div class="form-group"><label>Inverse</label><input type="checkbox" id="pec_inv_${idx}" ${bind.inverted?'checked':''}></div>
+    </div>
+  </div>`;
+}
+
+function peAddAction(evType) {
+  const defAct = actuators.length > 0 ? actuators[0].id : 255;
+  const isOff = evType === 'off';
+  const step = { actuatorId: defAct, commandType: isOff?3:0, valueSource: isOff?1:0,
+    valueFixed:0, ccIndex:0, delayMs:0, durationMinMs: isOff?0:8, durationMaxMs: isOff?0:25,
+    velocityCurve:0, alternateGroup:0 };
+  if (evType === 'on') peNoteOnActions.push(step);
+  else peNoteOffActions.push(step);
+  peRenderActions();
+}
+
+function peRemoveAction(evType, idx) {
+  if (evType === 'on') peNoteOnActions.splice(idx, 1);
+  else peNoteOffActions.splice(idx, 1);
+  peRenderActions();
+}
+
+function peAddCcBinding() {
+  const defAct = actuators.length > 0 ? actuators[0].id : 255;
+  peCcBindings.push({ ccNumber:4, actuatorId:defAct, commandType:1, rangeMin:0, rangeMax:127, curve:0, inverted:false });
+  peRenderActions();
+}
+
+function peRemoveCc(idx) {
+  peCcBindings.splice(idx, 1);
+  peRenderActions();
+}
+
+function peCollectActions() {
+  // Read current form values back into the arrays
+  peNoteOnActions.forEach((a, i) => {
+    const el = (id) => document.getElementById(id);
+    a.actuatorId = parseInt(el('pea_on_act_'+i)?.value||255);
+    a.commandType = parseInt(el('pea_on_cmd_'+i)?.value||0);
+    a.valueSource = parseInt(el('pea_on_src_'+i)?.value||0);
+    a.valueFixed = parseInt(el('pea_on_fix_'+i)?.value||0);
+    a.delayMs = parseInt(el('pea_on_del_'+i)?.value||0);
+    a.durationMinMs = parseInt(el('pea_on_dmin_'+i)?.value||0);
+    a.durationMaxMs = parseInt(el('pea_on_dmax_'+i)?.value||0);
+    a.velocityCurve = parseInt(el('pea_on_crv_'+i)?.value||0);
+    a.alternateGroup = parseInt(el('pea_on_grp_'+i)?.value||0);
+  });
+  peNoteOffActions.forEach((a, i) => {
+    const el = (id) => document.getElementById(id);
+    a.actuatorId = parseInt(el('pea_off_act_'+i)?.value||255);
+    a.commandType = parseInt(el('pea_off_cmd_'+i)?.value||0);
+    a.valueSource = parseInt(el('pea_off_src_'+i)?.value||0);
+    a.valueFixed = parseInt(el('pea_off_fix_'+i)?.value||0);
+    a.delayMs = parseInt(el('pea_off_del_'+i)?.value||0);
+    a.durationMinMs = parseInt(el('pea_off_dmin_'+i)?.value||0);
+    a.durationMaxMs = parseInt(el('pea_off_dmax_'+i)?.value||0);
+    a.velocityCurve = parseInt(el('pea_off_crv_'+i)?.value||0);
+    a.alternateGroup = parseInt(el('pea_off_grp_'+i)?.value||0);
+  });
+  peCcBindings.forEach((b, i) => {
+    const el = (id) => document.getElementById(id);
+    b.ccNumber = parseInt(el('pec_cc_'+i)?.value||0);
+    b.actuatorId = parseInt(el('pec_act_'+i)?.value||255);
+    b.commandType = parseInt(el('pec_cmd_'+i)?.value||0);
+    b.rangeMin = parseInt(el('pec_rmin_'+i)?.value||0);
+    b.rangeMax = parseInt(el('pec_rmax_'+i)?.value||127);
+    b.curve = parseInt(el('pec_crv_'+i)?.value||0);
+    b.inverted = el('pec_inv_'+i)?.checked || false;
+  });
+}
+
+async function peOpenEditor(instrId) {
+  await peLoadSchema();
+  peInstrId = instrId;
+  const inst = instruments.find(i => i.id === instrId);
+  if (!inst) { toast('Instrument introuvable', 'error'); return; }
+
+  document.getElementById('pipeEditInstrId').value = instrId;
+  document.getElementById('pipeEditorTitle').textContent = 'Pipeline: ' + inst.name;
+
+  // Load pipeline data from API
+  const data = await api('pipeline/blocks?instrumentId=' + instrId);
+
+  // Populate blocks
+  peBlocks = (data && data.blocks) ? data.blocks.map(b => ({
+    type: b.type, subtype: b.subtype, param1: b.param1, param2: b.param2
+  })) : [];
+
+  // Populate actions
+  peNoteOnActions = (data && data.noteOnActions) ? data.noteOnActions.map(a => ({...a})) : (inst.noteOnActions || []).map(a => ({...a}));
+  peNoteOffActions = (data && data.noteOffActions) ? data.noteOffActions.map(a => ({...a})) : (inst.noteOffActions || []).map(a => ({...a}));
+  peCcBindings = (data && data.ccBindings) ? data.ccBindings.map(b => ({...b})) : (inst.ccBindings || []).map(b => ({...b}));
+
+  // Output actuator select
+  const outSel = document.getElementById('peOutputActuator');
+  outSel.innerHTML = '<option value="255">Aucun (auto)</option>' +
+    actuators.map(a => `<option value="${a.id}">${a.name} (${a.id})</option>`).join('');
+  outSel.value = (data && data.outputActuatorId !== undefined) ? data.outputActuatorId :
+    (inst.actuatorIds && inst.actuatorIds[0] !== 255 ? inst.actuatorIds[0] : 255);
+
+  // Retrigger mode
+  document.getElementById('peRetriggerMode').value = (data && data.retriggerMode !== undefined) ? data.retriggerMode : (inst.retriggerMode || 0);
+
+  peRenderBlocks();
+  peRenderActions();
+  showModal('modalPipelineEditor');
+}
+
+async function peSavePipeline() {
+  peCollectActions();
+  const outActId = parseInt(document.getElementById('peOutputActuator').value);
+  const retrigger = parseInt(document.getElementById('peRetriggerMode').value);
+
+  const payload = {
+    blocks: peBlocks,
+    outputActuatorId: outActId,
+    retriggerMode: retrigger,
+    noteOnActions: peNoteOnActions,
+    noteOffActions: peNoteOffActions,
+    ccBindings: peCcBindings
+  };
+
+  const r = await api('pipeline/blocks?instrumentId=' + peInstrId, 'PUT', payload);
+  if (r && r.ok) {
+    toast('Pipeline sauvegarde et recompile', 'success');
+    closeModal('modalPipelineEditor');
+    await loadInstruments();
+    refreshMappings();
+  } else {
+    toast('Erreur lors de la sauvegarde', 'error');
+  }
+}
+
+async function peTestPipeline() {
+  const velocity = parseInt(prompt('Velocity (1-127)?', '80'));
+  if (isNaN(velocity) || velocity < 1 || velocity > 127) return;
+  const r = await api('pipeline/test', 'POST', { instrumentId: peInstrId, velocity });
+  if (r && r.ok) toast('Test envoye (note=' + r.note + ' vel=' + r.velocity + ')', 'success');
 }
 
 window.addEventListener('load', init);

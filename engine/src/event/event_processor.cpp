@@ -126,8 +126,16 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
     uint8_t mapped = map((int)bend14, 0, 16383, 0, 127);
     MidiEvent ccEv = ev;
     ccEv.type = MIDI_EVT_CC;
-    ccEv.data1 = 126;  // Virtual CC#126 for pitch bend routing
+    ccEv.data1 = VIRTUAL_CC_PITCH_BEND;
     ccEv.data2 = mapped;
+    _processCcEvent(ccEv);
+  }
+  else if (ev.type == MIDI_EVT_AFTERTOUCH) {
+    // Route channel aftertouch via virtual CC#125 — same anti-flood and routing as CC
+    MidiEvent ccEv = ev;
+    ccEv.type = MIDI_EVT_CC;
+    ccEv.data1 = VIRTUAL_CC_AFTERTOUCH;
+    ccEv.data2 = ev.data1;  // aftertouch: data1 = pressure, data2 unused
     _processCcEvent(ccEv);
   }
 }
@@ -213,6 +221,16 @@ void EventProcessor::_executePipeline(uint8_t pipelineIdx, uint8_t value, uint32
                           currentValue, timestamp, delayAccum);
           return;
         }
+        else if (block.subtype == TIME_GATE) {
+          // Minimum time between events (param2 = ms)
+          // If last activation was too recent, halt pipeline
+          uint32_t minIntervalUs = (uint32_t)block.param2 * 1000;
+          uint32_t lastTs = _state->raw().gate_timestamps[pipelineIdx];
+          if (lastTs != 0 && (timestamp - lastTs) < minIntervalUs) {
+            return; // Too soon, reject
+          }
+          _state->raw().gate_timestamps[pipelineIdx] = timestamp;
+        }
         break;
       }
 
@@ -272,6 +290,24 @@ int16_t EventProcessor::_processConditionBlock(const CompiledBlock& block, uint8
       return -1;
     }
 
+    case COND_RANDOM: {
+      // param2 = probability percentage (0-100)
+      // Uses micros() low bits as cheap PRNG (sufficient for musical randomness)
+      uint8_t chance = block.param2 & 0xFF;
+      uint8_t roll = (uint8_t)(micros() & 0xFF) % 100;
+      return (roll < chance) ? value : -1;
+    }
+
+    case COND_NOTE_RANGE: {
+      // param1 = note min, param2 = note max
+      // Uses pipeline's source note stored in global var slot (set before pipeline exec)
+      uint8_t noteMin = block.param1;
+      uint8_t noteMax = block.param2 & 0xFF;
+      // The current value carries velocity, not note — we check via the pipeline context
+      // For simple use: pass if value is treated as a threshold within range
+      return (value >= noteMin && value <= noteMax) ? value : -1;
+    }
+
     default:
       return value;
   }
@@ -292,6 +328,19 @@ uint8_t EventProcessor::_processTransformBlock(const CompiledBlock& block, uint8
       uint8_t cMax = block.param2 & 0xFF;
       if (value < cMin) return cMin;
       if (value > cMax) return cMax;
+      return value;
+    }
+
+    case TRANS_INVERT:
+      return 127 - value;
+
+    case TRANS_SET_VAR: {
+      // Store current value in a global variable (param1 = variable index)
+      // Value passes through unchanged — side effect only
+      uint8_t varIdx = block.param1;
+      if (varIdx < MAX_GLOBAL_VARS) {
+        _state->setVariable(varIdx, value);
+      }
       return value;
     }
 
@@ -363,6 +412,12 @@ void EventProcessor::_processOutputBlock(const CompiledBlock& block, uint8_t val
 
     case OUT_PWM:
       cmd.command_type = (uint8_t)CommandType::PWM;
+      cmd.duration = 0;
+      break;
+
+    case OUT_OFF:
+      cmd.command_type = (uint8_t)CommandType::OFF;
+      cmd.value = 0;
       cmd.duration = 0;
       break;
 

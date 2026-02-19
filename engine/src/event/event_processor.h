@@ -18,11 +18,13 @@
 //   4. Generer ActuatorCommand
 //   5. Push dans scheduler queue
 //
-// Supporte les 14 types de blocs :
-//   CONDITION: Threshold, RoundRobin, VelocitySplit
-//   TRANSFORM: VelocityCurve, Gain, Clamp
-//   TIME: Pulse, Delay, Ramp (micro-steps)
-//   OUTPUT: Pulse, Position, PWM
+// Supporte les 19 types de blocs :
+//   CONDITION: Threshold, RoundRobin, VelocitySplit, Random, NoteRange
+//   TRANSFORM: VelocityCurve, Gain, Clamp, Invert, SetVar
+//   TIME: Pulse, Delay, Ramp, Gate
+//   OUTPUT: Pulse, Position, PWM, Off
+//
+// MIDI events: NoteOn, NoteOff, CC, PitchBend (→CC#126), Aftertouch (→CC#125)
 //
 // Aucune allocation dynamique.
 // ============================================================================

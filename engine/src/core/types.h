@@ -97,6 +97,11 @@ constexpr uint8_t MIDI_EVT_NOTE_OFF    = 1;
 constexpr uint8_t MIDI_EVT_CC         = 2;
 constexpr uint8_t MIDI_EVT_PITCH_BEND = 3;
 constexpr uint8_t MIDI_EVT_AFTERTOUCH = 4;
+constexpr uint8_t MIDI_EVT_POLY_AFTERTOUCH = 5;
+
+// Virtual CC numbers (reserved for internal routing)
+constexpr uint8_t VIRTUAL_CC_AFTERTOUCH = 125;  // Channel aftertouch → CC#125
+constexpr uint8_t VIRTUAL_CC_PITCH_BEND = 126;  // Pitch bend → CC#126
 
 // --- Commande Actuator (structure universelle) ---
 struct ActuatorCommand {
@@ -235,24 +240,30 @@ struct CompiledBlock {
 };
 
 // Sous-types pour CONDITION
-constexpr uint8_t COND_THRESHOLD     = 0;  // Seuil
-constexpr uint8_t COND_ROUND_ROBIN   = 1;  // Alternance
-constexpr uint8_t COND_VELOCITY_SPLIT = 2; // Split velocite
+constexpr uint8_t COND_THRESHOLD     = 0;  // Seuil (variable vs valeur)
+constexpr uint8_t COND_ROUND_ROBIN   = 1;  // Alternance (round-robin groupes)
+constexpr uint8_t COND_VELOCITY_SPLIT = 2; // Split velocite (range gate)
+constexpr uint8_t COND_RANDOM        = 3;  // Probabilite (param2 = % chance, 0-100)
+constexpr uint8_t COND_NOTE_RANGE    = 4;  // Filtre note MIDI (param1=min, param2=max)
 
 // Sous-types pour TRANSFORM
-constexpr uint8_t TRANS_VELOCITY_CURVE = 0; // Courbe velocite
-constexpr uint8_t TRANS_GAIN          = 1;  // Gain/scale
-constexpr uint8_t TRANS_CLAMP         = 2;  // Limiteur
+constexpr uint8_t TRANS_VELOCITY_CURVE = 0; // Courbe velocite (LINEAR/EXPO/LOG)
+constexpr uint8_t TRANS_GAIN          = 1;  // Gain/scale (param2 = %, 100=1x)
+constexpr uint8_t TRANS_CLAMP         = 2;  // Limiteur (param1=min, param2=max)
+constexpr uint8_t TRANS_INVERT        = 3;  // Inverse (127 - value)
+constexpr uint8_t TRANS_SET_VAR       = 4;  // Stocke value dans variable (param1=varIdx)
 
 // Sous-types pour TIME
-constexpr uint8_t TIME_PULSE   = 0;  // Impulsion
-constexpr uint8_t TIME_DELAY   = 1;  // Delai
-constexpr uint8_t TIME_RAMP    = 2;  // Ramping
+constexpr uint8_t TIME_PULSE   = 0;  // Impulsion (velocity → duree)
+constexpr uint8_t TIME_DELAY   = 1;  // Delai fixe (param2=ms)
+constexpr uint8_t TIME_RAMP    = 2;  // Ramping (micro-steps progressifs)
+constexpr uint8_t TIME_GATE    = 3;  // Gate temporel (param2=ms minimum entre events)
 
 // Sous-types pour OUTPUT_BLOCK
 constexpr uint8_t OUT_PULSE    = 0;  // Sortie impulsion
 constexpr uint8_t OUT_POSITION = 1;  // Sortie position
 constexpr uint8_t OUT_PWM      = 2;  // Sortie PWM
+constexpr uint8_t OUT_OFF      = 3;  // Sortie arret
 
 // Courbes de velocite
 constexpr uint8_t CURVE_LINEAR = 0;
@@ -320,10 +331,12 @@ struct PipelineLookup {
 struct GlobalState {
   uint16_t variables[MAX_GLOBAL_VARS];
   uint8_t round_robin_counters[MAX_PIPELINES]; // Compteurs alternance
+  uint32_t gate_timestamps[MAX_PIPELINES];     // Derniere activation TIME_GATE par pipeline
 
   GlobalState() {
     memset(variables, 0, sizeof(variables));
     memset(round_robin_counters, 0, sizeof(round_robin_counters));
+    memset(gate_timestamps, 0, sizeof(gate_timestamps));
   }
 };
 

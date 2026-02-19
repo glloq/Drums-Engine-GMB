@@ -42,6 +42,12 @@ MIDI PitchBend → map 14-bit → 0-127 → route via CC#126 virtuel → cc_rout
 ```
 > CC#126 est utilise (et non CC#127) pour eviter la collision avec le vrai CC#127 (Poly Mode On).
 
+### Aftertouch (Channel Pressure)
+```
+MIDI Aftertouch → pressure 0-127 → route via CC#125 virtuel → cc_routes → scheduler
+```
+> CC#125 est reserve pour le routage interne de l'aftertouch. Anti-flood CC standard (5ms).
+
 ### Loop Engine
 ```
 LoopEngine::update() → tick fractionnaire → _dispatchEvent() → EventProcessor → pipeline
@@ -73,6 +79,29 @@ EventProcessor ──→ LedEventQueue (SPSC lock-free) ──→ LedEngine (Cor
 ### CompiledPipeline
 - Actions/bindings compilees + `retrigger_mode`
 - `alternate_group_count` pour round-robin
+- Jusqu'a 8 blocs par pipeline
+
+### Pipeline Blocks (19 types)
+| Categorie | Subtype | Description |
+|---|---|---|
+| **CONDITION** | Threshold | Compare variable/valeur vs seuil |
+| | Round-Robin | Alternance cyclique entre N groupes |
+| | Velocity Split | Gate si velocity dans [min, max] |
+| | Random | Probabilite N% de passage |
+| | Note Range | Gate si valeur dans [min, max] |
+| **TRANSFORM** | Velocity Curve | Applique courbe (linear/expo/log) |
+| | Gain | Multiplie par N% (100=1x) |
+| | Clamp | Limite entre min et max |
+| | Invert | Inverse (127 - value) |
+| | Set Variable | Stocke value dans variable globale |
+| **TIME** | Pulse | Velocity → duree impulsion (terminal) |
+| | Delay | Retarde sortie de N ms |
+| | Ramp | Micro-steps progressifs (terminal) |
+| | Gate | Bloque si intervalle < N ms |
+| **OUTPUT** | Pulse | Commande PULSE (terminal) |
+| | Position | Commande POSITION (terminal) |
+| | PWM | Commande PWM (terminal) |
+| | Off | Commande OFF (terminal) |
 
 ### PipelineLookup
 - `note_to_pipeline[128]` — O(1) lookup par note MIDI

@@ -87,8 +87,24 @@
 - [x] Config: `LED_MAX_STRIPS=4`, `LED_MAX_SEGMENTS=16`, `LED_MAX_THEMES=8`, `LED_FPS=60`
 - [x] GPIO par defaut: 4, 5, 16, 17 (SN74HCT125 level shifter recommande)
 
+## Phase 9 — Pipeline complet et editeur visuel
+**Statut: implementee**
+- [x] Aftertouch (channel pressure) → CC#125 virtuel, routage anti-flood
+- [x] Nouveaux blocs CONDITION: Random (probabilite), NoteRange (filtre valeur)
+- [x] Nouveaux blocs TRANSFORM: Invert (127-val), SetVar (ecriture variable globale)
+- [x] Nouveau bloc TIME: Gate (intervalle minimum entre events)
+- [x] Nouveau bloc OUTPUT: Off (commande arret actionneur)
+- [x] 19 sous-types de blocs pipeline (5 CONDITION, 5 TRANSFORM, 4 TIME, 4 OUTPUT)
+- [x] API schema blocs: `GET /api/pipeline/block-schema` (description dynamique pour UI)
+- [x] API pipeline CRUD: `GET/PUT /api/pipeline/blocks?instrumentId=<id>`
+- [x] API test pipeline: `POST /api/pipeline/test` (simule NoteOn)
+- [x] Pipeline Editor UI: onglet visuel avec blocs, actions, CC, reordonnancement
+- [x] Modal ajout bloc: picker par categorie avec description
+- [x] Modal edition bloc: formulaire dynamique genere depuis le schema
+- [x] CC virtuels documentes: CC#125 (aftertouch), CC#126 (pitch bend)
+- [x] Fix bug hideModal → closeModal dans les modals LED
+
 ## Risques / dette technique
 - Couverture tests: script curl fonctionnel mais pas de CI automatise.
 - Dependance environnement outillage (`pio`) pour validation complete firmware.
-- Pipeline editor UI non implemente (vision long terme).
 - LED: FastLED non utilise (RMT natif via espShow), a evaluer si besoin de plus d'animations.

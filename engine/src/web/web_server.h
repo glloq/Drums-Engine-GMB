@@ -127,6 +127,12 @@ private:
   void _handleGetLedStatus(AsyncWebServerRequest* req);
   void _handleSetLedBrightness(AsyncWebServerRequest* req, uint8_t* data, size_t len);
 
+  // Pipeline Editor
+  void _handleGetPipelineBlocks(AsyncWebServerRequest* req);
+  void _handleGetPipelineBlockSchema(AsyncWebServerRequest* req);
+  void _handleSetPipelineBlocks(AsyncWebServerRequest* req, uint8_t* data, size_t len);
+  void _handleTestPipeline(AsyncWebServerRequest* req, uint8_t* data, size_t len);
+
   // WebSocket
   void _onWsEvent(AsyncWebSocket* server, AsyncWebSocketClient* client,
                   AwsEventType type, void* arg, uint8_t* data, size_t len);

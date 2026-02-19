@@ -365,6 +365,33 @@ void WebServerManager::_setupRoutes() {
       }
     });
 
+  // --- Pipeline Editor API ---
+  _server.on("/api/pipeline/block-schema", HTTP_GET,
+    [this](AsyncWebServerRequest* req) { _handleGetPipelineBlockSchema(req); });
+
+  _server.on("/api/pipeline/blocks", HTTP_GET,
+    [this](AsyncWebServerRequest* req) { _handleGetPipelineBlocks(req); });
+
+  _server.on("/api/pipeline/blocks", HTTP_PUT,
+    [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) {
+        if (!_auth.checkAuth(req)) return;
+        _handleSetPipelineBlocks(req, data, len);
+      }
+    });
+
+  _server.on("/api/pipeline/test", HTTP_POST,
+    [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) {
+        if (!_auth.checkAuth(req)) return;
+        _handleTestPipeline(req, data, len);
+      }
+    });
+
   // --- LED Status / Brightness ---
   _server.on("/api/led/status", HTTP_GET,
     [this](AsyncWebServerRequest* req) { _handleGetLedStatus(req); });

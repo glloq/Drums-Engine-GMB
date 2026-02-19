@@ -56,6 +56,12 @@ Base URL: `http://<ip-esp32>/`
 - `GET /api/led/status` — status LED (brightness, counts, overflow)
 - `POST /api/led/brightness` — regler la luminosite master
 
+### Pipeline Editor
+- `GET /api/pipeline/block-schema` — schema complet des types de blocs (pour UI dynamique)
+- `GET /api/pipeline/blocks?instrumentId=<id>` — blocs pipeline + actions d'un instrument
+- `PUT /api/pipeline/blocks?instrumentId=<id>` — mettre a jour le pipeline (blocs + actions + CC)
+- `POST /api/pipeline/test` — tester un pipeline (simule NoteOn)
+
 ### Système / debug
 - `GET /api/status`
 - `GET /api/scan-i2c`
@@ -272,3 +278,90 @@ Le systeme sauvegarde et redemarre automatiquement.
 - Pour `shaker`/`brush`, la validation de slot impose actuellement un actuateur de type `PWM_MOTOR`.
 
 - L'UI effectue une pré-validation des `slotHints` (type/behavior) avant appel API pour retour utilisateur immédiat.
+
+
+## Pipeline Editor API
+
+### `GET /api/pipeline/block-schema`
+Retourne le schema complet des types de blocs disponibles, avec leurs sous-types, parametres et descriptions.
+Utilise par l'UI pour generer dynamiquement les formulaires de configuration des blocs.
+
+Reponse (extrait):
+```json
+[
+  {
+    "type": "condition",
+    "typeId": 0,
+    "label": "Condition",
+    "color": "#e94560",
+    "subtypes": [
+      {
+        "subtype": 0, "id": "threshold", "label": "Seuil",
+        "params": [
+          {"name": "param1", "label": "Variable", "type": "uint8", "default": 127, "min": 0, "max": 255},
+          {"name": "param2", "label": "Seuil", "type": "uint16", "default": 64, "min": 0, "max": 127}
+        ]
+      },
+      {"subtype": 3, "id": "random", "label": "Aleatoire", "params": [...]},
+      ...
+    ]
+  },
+  ...
+]
+```
+
+### `GET /api/pipeline/blocks?instrumentId=<id>`
+Retourne le pipeline compile d'un instrument: blocs, actions NoteOn/NoteOff, CC bindings.
+
+### `PUT /api/pipeline/blocks?instrumentId=<id>`
+Met a jour le pipeline d'un instrument, recompile le lookup, et sauvegarde.
+
+```json
+{
+  "blocks": [
+    {"type": "condition", "subtype": 2, "param1": 40, "param2": 127},
+    {"type": "transform", "subtype": 1, "param1": 0, "param2": 150}
+  ],
+  "outputActuatorId": 3,
+  "retriggerMode": 0,
+  "noteOnActions": [...],
+  "noteOffActions": [...],
+  "ccBindings": [...]
+}
+```
+
+### `POST /api/pipeline/test`
+Simule un NoteOn pour tester le pipeline d'un instrument.
+
+```json
+{"instrumentId": 3, "velocity": 80}
+```
+
+### Types de blocs pipeline (19 sous-types)
+
+| Categorie | ID | Sous-type | Description |
+|---|---|---|---|
+| condition | 0 | threshold | Compare variable/valeur a un seuil |
+| condition | 1 | round_robin | Alternance entre N groupes |
+| condition | 2 | velocity_split | Gate velocity [min, max] |
+| condition | 3 | random | Probabilite (0-100%) |
+| condition | 4 | note_range | Gate valeur [min, max] |
+| transform | 0 | velocity_curve | Courbe (linear/expo/log) |
+| transform | 1 | gain | Gain en % |
+| transform | 2 | clamp | Clamp [min, max] |
+| transform | 3 | invert | 127 - value |
+| transform | 4 | set_var | Stocke dans variable globale |
+| time | 0 | pulse | Velocity → duree (terminal) |
+| time | 1 | delay | Retarde de N ms |
+| time | 2 | ramp | N micro-steps (terminal) |
+| time | 3 | gate | Min N ms entre events |
+| output | 0 | pulse | Commande PULSE (terminal) |
+| output | 1 | position | Commande POSITION (terminal) |
+| output | 2 | pwm | Commande PWM (terminal) |
+| output | 3 | off | Commande OFF (terminal) |
+
+### CC virtuels internes
+| CC# | Usage |
+|---|---|
+| 125 | Aftertouch (channel pressure) |
+| 126 | Pitch Bend (14-bit → 7-bit) |

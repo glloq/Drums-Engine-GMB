@@ -240,7 +240,7 @@ input[type=checkbox] { width: auto; }
 <body>
 
 <div class="header">
-  <h1>Drums Engine</h1>
+  <h1>Drums Engine <span id="saveDot" style="display:none;width:8px;height:8px;border-radius:50%;background:var(--warn);display:none;vertical-align:middle;" title="Modifications non sauvegardees"></span></h1>
   <div style="display:flex;align-items:center;gap:4px;">
     <span id="loopBpmLeft" style="font-size:0.7em;color:var(--fg2);min-width:12px;text-align:right;">b</span>
     <button class="btn-loop" id="btnLoop" onclick="showModal('modalLoopEditor')" title="Boucles">&#8734;</button>
@@ -1358,6 +1358,7 @@ let currentLoopIdx = -1;
 let capabilities = null;
 let apiToken = '';
 let hideUsedActuators = localStorage.getItem('hideUsedAct') !== '0';
+let configDirty = false;
 let ledStrips = [];
 let ledSegments = [];
 let ledThemes = [];
@@ -1888,12 +1889,14 @@ async function saveActuator() {
   if (result === null || result === undefined) return;
   closeModal('modalActuator');
   await loadActuators();
+  markConfigDirty();
   toast('Actionneur enregistre', 'success');
 }
 
 async function deleteActuator(id) {
   await api('actuator?id=' + id, 'DELETE');
   await loadActuators();
+  markConfigDirty();
   toast('Actionneur supprime', 'success');
 }
 
@@ -2676,6 +2679,7 @@ async function saveInstrument() {
   if (result === null || result === undefined) return;
   closeModal('modalInstrument');
   await loadInstruments();
+  markConfigDirty();
   toast('Instrument enregistre', 'success');
 }
 
@@ -2763,6 +2767,7 @@ async function saveHiHatInstruments(baseName, retrigger, enabled, editId) {
 async function deleteInstrument(id) {
   await api('instrument?id=' + id, 'DELETE');
   await loadInstruments();
+  markConfigDirty();
   toast('Instrument supprime', 'success');
 }
 
@@ -3528,8 +3533,20 @@ async function scanI2C() {
   }
 }
 
+function markConfigDirty() {
+  configDirty = true;
+  const dot = document.getElementById('saveDot');
+  if (dot) dot.style.display = 'inline-block';
+}
+function markConfigClean() {
+  configDirty = false;
+  const dot = document.getElementById('saveDot');
+  if (dot) dot.style.display = 'none';
+}
+
 async function saveAll() {
   await api('save', 'POST');
+  markConfigClean();
   toast('Configuration sauvegardee', 'success');
 }
 

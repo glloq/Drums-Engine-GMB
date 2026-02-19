@@ -1,6 +1,11 @@
 #include "led_strip_driver.h"
 #include <driver/rmt_tx.h>
 
+// espShow() from Arduino ESP32 Core 3.x (esp32-hal-rgb-led.c)
+// Sends raw WS2812B bitstream via RMT hardware.
+// type: 0 = WS2812B
+extern "C" void espShow(uint8_t pin, uint8_t* pixels, uint32_t numBytes, uint8_t type);
+
 // ============================================================================
 // WS2812B timing via ESP32 RMT (hardware, zero CPU)
 // ============================================================================
@@ -164,9 +169,5 @@ void LedStripDriver::_rmtSend(uint8_t stripIdx) {
     grb[off + 2] = strip.buffer[off + 2]; // B
   }
 
-  // espShow() is declared in esp32-hal-rgb-led.h (Arduino ESP32 Core 3.x)
-  // Signature: void espShow(uint8_t pin, uint8_t *pixels, uint32_t numBytes, uint8_t type)
-  // type: 0 = WS2812B
-  extern "C" void espShow(uint8_t pin, uint8_t* pixels, uint32_t numBytes, uint8_t type);
   espShow(strip.gpioPin, grb, numBytes, 0);
 }

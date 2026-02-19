@@ -50,8 +50,10 @@ bool MCP23017Driver::digitalRead(uint8_t pin) {
 }
 
 bool MCP23017Driver::_checkI2CError() {
-  // Check I2C bus error via Wire.lastError (ESP32 specific)
-  if (Wire.lastError() != 0) {
+  // Probe I2C device to detect bus errors (portable across ESP32 Core 2.x/3.x)
+  Wire.beginTransmission(_address);
+  uint8_t err = Wire.endTransmission();
+  if (err != 0) {
     _errorCount++;
     if (_errorCount >= 10) {
       DBGF("[HAL] MCP23017 @ 0x%02X: too many I2C errors (%d), attempting recovery\n",

@@ -56,7 +56,10 @@ void PCA9685Driver::setServoPulse(uint8_t channel, uint16_t pulse) {
 }
 
 bool PCA9685Driver::_checkI2CError() {
-  if (Wire.lastError() != 0) {
+  // Probe I2C device to detect bus errors (portable across ESP32 Core 2.x/3.x)
+  Wire.beginTransmission(_address);
+  uint8_t err = Wire.endTransmission();
+  if (err != 0) {
     _errorCount++;
     if (_errorCount >= 10) {
       DBGF("[HAL] PCA9685 @ 0x%02X: too many I2C errors (%d), attempting recovery\n",

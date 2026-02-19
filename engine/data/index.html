@@ -208,9 +208,20 @@ input[type=checkbox] { width: auto; }
   .header h1 { font-size: 1em; }
   .tab { padding: 8px 10px; font-size: 0.82em; }
   .card { padding: 10px; }
-  .modal { padding: 16px; margin: 10px; width: calc(100% - 20px); }
+  .modal { padding: 14px; margin: 8px; width: calc(100% - 16px); max-height: 90vh; overflow-y: auto; }
   .form-row { gap: 8px; }
-  .transport { flex-wrap: wrap; gap: 8px; }
+  .form-row .form-group { min-width: 100px; }
+  .transport { flex-wrap: wrap; gap: 6px; }
+  .list-item .item-actions { gap: 4px; }
+  .list-item .item-actions .btn { padding: 5px 8px; font-size: 0.75em; }
+  .loop-grid { gap: 0; }
+  .loop-cell { min-height: 14px; border-radius: 1px; }
+  .loop-label { font-size: 0.6em; }
+  .beat-marker { font-size: 0.55em; }
+  .calib-controls { gap: 4px; }
+  .monitor-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
+  .btn-sm { padding: 5px 8px; font-size: 0.78em; }
+  .header-right .status { display: none; }
 }
 </style>
 </head>
@@ -226,7 +237,7 @@ input[type=checkbox] { width: auto; }
   <div class="header-right">
     <div class="status">
       <span><span class="dot" id="wifiDot"></span><span id="wifiStatus">--</span></span>
-      <span><span class="dot" id="midiDot"></span><span id="midiStatus">--</span><span class="midi-rx" id="midiRxDot" title="MIDI RX"></span></span>
+      <span><span class="dot" id="midiDot"></span><span id="midiStatus">--</span><span class="midi-rx" id="midiRxDot" title="MIDI RX"></span><span id="lastNoteDisplay" style="font-size:0.85em;color:var(--accent);margin-left:4px;min-width:20px;"></span></span>
     </div>
     <button class="btn-gear" onclick="showModal('modalSettings')" title="Reglages">&#9881;</button>
   </div>
@@ -4375,9 +4386,13 @@ function connectWebSocket() {
     try {
       const msg = JSON.parse(evt.data);
       if (msg.type === 'midi_note') {
-        // Flash MIDI RX indicator in header
+        // Flash MIDI RX indicator in header + show last note
         const rxDot = document.getElementById('midiRxDot');
         if (rxDot) { rxDot.classList.add('flash'); clearTimeout(rxDot._t); rxDot._t = setTimeout(() => rxDot.classList.remove('flash'), 80); }
+        if (msg.on) {
+          const lnd = document.getElementById('lastNoteDisplay');
+          if (lnd) { lnd.textContent = msg.note; clearTimeout(lnd._t); lnd._t = setTimeout(() => { lnd.textContent = ''; }, 2000); }
+        }
         // Piano live display
         if (pianoLiveActive) {
           const grid = document.getElementById('pianoPadGrid');

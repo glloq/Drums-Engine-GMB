@@ -450,6 +450,7 @@ input[type=checkbox] { width: auto; }
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
         <p class="hint" style="margin:0;">Testez chaque actionneur individuellement.</p>
         <button class="btn btn-sm btn-success" onclick="testAllSequential()" title="Teste chaque actionneur un par un">Test Sequence</button>
+        <button class="btn btn-sm btn-secondary" onclick="testIntegration()" title="Teste la chaine MIDI complete pour chaque instrument">Test Integration</button>
         <input type="text" placeholder="Filtrer..." oninput="filterList('calibActuatorList',this.value)" style="width:120px;padding:5px 8px;font-size:0.85em;">
       </div>
       <div id="calibActuatorList"></div>
@@ -943,6 +944,7 @@ input[type=checkbox] { width: auto; }
           <button class="btn btn-danger btn-sm" onclick="stopLoop()">&#9632; Stop</button>
           <button class="btn btn-secondary btn-sm" onclick="tapTempo()" title="Cliquez en rythme pour definir le BPM">Tap</button>
           <div class="bpm-display"><span id="loopBpmDisplay">120</span> BPM</div>
+          <div id="loopPositionDisplay" style="font-size:0.85em;color:var(--fg2);min-width:60px;text-align:center;display:none;"></div>
           <input type="range" id="loopBpmSlider" min="40" max="300" value="120"
                  oninput="updateLoopBpm(this.value)" style="flex:1;">
         </div>
@@ -3701,7 +3703,25 @@ async function updateLoopPlayhead() {
     stopLoopPlayhead(); clearPlayhead();
     const cs = document.getElementById('chainStatus');
     if (cs) cs.textContent = '';
+    const pauseBtn = document.getElementById('btnPauseLoop');
+    if (pauseBtn) pauseBtn.style.display = 'none';
+    const posDisp = document.getElementById('loopPositionDisplay');
+    if (posDisp) posDisp.style.display = 'none';
     return;
+  }
+
+  // Show loop position
+  const posDisp = document.getElementById('loopPositionDisplay');
+  if (posDisp && data.loop_bar !== undefined) {
+    posDisp.style.display = '';
+    posDisp.textContent = (data.loop_bar + 1) + '.' + (data.loop_beat + 1);
+  }
+
+  // Sync pause button state
+  const pauseBtn = document.getElementById('btnPauseLoop');
+  if (pauseBtn) {
+    pauseBtn.style.display = '';
+    pauseBtn.innerHTML = data.loop_paused ? '&#9654; Resume' : '&#10074;&#10074; Pause';
   }
 
   // Update chain status display
@@ -5377,7 +5397,7 @@ async function loadCalibrationData() {
         return a ? ('#' + a.id + ' ' + (a.name||'?')) : '#' + aid;
       });
       const actInfo = actNames.length ? actNames.join(', ') : 'Aucun';
-      return '<div class="calib-item">' +
+      return '<div class="calib-item" data-instid="' + inst.id + '">' +
         '<h4><span>' + (inst.name||'Sans nom') + '</span>' +
         '<span class="badge">Note ' + inst.midiNote + ' | CH ' + inst.midiChannel + '</span></h4>' +
         '<div style="font-size:0.78em;color:var(--fg2);margin-bottom:6px;">Actionneurs: ' + actInfo + '</div>' +
@@ -5466,6 +5486,26 @@ async function testAllSequential() {
     if (card) card.style.boxShadow = '';
   }
   toast('Test sequentiel termine', 'success');
+}
+
+async function testIntegration() {
+  const enabled = instruments.filter(i => i.enabled !== false);
+  if (enabled.length === 0) { toast('Aucun instrument actif', 'warn'); return; }
+  toast('Test integration: ' + enabled.length + ' instruments via MIDI...', 'success');
+  for (let i = 0; i < enabled.length; i++) {
+    const inst = enabled[i];
+    // Flash the instrument card in calibration list
+    const card = document.querySelector('.calib-item[data-instid="' + inst.id + '"]');
+    if (card) card.style.boxShadow = '0 0 8px var(--success)';
+    // Send NoteOn via MIDI pipeline
+    await api('test/note', 'POST', {note: inst.midiNote, velocity: 80, channel: 10});
+    await new Promise(r => setTimeout(r, 300));
+    // Send NoteOff
+    await api('test/note', 'POST', {note: inst.midiNote, velocity: 0, channel: 10, noteOff: true});
+    await new Promise(r => setTimeout(r, 200));
+    if (card) card.style.boxShadow = '';
+  }
+  toast('Test integration termine', 'success');
 }
 
 async function emergencyStopAll() {

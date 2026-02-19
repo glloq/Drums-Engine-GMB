@@ -48,7 +48,7 @@ enum class ActuatorBehavior : uint8_t {
   SOLENOID_MUTE,          // Solenoide mute (off = mute/contact, on = libre)
   MOTOR_TIMED,            // Moteur active pour une duree puis arret auto
   MOTOR_SPEED,            // Moteur vitesse continue (velocity → vitesse)
-  MOTOR_SWEEP,            // Moteur tourne jusqu'au end stop puis arret
+  MOTOR_SWEEP,            // 1 end stop: aller puis arret / 2 end stops: aller-retour
   MOTOR_ALTERNATE,        // Moteur alterne direction entre end stops
   BEHAVIOR_COUNT
 };
@@ -174,6 +174,7 @@ struct ActuatorConfig {
   // MOTOR_TIMED:       paramMin=pwmMin%, paramMax=pwmMax%, duration from command
   // MOTOR_SPEED:       paramMin=pwmMin%, paramMax=pwmMax% (PWM command → vitesse)
   // MOTOR_SWEEP:       paramMin=pwmMin%, paramMax=pwmMax%, endStopPin1/2 requis
+  //                    1 end stop → aller simple / 2 end stops + hwAddress=dirPin → aller-retour
   // MOTOR_ALTERNATE:   paramMin=pwmMin%, paramMax=pwmMax%, hwAddress=dirPin GPIO,
   //                    endStopPin1/2 requis (alterne direction entre les 2 butees)
 

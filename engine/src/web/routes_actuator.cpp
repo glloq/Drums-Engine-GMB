@@ -176,9 +176,16 @@ bool WebServerManager::_validateActuatorConfig(const ActuatorConfig& cfg, const 
       return false;
     }
     // MOTOR_SWEEP requiert au moins un end stop
+    // 2 end stops + hwAddress → aller-retour complet (direction pin requis)
     if (cfg.behavior == ActuatorBehavior::MOTOR_SWEEP) {
       if (cfg.endStopPin1 == 0xFF && cfg.endStopPin2 == 0xFF) {
         errMsg = "MOTOR_SWEEP requires at least one endStopPin";
+        return false;
+      }
+      bool hasTwoEndStops = (cfg.endStopPin1 != 0xFF && cfg.endStopPin2 != 0xFF);
+      bool hasDirPin = (cfg.hwAddress > 0 && cfg.hwAddress < 40);
+      if (hasTwoEndStops && !hasDirPin) {
+        errMsg = "MOTOR_SWEEP with 2 end stops requires hwAddress as direction GPIO pin (1-39)";
         return false;
       }
     }

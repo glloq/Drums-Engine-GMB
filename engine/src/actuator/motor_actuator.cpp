@@ -15,6 +15,7 @@ MotorActuator::MotorActuator(HalDriver* driver)
     _sensorPin(0xFF), _dirPin(0xFF), _forward(true),
     _targetEdges(0), _positionTracking(false),
     _timedDurationUs(0), _alternateRunning(false),
+    _sweepPhase(0),
     _homing(false), _endStopReached(false) {}
 
 void MotorActuator::init() {
@@ -26,20 +27,22 @@ void MotorActuator::init() {
   _positionTracking = false;
   _timedDurationUs = 0;
   _alternateRunning = false;
+  _sweepPhase = 0;
   _sensorPin = 0xFF;
   _dirPin = 0xFF;
   _forward = true;
 
   // hwAddress : role depend du type/behavior
-  //   MOTOR_OPTICAL   → capteur optique (INPUT_PULLUP, ISR)
-  //   MOTOR_ALTERNATE → pin direction H-bridge (OUTPUT)
-  //   Autres PWM_MOTOR → ignore
+  //   MOTOR_OPTICAL            → capteur optique (INPUT_PULLUP, ISR)
+  //   MOTOR_ALTERNATE / SWEEP  → pin direction H-bridge (OUTPUT)
+  //   Autres PWM_MOTOR         → ignore
   if (_config.type == ActuatorType::MOTOR_OPTICAL) {
     _sensorPin = _config.hwAddress;
     if (_sensorPin > 0 && _sensorPin < 40) {
       pinMode(_sensorPin, INPUT_PULLUP);
     }
-  } else if (_config.behavior == ActuatorBehavior::MOTOR_ALTERNATE) {
+  } else if (_config.behavior == ActuatorBehavior::MOTOR_ALTERNATE ||
+             _config.behavior == ActuatorBehavior::MOTOR_SWEEP) {
     if (_config.hwAddress > 0 && _config.hwAddress < 40) {
       _dirPin = _config.hwAddress;
       pinMode(_dirPin, OUTPUT);
@@ -98,14 +101,19 @@ void MotorActuator::execute(const ActuatorCommand& cmd) {
           break;
 
         case ActuatorBehavior::MOTOR_SWEEP:
-          // Tourne a 'speed' jusqu'a ce qu'un end stop soit atteint
+          // 1 end stop : tourne jusqu'a la butee, arret
+          // 2 end stops + dirPin : aller (phase 0) → inverser → retour (phase 1) → arret
+          _sweepPhase = 0;
+          _forward = true;
           _endStopReached = false;
           _alternateRunning = false;
+          _setDirection(_forward);
           _driver->pwmWrite(_config.hwPin, speed);
           _currentSpeed = speed;
           markActivation(now);
-          DBGF("[Actuator] Motor '%s' sweep (speed=%d)\n",
-               _config.name, speed);
+          DBGF("[Actuator] Motor '%s' sweep (speed=%d, endstops=%s)\n",
+               _config.name, speed,
+               (_dirPin != 0xFF) ? "2 (aller-retour)" : "1 (aller)");
           break;
 
         case ActuatorBehavior::MOTOR_ALTERNATE:
@@ -298,6 +306,7 @@ void MotorActuator::stop() {
   _targetEdges = 0;
   _timedDurationUs = 0;
   _alternateRunning = false;
+  _sweepPhase = 0;
   _homing = false;
   markDeactivation();
 }
@@ -307,7 +316,7 @@ void MotorActuator::stop() {
 // =========================================================================
 // Logique par behavior :
 //   MOTOR_TIMED     → arret apres _timedDurationUs
-//   MOTOR_SWEEP     → arret quand end stop atteint (check standard)
+//   MOTOR_SWEEP     → 1 end stop: arret / 2 end stops: aller-retour puis arret
 //   MOTOR_ALTERNATE → inverse direction quand end stop atteint, continue
 //   MOTOR_SPEED     → timeout securite seulement
 //   OPTICAL_TRACK   → suivi compteur ISR
@@ -320,7 +329,7 @@ bool MotorActuator::checkTimeout(uint32_t nowUs) {
     if (!_endStopReached) {
       _endStopReached = true;
 
-      // MOTOR_ALTERNATE : inverser et continuer
+      // MOTOR_ALTERNATE : inverser et continuer indefiniment
       if (_alternateRunning) {
         _driver->pwmWrite(_config.hwPin, 0);           // pause breve
         _forward = !_forward;
@@ -332,7 +341,23 @@ bool MotorActuator::checkTimeout(uint32_t nowUs) {
         return false;
       }
 
-      // Tous les autres behaviors : arret
+      // MOTOR_SWEEP avec 2 end stops (dirPin) : aller-retour
+      //   phase 0 (aller)  → inverser, passer en phase 1
+      //   phase 1 (retour) → arret, sweep complet
+      if (_config.behavior == ActuatorBehavior::MOTOR_SWEEP &&
+          _dirPin != 0xFF && _sweepPhase == 0) {
+        _driver->pwmWrite(_config.hwPin, 0);           // pause breve
+        _forward = !_forward;
+        _setDirection(_forward);
+        _driver->pwmWrite(_config.hwPin, _currentSpeed); // reprendre
+        _sweepPhase = 1;
+        _activationStartUs = nowUs;                     // reset timeout securite
+        DBGF("[Actuator] Motor '%s' sweep retour (%s)\n",
+             _config.name, _forward ? "FWD" : "REV");
+        return false;
+      }
+
+      // Tous les autres cas : arret
       DBGF("[Actuator] Motor '%s' end stop triggered - stopping\n", _config.name);
       stop();
       return true;

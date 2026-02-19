@@ -10,7 +10,7 @@
 // Comportements :
 //   MOTOR_SPEED         : Vitesse continue (velocity → PWM)
 //   MOTOR_TIMED         : Tourne pendant une duree, puis arret auto
-//   MOTOR_SWEEP         : Tourne jusqu'au end stop, puis arret
+//   MOTOR_SWEEP         : 1 end stop → arret, 2 end stops → aller-retour complet
 //   MOTOR_ALTERNATE     : Alterne direction entre end stops (hwAddress=dirPin)
 //   MOTOR_OPTICAL_TRACK : Suivi optique par comptage ISR
 //
@@ -32,6 +32,7 @@ public:
                     _sensorPin(0xFF), _dirPin(0xFF), _forward(true),
                     _targetEdges(0), _positionTracking(false),
                     _timedDurationUs(0), _alternateRunning(false),
+                    _sweepPhase(0),
                     _homing(false), _endStopReached(false) {}
   MotorActuator(HalDriver* driver);
 
@@ -46,7 +47,7 @@ private:
 
   // --- Pin secondaire (selon behavior) ---
   uint8_t _sensorPin;               // OPTICAL: GPIO capteur (from hwAddress)
-  uint8_t _dirPin;                  // ALTERNATE: GPIO direction (from hwAddress)
+  uint8_t _dirPin;                  // ALTERNATE/SWEEP: GPIO direction (from hwAddress)
   bool _forward;                    // Direction courante (true = avant)
 
   // --- Suivi optique ---
@@ -56,6 +57,7 @@ private:
   // --- Etats modes moteur ---
   uint32_t _timedDurationUs;        // Duree pour MOTOR_TIMED (us)
   bool _alternateRunning;           // MOTOR_ALTERNATE en cours
+  uint8_t _sweepPhase;              // MOTOR_SWEEP: 0=aller, 1=retour (2 end stops)
 
   bool _homing;
   bool _endStopReached;

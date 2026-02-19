@@ -90,12 +90,16 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
     // Decrement stack counter; only fire noteOff actions when last instance releases
     portENTER_CRITICAL(&_noteActiveMux);
     uint8_t noteOffCount = _noteActive[ev.data1];
+    if (noteOffCount == 0) {
+      portEXIT_CRITICAL(&_noteActiveMux);
+      return;  // No active note — ignore spurious NoteOff
+    }
     portEXIT_CRITICAL(&_noteActiveMux);
 
     if (noteOffCount > 1 &&
         pipeline.retrigger_mode == (uint8_t)RetriggerMode::STACK) {
       portENTER_CRITICAL(&_noteActiveMux);
-      _noteActive[ev.data1]--;
+      if (_noteActive[ev.data1] > 0) _noteActive[ev.data1]--;
       portEXIT_CRITICAL(&_noteActiveMux);
       return;  // Other instances still active, don't fire noteOff yet
     }
@@ -160,6 +164,7 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
 }
 
 void EventProcessor::_processCcEvent(const MidiEvent& ev) {
+  if (ev.data1 >= 128) return;  // Guard against out-of-bounds CC number
   _ccStats.received++;
   if (ev.data1 < MAX_GLOBAL_VARS) {
     _state->setVariable(ev.data1, ev.data2);
@@ -228,7 +233,12 @@ void EventProcessor::_executePipeline(uint8_t pipelineIdx, uint8_t value, uint32
 
       case BlockType::TIME: {
         if (block.subtype == TIME_DELAY) {
-          delayAccum += (uint32_t)block.param2 * 1000;
+          uint32_t addUs = (uint32_t)block.param2 * 1000;
+          if (delayAccum + addUs < delayAccum) {
+            delayAccum = UINT32_MAX;  // Saturate on overflow
+          } else {
+            delayAccum += addUs;
+          }
         }
         else if (block.subtype == TIME_PULSE) {
           _processTimePulse(block, pipeline.output_actuator_id,

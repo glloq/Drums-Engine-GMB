@@ -68,6 +68,7 @@ private:
   Scheduler* _scheduler = nullptr;
 
   int8_t _findIndex(uint8_t id) const;
+  void _updateActiveCountLocked();  // Must be called with _actMgrMux held
 };
 
 #endif // ACTUATOR_MANAGER_H

@@ -46,17 +46,48 @@ void WebServerManager::_broadcastNoteChanges() {
   uint8_t current[128];
   _eventProc->getNoteActive(current);
 
+  // Collect all changes, then send as a single batched JSON message
+  // to avoid flooding the WebSocket with up to 128 individual frames
+  uint8_t changedNotes[128];
+  uint8_t changeCount = 0;
+
   for (uint8_t i = 0; i < 128; i++) {
     bool wasActive = _wsNoteCache[i] > 0;
     bool isActive = current[i] > 0;
     if (wasActive != isActive) {
-      // Send individual note change via WebSocket (includes velocity)
-      char buf[80];
-      snprintf(buf, sizeof(buf), "{\"type\":\"midi_note\",\"note\":%d,\"on\":%s,\"vel\":%d}",
-               i, isActive ? "true" : "false", current[i]);
-      _ws.textAll(buf);
+      changedNotes[changeCount++] = i;
     }
   }
+
+  if (changeCount == 0) {
+    // No changes — skip entirely
+    return;
+  }
+
+  if (changeCount == 1) {
+    // Single change: send compact message directly
+    uint8_t n = changedNotes[0];
+    char buf[80];
+    snprintf(buf, sizeof(buf), "{\"type\":\"midi_note\",\"note\":%d,\"on\":%s,\"vel\":%d}",
+             n, current[n] > 0 ? "true" : "false", current[n]);
+    _ws.textAll(buf);
+  } else {
+    // Multiple changes: batch into a single JSON array message
+    String msg;
+    msg.reserve(32 + changeCount * 40);
+    msg = "{\"type\":\"midi_notes\",\"notes\":[";
+    for (uint8_t c = 0; c < changeCount; c++) {
+      uint8_t n = changedNotes[c];
+      if (c > 0) msg += ',';
+      char entry[48];
+      snprintf(entry, sizeof(entry), "{\"n\":%d,\"on\":%s,\"v\":%d}",
+               n, current[n] > 0 ? "true" : "false", current[n]);
+      msg += entry;
+    }
+    msg += "]}";
+    _ws.textAll(msg);
+  }
+
   memcpy(_wsNoteCache, current, 128);
 }
 

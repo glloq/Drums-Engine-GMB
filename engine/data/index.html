@@ -1367,7 +1367,7 @@ let ledStatus = {};
 // ====================================================================
 // API helper
 // ====================================================================
-async function api(path, method='GET', body=null) {
+async function api(path, method='GET', body=null, silent=false) {
   const opts = {method, headers: {'Content-Type':'application/json'}};
   if (apiToken && method !== 'GET') {
     opts.headers['Authorization'] = 'Bearer ' + apiToken;
@@ -1377,13 +1377,15 @@ async function api(path, method='GET', body=null) {
     const r = await fetch('/api/' + path, opts);
     const payload = await r.json();
     if (!r.ok) {
-      const msg = payload && (payload.message || payload.error) ? (payload.message || payload.error) : ('HTTP ' + r.status);
-      toast('Erreur API: ' + msg, 'error');
+      if (!silent) {
+        const msg = payload && (payload.message || payload.error) ? (payload.message || payload.error) : ('HTTP ' + r.status);
+        toast('Erreur API: ' + msg, 'error');
+      }
       return null;
     }
     return payload;
   } catch(e) {
-    toast('Erreur reseau: ' + e.message, 'error');
+    if (!silent) toast('Erreur reseau: ' + e.message, 'error');
     return null;
   }
 }
@@ -3371,9 +3373,19 @@ async function updateLoopPlayhead() {
 // ====================================================================
 // SYSTEM
 // ====================================================================
+let connLost = false;
 async function refreshStatus() {
-  const data = await api('status');
-  if (!data) return;
+  const data = await api('status', 'GET', null, true);
+  if (!data) {
+    if (!connLost) {
+      connLost = true;
+      document.getElementById('wifiDot').className = 'dot off';
+      document.getElementById('wifiStatus').textContent = 'Deconnecte';
+      toast('Connexion perdue avec l\'ESP32', 'error');
+    }
+    return;
+  }
+  if (connLost) { connLost = false; toast('Connexion retablie', 'success'); }
   statusData = data;
 
   // Header status dots

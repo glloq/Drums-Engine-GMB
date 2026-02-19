@@ -124,6 +124,7 @@ input[type=checkbox] { width: auto; }
 .toast.show { transform: translateY(0); opacity: 1; }
 .toast.error { border-left: 3px solid var(--accent); }
 .toast.success { border-left: 3px solid var(--success); }
+.toast.warn { border-left: 3px solid var(--warn); }
 
 .empty-state { text-align: center; padding: 40px; color: var(--fg2); }
 
@@ -1553,6 +1554,7 @@ function renderActuators() {
       <div class="item-actions">
         <button class="btn btn-sm btn-success" onclick="testActuator(${a.id})">Test</button>
         <button class="btn btn-sm btn-secondary" onclick="editActuator(${a.id})">Modifier</button>
+        <button class="btn btn-sm btn-secondary" onclick="duplicateActuator(${a.id})">Dupliquer</button>
         <button class="btn btn-sm btn-danger" onclick="confirmDelete(this, () => deleteActuator(${a.id}))">Suppr</button>
       </div>
       <div class="item-detail">${details}</div>
@@ -1755,6 +1757,22 @@ async function deleteActuator(id) {
   await api('actuator?id=' + id, 'DELETE');
   await loadActuators();
   toast('Actionneur supprime', 'success');
+}
+
+async function duplicateActuator(id) {
+  const act = actuators.find(a => a.id === id);
+  if (!act) return;
+  const copy = JSON.parse(JSON.stringify(act));
+  delete copy.id;
+  copy.name = act.name + ' (copie)';
+  // Auto-assign next pin
+  copy.hwPin = (act.hwPin + 1) % 16;
+
+  const result = await api('actuators', 'POST', copy);
+  if (result !== null && result !== undefined) {
+    await loadActuators();
+    toast('Actionneur duplique', 'success');
+  }
 }
 
 async function testActuator(id) {
@@ -1967,6 +1985,7 @@ function renderInstruments() {
         <button class="btn btn-sm btn-secondary" onclick="testInstrumentAction(${inst.id}, 'on', 0)">On#1</button>
         <button class="btn btn-sm btn-secondary" onclick="testInstrumentAction(${inst.id}, 'off', 0)">Off#1</button>
         <button class="btn btn-sm btn-secondary" onclick="editInstrument(${inst.id})">Modifier</button>
+        <button class="btn btn-sm btn-secondary" onclick="duplicateInstrument(${inst.id})">Dupliquer</button>
         <button class="btn btn-sm btn-danger" onclick="confirmDelete(this, () => deleteInstrument(${inst.id}))">Suppr</button>
       </div>
       <div class="item-detail">
@@ -2487,6 +2506,27 @@ async function deleteInstrument(id) {
   await api('instrument?id=' + id, 'DELETE');
   await loadInstruments();
   toast('Instrument supprime', 'success');
+}
+
+async function duplicateInstrument(id) {
+  const inst = instruments.find(i => i.id === id);
+  if (!inst) return;
+  // Find next free MIDI note
+  const usedNotes = new Set(instruments.map(i => i.midiNote));
+  let newNote = inst.midiNote + 1;
+  while (usedNotes.has(newNote) && newNote <= 127) newNote++;
+  if (newNote > 127) { toast('Pas de note MIDI libre', 'error'); return; }
+
+  const copy = JSON.parse(JSON.stringify(inst));
+  delete copy.id;
+  copy.name = inst.name + ' (copie)';
+  copy.midiNote = newNote;
+
+  const result = await api('instruments', 'POST', copy);
+  if (result !== null && result !== undefined) {
+    await loadInstruments();
+    toast('Instrument duplique (note ' + newNote + ')', 'success');
+  }
 }
 
 async function testInstrument(id) {
@@ -4034,19 +4074,35 @@ async function loadCalibrationData() {
         'Pitch Bend','Motor Optical','Hi-Hat Ctrl','Servo Mute','Sol.Mute',
         'Motor Timed','Motor Speed','Motor Sweep','Motor Alt.'];
       const behavName = behavNames[a.behavior] || '?';
-      return '<div class="calib-item">' +
+      // Type-specific label and hints
+      let sliderLabel = 'Valeur';
+      let hint = '';
+      if (a.type === 0) { // Servo
+        sliderLabel = 'Position';
+        hint = 'Angle: ' + a.paramMin + '°-' + a.paramMax + '° (repos: ' + a.paramDefault + '°)';
+      } else if (a.type === 1) { // Solenoid
+        sliderLabel = a.behavior === 0 ? 'Force' : 'Valeur';
+        hint = a.behavior === 0 ? 'Duree: ' + a.paramMin + '-' + a.paramMax + 'ms | Cooldown: ' + Math.round(a.cooldownUs * 0.1) + 'ms' :
+               a.behavior === 1 ? 'PWM act: ' + a.paramMin + ' hold: ' + a.paramMax + ' | Trans: ' + a.paramDefault + 'ms' :
+               'On/Off toggle';
+      } else if (a.type === 2) { // Motor
+        sliderLabel = 'Vitesse';
+        hint = 'PWM: ' + a.paramMin + '%-' + a.paramMax + '%' + (a.inverted ? ' [INV]' : '');
+      }
+      const border = a.active ? 'var(--success)' : 'var(--accent2)';
+      return '<div class="calib-item" style="border-left-color:' + border + ';">' +
         '<h4><span>#' + a.id + ' ' + (a.name||'Sans nom') + '</span>' +
-        '<span class="badge">' + typeName + ' / ' + behavName + '</span></h4>' +
+        '<span class="badge">' + typeName + ' / ' + behavName + '</span>' +
+        (a.active ? '<span class="badge badge-green">ACTIF</span>' : '') + '</h4>' +
         '<div class="calib-controls">' +
-          '<label style="font-size:0.8em;color:var(--fg2);min-width:50px;">Valeur:</label>' +
+          '<label style="font-size:0.8em;color:var(--fg2);min-width:55px;">' + sliderLabel + ':</label>' +
           '<input type="range" class="calib-slider" id="calibVal' + a.id + '" min="0" max="127" value="80" ' +
             'oninput="document.getElementById(\'calibDisp' + a.id + '\').textContent=this.value">' +
           '<span class="calib-val" id="calibDisp' + a.id + '">80</span>' +
           '<button class="btn btn-primary btn-sm" onclick="calibTestActuator(' + a.id + ')">Tester</button>' +
           '<button class="btn btn-danger btn-sm" onclick="calibStopActuator(' + a.id + ')">Stop</button>' +
         '</div>' +
-        '<div style="margin-top:6px;font-size:0.78em;color:var(--fg2);">Range: ' + a.paramMin + '-' + a.paramMax + ' | Default: ' + a.paramDefault +
-          (a.cooldownUs > 0 ? ' | Cooldown: ' + Math.round(a.cooldownUs * 0.1) + 'ms' : '') + '</div>' +
+        (hint ? '<div style="margin-top:6px;font-size:0.78em;color:var(--fg2);">' + hint + '</div>' : '') +
       '</div>';
     }).join('');
   }

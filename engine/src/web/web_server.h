@@ -107,6 +107,8 @@ private:
   void _handleGetLogs(AsyncWebServerRequest* req);
   void _handleClearLogs(AsyncWebServerRequest* req);
   void _handleGetAuthToken(AsyncWebServerRequest* req);
+  void _handleLoginStatus(AsyncWebServerRequest* req);
+  void _handleSetPin(AsyncWebServerRequest* req, uint8_t* data, size_t len);
   void _handleGetMidiChannels(AsyncWebServerRequest* req);
   void _handleSetMidiChannels(AsyncWebServerRequest* req, uint8_t* data, size_t len);
   void _handleFactoryReset(AsyncWebServerRequest* req);

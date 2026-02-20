@@ -84,13 +84,17 @@ void WebServerManager::_broadcastNoteChanges() {
 
 void WebServerManager::_setupRoutes() {
   // UI web: serve from LittleFS if available, otherwise from embedded PROGMEM gzip
+  // Cache-Control: no-cache forces revalidation on every load (fixes phone browser caching)
   _server.on("/", HTTP_GET, [](AsyncWebServerRequest* req) {
     if (LittleFS.exists("/index.html")) {
-      req->send(LittleFS, "/index.html", "text/html");
+      AsyncWebServerResponse* response = req->beginResponse(LittleFS, "/index.html", "text/html");
+      response->addHeader("Cache-Control", "no-cache, must-revalidate");
+      req->send(response);
     } else {
       AsyncWebServerResponse* response = req->beginResponse_P(
         200, "text/html", INDEX_HTML_GZ, INDEX_HTML_GZ_LEN);
       response->addHeader("Content-Encoding", "gzip");
+      response->addHeader("Cache-Control", "no-cache, must-revalidate");
       req->send(response);
     }
   });
@@ -345,9 +349,22 @@ void WebServerManager::_setupRoutes() {
       _handleClearLogs(req);
     });
 
-  // --- Auth token API (local access only) ---
+  // --- Auth & Login ---
   _server.on("/api/auth-token", HTTP_GET,
     [this](AsyncWebServerRequest* req) { _handleGetAuthToken(req); });
+
+  _server.on("/api/login-status", HTTP_GET,
+    [this](AsyncWebServerRequest* req) { _handleLoginStatus(req); });
+
+  _server.on("/api/pin", HTTP_POST,
+    [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) {
+        if (!_auth.checkAuth(req)) return;
+        _handleSetPin(req, data, len);
+      }
+    });
 
   // --- Validation ---
   _server.on("/api/validate", HTTP_GET,

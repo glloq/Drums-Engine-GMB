@@ -13,6 +13,7 @@
 // - ApiAuth: Bearer token authentication for mutating endpoints (POST/PUT/DELETE)
 //   GET and WebSocket connections are exempt (read-only / local config UI).
 //   Token is persisted in /auth.json on LittleFS; auto-generated on first boot.
+//   Optional PIN code protects the token endpoint (login page).
 //
 // - RateLimiter: Fixed-window per-IP rate limiter (no heap allocation).
 //   Tracks up to MAX_RATE_CLIENTS IPs with a sliding 1-second window.
@@ -20,6 +21,7 @@
 
 #define AUTH_TOKEN_FILE   "/auth.json"
 #define AUTH_TOKEN_LEN    16          // 16 hex chars = 8 random bytes
+#define AUTH_PIN_MAX_LEN  16          // max PIN length
 #define MAX_RATE_CLIENTS  8
 #define RATE_LIMIT_PER_S  30
 #define RATE_WINDOW_MS    1000
@@ -44,11 +46,19 @@ public:
   /// Return the current token (for Serial display at boot).
   String getToken() const;
 
+  /// PIN management
+  bool hasPin() const;
+  bool checkPin(const String& pin) const;
+  bool setPin(const String& pin);
+
 private:
   char _token[AUTH_TOKEN_LEN + 1] = {0};
+  char _pin[AUTH_PIN_MAX_LEN + 1] = {0};
+  bool _hasPin = false;
 
   bool _loadToken();
   bool _generateAndSaveToken();
+  bool _saveAuthFile();
 };
 
 // ============================================================================

@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Drums Engine</title>
 <style>
 :root {
@@ -221,6 +224,16 @@ input[type=checkbox] { width: auto; }
 .act-calib-quick { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
 .act-calib-info { font-size: 0.78em; color: var(--fg2); margin-top: 6px; }
 
+/* Login screen */
+.login-overlay { position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center; }
+.login-box { background:var(--bg2);border-radius:12px;padding:32px 28px;max-width:360px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.5);text-align:center; }
+.login-box h1 { font-size:1.4em;margin-bottom:4px;color:var(--accent); }
+.login-box .login-subtitle { font-size:0.85em;color:var(--fg2);margin-bottom:24px; }
+.login-box input[type=password], .login-box input[type=text] { text-align:center;font-size:1.2em;letter-spacing:4px;padding:12px;margin-bottom:12px; }
+.login-box .btn { width:100%;padding:12px;font-size:1em;margin-bottom:8px; }
+.login-error { color:var(--accent);font-size:0.85em;min-height:20px;margin-bottom:8px; }
+.login-box .login-version { font-size:0.7em;color:var(--fg2);margin-top:16px;opacity:0.5; }
+
 @media (max-width: 600px) {
   .content { padding: 8px; }
   .header { padding: 6px 10px; }
@@ -256,6 +269,32 @@ input[type=checkbox] { width: auto; }
 </style>
 </head>
 <body>
+
+<!-- ====== LOGIN SCREEN ====== -->
+<div class="login-overlay" id="loginOverlay" style="display:none;">
+  <div class="login-box">
+    <h1>Drums Engine</h1>
+    <div class="login-subtitle">Connexion au controleur</div>
+    <div id="loginSetupMode" style="display:none;">
+      <p style="font-size:0.85em;color:var(--fg2);margin-bottom:12px;">Premiere connexion : choisissez un code PIN (4-16 caracteres)</p>
+      <input type="password" id="loginNewPin" placeholder="Nouveau PIN" maxlength="16" autocomplete="new-password">
+      <input type="password" id="loginConfirmPin" placeholder="Confirmer le PIN" maxlength="16" autocomplete="new-password">
+      <div class="login-error" id="loginSetupError"></div>
+      <button class="btn btn-primary" onclick="loginSetupPin()">Definir le PIN</button>
+      <button class="btn btn-secondary" onclick="loginSkipPin()">Continuer sans PIN</button>
+    </div>
+    <div id="loginPinMode" style="display:none;">
+      <input type="password" id="loginPin" placeholder="Code PIN" maxlength="16" autocomplete="current-password"
+        onkeydown="if(event.key==='Enter')loginSubmit()">
+      <div class="login-error" id="loginError"></div>
+      <button class="btn btn-primary" onclick="loginSubmit()">Connexion</button>
+    </div>
+    <div id="loginLoading">
+      <p style="color:var(--fg2);">Connexion...</p>
+    </div>
+    <div class="login-version">Drums Engine MIDI</div>
+  </div>
+</div>
 
 <div class="header">
   <h1>Drums Engine <span id="saveDot" style="display:none;width:8px;height:8px;border-radius:50%;background:var(--warn);display:none;vertical-align:middle;" title="Modifications non sauvegardees"></span></h1>
@@ -1171,6 +1210,33 @@ input[type=checkbox] { width: auto; }
       </label>
     </div>
 
+    <!-- Security / PIN -->
+    <div class="card" style="margin-top:12px;">
+      <h3>Securite</h3>
+      <div id="pinStatus" style="font-size:0.85em;margin-bottom:8px;"></div>
+      <div id="pinChangeSection">
+        <div class="form-row">
+          <div class="form-group" id="pinCurrentGroup" style="display:none;">
+            <label>PIN actuel</label>
+            <input type="password" id="settCurrentPin" placeholder="PIN actuel" maxlength="16">
+          </div>
+          <div class="form-group">
+            <label>Nouveau PIN</label>
+            <input type="password" id="settNewPin" placeholder="4-16 caracteres" maxlength="16">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:6px;">
+          <button class="btn btn-primary btn-sm" onclick="changePin()">Definir le PIN</button>
+          <button class="btn btn-danger btn-sm" id="btnRemovePin" style="display:none;" onclick="removePin()">Supprimer le PIN</button>
+        </div>
+      </div>
+      <div class="hint" style="margin-top:6px;">Le PIN est demande a chaque connexion pour proteger l'acces.</div>
+      <div style="margin-top:10px;border-top:1px solid rgba(255,255,255,0.1);padding-top:10px;">
+        <button class="btn btn-secondary btn-sm" onclick="logoutSession()">Deconnexion</button>
+        <span class="hint" style="margin-left:6px;">Oublie le token de session sur ce navigateur</span>
+      </div>
+    </div>
+
     <!-- Import/Export -->
     <div class="card" style="margin-top:12px;">
       <h3>Sauvegarde / Restauration</h3>
@@ -1528,22 +1594,153 @@ async function api(path, method='GET', body=null, silent=false) {
 }
 
 // ====================================================================
-// Init
+// Login & Init
 // ====================================================================
-async function init() {
-  // Fetch API auth token (required for POST/PUT/DELETE)
-  const authData = await api('auth-token');
-  if (authData && authData.token) apiToken = authData.token;
 
+async function init() {
+  // Check login status first
+  try {
+    const r = await fetch('/api/login-status');
+    const status = await r.json();
+
+    if (status.pinRequired) {
+      // PIN is set: show login screen
+      const savedToken = localStorage.getItem('drumsApiToken');
+      if (savedToken) {
+        // Try saved token
+        apiToken = savedToken;
+        const check = await api('status', 'GET', null, true);
+        if (check) {
+          // Token still valid, proceed
+          hideLogin();
+          await initApp();
+          return;
+        }
+        // Token invalid, clear and show login
+        localStorage.removeItem('drumsApiToken');
+        apiToken = '';
+      }
+      showLoginPin();
+    } else {
+      // No PIN: check if first connection (offer to set one)
+      const hasSkipped = localStorage.getItem('drumsSkipPin');
+      if (!hasSkipped) {
+        showLoginSetup();
+      } else {
+        // Auto-connect without PIN
+        const authData = await api('auth-token');
+        if (authData && authData.token) {
+          apiToken = authData.token;
+          localStorage.setItem('drumsApiToken', apiToken);
+        }
+        hideLogin();
+        await initApp();
+      }
+    }
+  } catch (e) {
+    // Network error: try to load anyway (might be first connection)
+    hideLogin();
+    await initApp();
+  }
+}
+
+function showLoginPin() {
+  document.getElementById('loginOverlay').style.display = '';
+  document.getElementById('loginLoading').style.display = 'none';
+  document.getElementById('loginSetupMode').style.display = 'none';
+  document.getElementById('loginPinMode').style.display = '';
+  document.getElementById('loginError').textContent = '';
+  setTimeout(function() { document.getElementById('loginPin').focus(); }, 100);
+}
+
+function showLoginSetup() {
+  document.getElementById('loginOverlay').style.display = '';
+  document.getElementById('loginLoading').style.display = 'none';
+  document.getElementById('loginPinMode').style.display = 'none';
+  document.getElementById('loginSetupMode').style.display = '';
+  document.getElementById('loginSetupError').textContent = '';
+  setTimeout(function() { document.getElementById('loginNewPin').focus(); }, 100);
+}
+
+function hideLogin() {
+  document.getElementById('loginOverlay').style.display = 'none';
+}
+
+async function loginSubmit() {
+  const pin = document.getElementById('loginPin').value;
+  if (!pin) {
+    document.getElementById('loginError').textContent = 'Entrez le code PIN';
+    return;
+  }
+  document.getElementById('loginError').textContent = '';
+  try {
+    const r = await fetch('/api/auth-token?pin=' + encodeURIComponent(pin));
+    const data = await r.json();
+    if (r.ok && data.token) {
+      apiToken = data.token;
+      localStorage.setItem('drumsApiToken', apiToken);
+      hideLogin();
+      await initApp();
+    } else {
+      document.getElementById('loginError').textContent = 'Code PIN incorrect';
+      document.getElementById('loginPin').value = '';
+      document.getElementById('loginPin').focus();
+    }
+  } catch (e) {
+    document.getElementById('loginError').textContent = 'Erreur de connexion';
+  }
+}
+
+async function loginSetupPin() {
+  const pin1 = document.getElementById('loginNewPin').value;
+  const pin2 = document.getElementById('loginConfirmPin').value;
+  const err = document.getElementById('loginSetupError');
+
+  if (!pin1) { err.textContent = 'Entrez un code PIN'; return; }
+  if (pin1.length < 4) { err.textContent = 'Le PIN doit faire au moins 4 caracteres'; return; }
+  if (pin1 !== pin2) { err.textContent = 'Les codes PIN ne correspondent pas'; return; }
+
+  // First get the token (no PIN required yet)
+  const authData = await api('auth-token');
+  if (!authData || !authData.token) {
+    err.textContent = 'Erreur de connexion au controleur';
+    return;
+  }
+  apiToken = authData.token;
+
+  // Set the PIN
+  const result = await api('pin', 'POST', { pin: pin1 });
+  if (result) {
+    localStorage.setItem('drumsApiToken', apiToken);
+    hideLogin();
+    await initApp();
+    toast('PIN defini. Il sera demande a chaque connexion.', 'success');
+  } else {
+    err.textContent = 'Erreur lors de la definition du PIN';
+  }
+}
+
+async function loginSkipPin() {
+  localStorage.setItem('drumsSkipPin', '1');
+  const authData = await api('auth-token');
+  if (authData && authData.token) {
+    apiToken = authData.token;
+    localStorage.setItem('drumsApiToken', apiToken);
+  }
+  hideLogin();
+  await initApp();
+}
+
+async function initApp() {
   populateMidiSelects();
   await Promise.all([loadMidiNotes(), loadCapabilities(), loadActuators(), loadInstruments(), loadLoops(), loadLedData()]);
   refreshStatus();
   setInterval(refreshStatus, 5000);
-  // Auto-connect WebSocket for MIDI RX indicator
   connectWebSocket();
 
-  // Click overlay backdrop to close modals
+  // Click overlay backdrop to close modals (skip login overlay)
   document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    if (overlay.id === 'loginOverlay') return;
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) overlay.classList.remove('show');
     });
@@ -2476,6 +2673,73 @@ function sortActuators(key) {
 }
 
 let _hideUsedActuators = false;
+// ====================================================================
+// PIN / Security management
+// ====================================================================
+async function loadPinStatus() {
+  try {
+    const r = await fetch('/api/login-status');
+    const data = await r.json();
+    const hasPin = data.pinRequired;
+    document.getElementById('pinStatus').innerHTML = hasPin ?
+      '<span style="color:var(--success);">PIN actif</span> — la connexion est protegee.' :
+      '<span style="color:var(--warn);">Aucun PIN</span> — l\'acces est ouvert a tous sur le reseau.';
+    document.getElementById('pinCurrentGroup').style.display = hasPin ? '' : 'none';
+    document.getElementById('btnRemovePin').style.display = hasPin ? '' : 'none';
+  } catch(e) {}
+}
+
+async function changePin() {
+  const current = document.getElementById('settCurrentPin').value;
+  const newPin = document.getElementById('settNewPin').value;
+  if (!newPin || newPin.length < 4) {
+    toast('Le PIN doit faire au moins 4 caracteres', 'error');
+    return;
+  }
+  const body = { pin: newPin };
+  // Include current PIN if one is set
+  if (document.getElementById('pinCurrentGroup').style.display !== 'none') {
+    body.currentPin = current;
+  }
+  const result = await api('pin', 'POST', body);
+  if (result) {
+    toast('PIN mis a jour', 'success');
+    // Re-fetch token with new PIN
+    const r = await fetch('/api/auth-token?pin=' + encodeURIComponent(newPin));
+    const data = await r.json();
+    if (data.token) {
+      apiToken = data.token;
+      localStorage.setItem('drumsApiToken', apiToken);
+    }
+    localStorage.removeItem('drumsSkipPin');
+    document.getElementById('settCurrentPin').value = '';
+    document.getElementById('settNewPin').value = '';
+    loadPinStatus();
+  }
+}
+
+async function removePin() {
+  const current = document.getElementById('settCurrentPin').value;
+  if (!current) {
+    toast('Entrez le PIN actuel pour le supprimer', 'error');
+    return;
+  }
+  const result = await api('pin', 'POST', { pin: null, currentPin: current });
+  if (result) {
+    toast('PIN supprime', 'success');
+    localStorage.setItem('drumsSkipPin', '1');
+    document.getElementById('settCurrentPin').value = '';
+    loadPinStatus();
+  }
+}
+
+function logoutSession() {
+  localStorage.removeItem('drumsApiToken');
+  localStorage.removeItem('drumsSkipPin');
+  apiToken = '';
+  location.reload();
+}
+
 function toggleLedsTab(show) {
   document.getElementById('tabLeds').style.display = show ? '' : 'none';
   localStorage.setItem('showLedsTab', show ? '1' : '0');
@@ -4709,7 +4973,7 @@ async function importConfig(file) {
 // ====================================================================
 function showModal(id) {
   document.getElementById(id).classList.add('show');
-  if (id === 'modalSettings') { loadWifiSettings(); loadMidiChannels(); refreshStatus(); document.getElementById('settHideUsedActuators').checked = hideUsedActuators; }
+  if (id === 'modalSettings') { loadWifiSettings(); loadMidiChannels(); refreshStatus(); loadPinStatus(); document.getElementById('settHideUsedActuators').checked = hideUsedActuators; }
   if (id === 'modalLoopEditor') { renderLoops(); }
 }
 function closeModal(id) {

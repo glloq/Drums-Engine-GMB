@@ -340,6 +340,12 @@ input[type=checkbox] { width: auto; }
       <h2>Actionneurs (<span id="actCount">0</span>)</h2>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <button id="btnHideUsed" class="btn btn-sm btn-secondary" onclick="toggleHideUsedActuators()" title="Masquer les actionneurs deja assignes">Cacher utilises</button>
+        <select id="actSort" style="padding:6px;font-size:0.85em;" onchange="sortActuators(this.value)">
+          <option value="">Trier...</option>
+          <option value="name">Nom</option>
+          <option value="id">ID</option>
+          <option value="type">Type</option>
+        </select>
         <button class="btn btn-primary" onclick="showAddActuator()">+ Ajouter</button>
       </div>
     </div>
@@ -2731,6 +2737,16 @@ async function applyActuator() {
   await loadActuators();
   renderActCalibContent();
   toast('Parametres appliques — prets a tester', 'success');
+}
+
+function sortActuators(key) {
+  if (!key) return;
+  const cmp = {
+    name: (a,b) => (a.name||'').localeCompare(b.name||''),
+    id: (a,b) => (a.id||0) - (b.id||0),
+    type: (a,b) => (a.type||0) - (b.type||0)
+  };
+  if (cmp[key]) { actuators.sort(cmp[key]); renderActuators(); }
 }
 
 let _hideUsedActuators = false;

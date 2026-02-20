@@ -47,6 +47,8 @@ public:
 
   // Test direct d'un actionneur (utilise le scheduler pour les solenoide)
   void testActuator(uint8_t id, uint8_t value);
+  // Test servo: angle brut 0-180 (bypass paramMin/paramMax)
+  void testServoAngle(uint8_t id, uint8_t angle);
   void setScheduler(class Scheduler* sched) { _scheduler = sched; }
 
   // --- Safety ---

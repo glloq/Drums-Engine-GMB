@@ -25,6 +25,9 @@ public:
   // Position actuelle du servo
   uint8_t getCurrentAngle() const { return _currentAngle; }
 
+  // Test direct: deplace le servo a un angle brut (0-180), sans clamping paramMin/paramMax
+  void moveToRawAngle(uint8_t angle);
+
 private:
   PCA9685Driver* _driver;
   uint8_t _currentAngle;

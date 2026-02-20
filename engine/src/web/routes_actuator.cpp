@@ -139,6 +139,15 @@ void WebServerManager::_handleTestActuator(AsyncWebServerRequest* req, uint8_t* 
   JsonDocument doc;
   if (deserializeJson(doc, data, len)) { _sendError(req, 400, "Invalid JSON"); return; }
   uint8_t id = doc["id"] | 0;
+
+  // Raw angle mode: bypass paramMin/paramMax for servo calibration
+  if (doc.containsKey("angle")) {
+    uint8_t angle = doc["angle"] | 90;
+    _actMgr->testServoAngle(id, angle);
+    _sendError(req, 200, "Servo angle test");
+    return;
+  }
+
   uint8_t val = doc["value"] | 80;
   _actMgr->testActuator(id, val);
   _sendError(req, 200, "Testing");

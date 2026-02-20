@@ -152,6 +152,13 @@ bool ServoActuator::checkTimeout(uint32_t nowUs) {
   return false;
 }
 
+void ServoActuator::moveToRawAngle(uint8_t angle) {
+  if (!_driver || !_driver->isReady()) return;
+  if (angle > 180) angle = 180;
+  _currentAngle = angle;
+  _driver->setServoPulse(_config.hwPin, _driver->angleToPulse(angle));
+}
+
 void ServoActuator::_moveToAngle(uint8_t angle) {
   if (angle < _config.paramMin) angle = _config.paramMin;
   if (angle > _config.paramMax) angle = _config.paramMax;

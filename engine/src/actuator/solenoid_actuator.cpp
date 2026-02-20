@@ -44,6 +44,11 @@ void SolenoidActuator::execute(const ActuatorCommand& cmd) {
         _holdTransitioned = false;
       } else {
         _driver->digitalWrite(_config.hwPin, !_config.inverted);
+        // C1 fix: Store strike duration for auto-stop in checkTimeout.
+        // cmd.duration is in us/100; if 0, fallback to paramMax (ms)
+        _strikeDurationUs = (cmd.duration > 0)
+          ? (uint32_t)cmd.duration * 100
+          : (uint32_t)_config.paramMax * 1000;
       }
       markActivation(now);
       break;
@@ -103,10 +108,12 @@ bool SolenoidActuator::checkTimeout(uint32_t nowUs) {
   }
 
   // HOLD behavior: use configured max active time (cooldownUs stores maxActiveTime*10)
-  // STRIKE behavior: use fixed safety limit
+  // STRIKE behavior: use strike duration (C1 fix), fallback to safety limit
   uint32_t maxOnUs;
   if (_config.behavior == ActuatorBehavior::SOLENOID_HOLD && _config.cooldownUs > 0) {
     maxOnUs = (uint32_t)_config.cooldownUs * 100;  // cooldownUs stored as value/100
+  } else if (_strikeDurationUs > 0) {
+    maxOnUs = _strikeDurationUs;  // C1: Use strike duration instead of 500ms safety max
   } else {
     maxOnUs = SOLENOID_MAX_ON_US;
   }

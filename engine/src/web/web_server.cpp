@@ -353,6 +353,14 @@ void WebServerManager::_setupRoutes() {
   _server.on("/api/auth-token", HTTP_GET,
     [this](AsyncWebServerRequest* req) { _handleGetAuthToken(req); });
 
+  // H7: POST route for PIN-based token retrieval (PIN in body, not query string)
+  _server.on("/api/auth-token", HTTP_POST,
+    [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) _handlePostAuthToken(req, data, len);
+    });
+
   _server.on("/api/login-status", HTTP_GET,
     [this](AsyncWebServerRequest* req) { _handleLoginStatus(req); });
 

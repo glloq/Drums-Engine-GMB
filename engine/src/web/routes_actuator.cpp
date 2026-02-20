@@ -176,11 +176,28 @@ bool WebServerManager::_validateActuatorConfig(const ActuatorConfig& cfg, const 
       errMsg = "Servo channel must be in [0..15]";
       return false;
     }
+    // M7 fix: Validate behavior matches servo type
+    if (cfg.behavior != ActuatorBehavior::SERVO_POSITION &&
+        cfg.behavior != ActuatorBehavior::SERVO_STRIKE &&
+        cfg.behavior != ActuatorBehavior::COMB_BRUSH &&
+        cfg.behavior != ActuatorBehavior::PITCH_BEND &&
+        cfg.behavior != ActuatorBehavior::HIHAT_CONTROLLER &&
+        cfg.behavior != ActuatorBehavior::SERVO_MUTE) {
+      errMsg = "Servo behavior must be SERVO_POSITION, SERVO_STRIKE, COMB_BRUSH, PITCH_BEND, HIHAT_CONTROLLER or SERVO_MUTE";
+      return false;
+    }
   }
 
   if (cfg.type == ActuatorType::SOLENOID) {
     if (cfg.bus != HardwareBus::MCP23017 && cfg.bus != HardwareBus::GPIO_DIRECT) {
       errMsg = "Solenoid supports MCP23017 or GPIO_DIRECT";
+      return false;
+    }
+    // M7 fix: Validate behavior matches solenoid type
+    if (cfg.behavior != ActuatorBehavior::SOLENOID_STRIKE &&
+        cfg.behavior != ActuatorBehavior::SOLENOID_HOLD &&
+        cfg.behavior != ActuatorBehavior::SOLENOID_MUTE) {
+      errMsg = "Solenoid behavior must be SOLENOID_STRIKE, SOLENOID_HOLD or SOLENOID_MUTE";
       return false;
     }
   }

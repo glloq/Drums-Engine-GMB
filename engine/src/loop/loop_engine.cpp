@@ -145,20 +145,22 @@ int LoopEngine::createLoop(const char* name, uint16_t bpm, uint8_t bars,
 bool LoopEngine::deleteLoop(uint8_t index) {
   if (index >= _loopCount) return false;
 
-  // Safety: if this loop is referenced in an active chain, stop chain first
+  // C5 fix: Adjust chain indices BEFORE potential stop(), since stop() clears state
   if (_chainActive) {
+    bool shouldStop = false;
     for (uint8_t i = 0; i < _chainLength; i++) {
       if (_chain[i] == index) {
-        DBGLN("[Loop] Chain stopped (deleted loop was referenced)");
-        stop();
+        shouldStop = true;
         break;
       }
     }
     // Adjust remaining chain references: indices above deleted one shift down
-    if (_chainActive) {
-      for (uint8_t i = 0; i < _chainLength; i++) {
-        if (_chain[i] > index) _chain[i]--;
-      }
+    for (uint8_t i = 0; i < _chainLength; i++) {
+      if (_chain[i] > index) _chain[i]--;
+    }
+    if (shouldStop) {
+      DBGLN("[Loop] Chain stopped (deleted loop was referenced)");
+      stop();
     }
   }
 

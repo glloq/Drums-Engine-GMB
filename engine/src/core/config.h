@@ -48,7 +48,7 @@
 #define MAX_GLOBAL_VARS      128
 #define MAX_ACTIONS_PER_EVENT 4
 #define MAX_CC_BINDINGS       4
-#define MAX_CC_ROUTES         16
+#define MAX_CC_ROUTES         64
 #define MAX_LOOPS            8
 #define MAX_LOOP_EVENTS      256
 

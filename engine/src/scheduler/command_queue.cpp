@@ -7,6 +7,15 @@ bool CommandQueue::push(const ActuatorCommand& cmd) {
   uint16_t nextHead = (_head + 1) % COMMAND_QUEUE_SIZE;
 
   if (nextHead == _tail) {
+    // H3 fix: OFF commands must not be dropped (safety critical).
+    // Drop the oldest command to make room for OFF.
+    if (cmd.command_type == (uint8_t)CommandType::OFF) {
+      _tail = (_tail + 1) % COMMAND_QUEUE_SIZE;  // Evict oldest
+      _buffer[_head] = cmd;
+      _head = nextHead;
+      _overflowCount++;
+      return true;
+    }
     // Queue pleine
     _overflowCount++;
     DBGF("[Queue] OVERFLOW! (count=%lu)\n", _overflowCount);

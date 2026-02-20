@@ -111,11 +111,17 @@ bool Scheduler::scheduleActionSteps(const ActionStep* steps, uint8_t stepCount,
         if (act) {
           const ActuatorConfig& cfg = act->getConfig();
           if (cfg.behavior == ActuatorBehavior::SOLENOID_HOLD) {
-            // HOLD: paramMin/Max sont des valeurs PWM, pas des durees
-            // Utiliser cooldownUs (max active time /10 en ms) comme duree de securite
-            uint16_t safetyMs = (cfg.cooldownUs > 0) ? (cfg.cooldownUs / 10) : 500;
-            minMs = safetyMs;
-            maxMs = safetyMs;
+            // C2 fix: HOLD stays on until NoteOff — don't auto-generate OFF.
+            // Just schedule the ON command; solenoid_actuator's checkTimeout
+            // handles the safety max via cooldownUs.
+            ActuatorCommand cmd;
+            cmd.actuator_id = step.actuator_id;
+            cmd.command_type = (uint8_t)CommandType::PULSE;
+            cmd.value = value;
+            cmd.duration = 0;
+            cmd.execute_at = executeAt;
+            if (!scheduleCommand(cmd)) allScheduled = false;
+            continue;
           } else {
             // STRIKE: paramMin/Max sont les durees min/max en ms
             minMs = cfg.paramMin;

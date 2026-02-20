@@ -25,6 +25,7 @@ public:
 private:
   HalDriver* _driver;
   bool _holdTransitioned;  // True once HOLD PWM has dropped from activation to hold level
+  uint32_t _strikeDurationUs = 0;  // Auto-stop duration for STRIKE (0 = use safety max)
 };
 
 #endif // SOLENOID_ACTUATOR_H

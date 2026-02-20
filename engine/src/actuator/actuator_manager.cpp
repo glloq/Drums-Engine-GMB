@@ -53,22 +53,23 @@ void ActuatorManager::dispatch(const ActuatorCommand& cmd) {
   Actuator* act = _actuators[idx];
   if (!act || !act->isEnabled()) return;
 
-  // Protection surcharge: check + execute + recount under spinlock
-  // to prevent race between Core 0 (watchdog) and Core 1 (scheduler)
-  portENTER_CRITICAL(&_actMgrMux);
-
+  // H4 fix: Reduce spinlock scope — only hold lock for overload check,
+  // execute outside lock (I2C writes can be slow), then re-lock to update count.
   if ((CommandType)cmd.command_type != CommandType::OFF) {
+    portENTER_CRITICAL(&_actMgrMux);
     if (!act->isActive() && _activeCount >= MAX_CONCURRENT_ACTIVE) {
       portEXIT_CRITICAL(&_actMgrMux);
       DBGF("[Safety] Overload protection: %d actuators active, refusing new activation\n",
            _activeCount);
       return;
     }
+    portEXIT_CRITICAL(&_actMgrMux);
   }
 
   act->execute(cmd);
-  _updateActiveCountLocked();
 
+  portENTER_CRITICAL(&_actMgrMux);
+  _updateActiveCountLocked();
   portEXIT_CRITICAL(&_actMgrMux);
 }
 

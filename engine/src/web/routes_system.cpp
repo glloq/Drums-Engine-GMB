@@ -573,8 +573,13 @@ void WebServerManager::_handleCreateInstrumentFromTemplate(AsyncWebServerRequest
 }
 
 void WebServerManager::_handleSaveConfig(AsyncWebServerRequest* req) {
-  _storage->saveActuators(*_actFactory);
-  _storage->saveInstruments(*_instrMgr);
+  // H6 fix: Check return values from save operations
+  bool ok1 = _storage->saveActuators(*_actFactory);
+  bool ok2 = _storage->saveInstruments(*_instrMgr);
+  if (!ok1 || !ok2) {
+    _sendError(req, 500, "Save failed (storage write error)");
+    return;
+  }
   _sendError(req, 200, "Configuration saved");
 }
 
@@ -615,27 +620,46 @@ void WebServerManager::_handleClearLogs(AsyncWebServerRequest* req) {
 }
 
 void WebServerManager::_handleGetAuthToken(AsyncWebServerRequest* req) {
-  // If PIN is set, require it as query parameter
-  if (_auth.hasPin()) {
-    if (!req->hasParam("pin")) {
-      JsonDocument doc;
-      doc["error"] = "PIN required";
-      doc["pinRequired"] = true;
-      _sendJson(req, 401, doc);
-      return;
-    }
-    String pin = req->getParam("pin")->value();
-    if (!_auth.checkPin(pin)) {
-      JsonDocument doc;
-      doc["error"] = "Invalid PIN";
-      doc["pinRequired"] = true;
-      _sendJson(req, 401, doc);
-      return;
-    }
+  // H7 fix: No-PIN case (GET without PIN) — return token directly
+  if (!_auth.hasPin()) {
+    JsonDocument doc;
+    doc["token"] = _auth.getToken();
+    doc["pinRequired"] = false;
+    _sendJson(req, 200, doc);
+    return;
+  }
+  // PIN is required — must use POST with PIN in body
+  JsonDocument doc;
+  doc["error"] = "PIN required (use POST with {pin} in body)";
+  doc["pinRequired"] = true;
+  _sendJson(req, 401, doc);
+}
+
+void WebServerManager::_handlePostAuthToken(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
+  // H7 fix: Accept PIN in POST body instead of query string
+  if (!_auth.hasPin()) {
+    JsonDocument doc;
+    doc["token"] = _auth.getToken();
+    doc["pinRequired"] = false;
+    _sendJson(req, 200, doc);
+    return;
+  }
+  JsonDocument body;
+  if (deserializeJson(body, data, len)) {
+    _sendError(req, 400, "Invalid JSON");
+    return;
+  }
+  const char* pin = body["pin"];
+  if (!pin || !_auth.checkPin(String(pin))) {
+    JsonDocument doc;
+    doc["error"] = "Invalid PIN";
+    doc["pinRequired"] = true;
+    _sendJson(req, 401, doc);
+    return;
   }
   JsonDocument doc;
   doc["token"] = _auth.getToken();
-  doc["pinRequired"] = _auth.hasPin();
+  doc["pinRequired"] = true;
   _sendJson(req, 200, doc);
 }
 

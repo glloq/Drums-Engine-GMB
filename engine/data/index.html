@@ -1656,7 +1656,11 @@ async function loginSubmit() {
   }
   document.getElementById('loginError').textContent = '';
   try {
-    const r = await fetch('/api/auth-token?pin=' + encodeURIComponent(pin));
+    const r = await fetch('/api/auth-token', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({pin: pin})
+    });
     const data = await r.json();
     if (r.ok && data.token) {
       apiToken = data.token;
@@ -2765,7 +2769,11 @@ async function changePin() {
   if (result) {
     toast('PIN mis a jour', 'success');
     // Re-fetch token with new PIN
-    const r = await fetch('/api/auth-token?pin=' + encodeURIComponent(newPin));
+    const r = await fetch('/api/auth-token', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({pin: newPin})
+    });
     const data = await r.json();
     if (data.token) {
       apiToken = data.token;

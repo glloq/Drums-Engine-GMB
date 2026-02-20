@@ -215,6 +215,11 @@ input[type=checkbox] { width: auto; }
 .calib-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .calib-slider { flex: 2; min-width: 100px; }
 .calib-val { min-width: 32px; text-align: center; font-weight: 600; font-size: 0.9em; }
+/* Modal calibration section */
+.act-calib-section { border: 1px solid var(--accent2); border-radius: var(--radius); padding: 12px; margin-bottom: 12px; background: rgba(83,52,131,0.08); }
+.act-calib-section h3 { font-size: 0.95em; margin: 0 0 8px 0; display: flex; justify-content: space-between; align-items: center; }
+.act-calib-quick { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
+.act-calib-info { font-size: 0.78em; color: var(--fg2); margin-top: 6px; }
 
 @media (max-width: 600px) {
   .content { padding: 8px; }
@@ -454,7 +459,7 @@ input[type=checkbox] { width: auto; }
         </div>
       </h3>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
-        <p class="hint" style="margin:0;">Testez chaque actionneur individuellement.</p>
+        <p class="hint" style="margin:0;">Test rapide. Pour calibrer finement, utilisez le bouton Modifier sur chaque actionneur.</p>
         <button class="btn btn-sm btn-success" onclick="testAllSequential()" title="Teste chaque actionneur un par un">Test Sequence</button>
         <button class="btn btn-sm btn-secondary" onclick="testIntegration()" title="Teste la chaine MIDI complete pour chaque instrument">Test Integration</button>
         <input type="text" placeholder="Filtrer..." oninput="filterList('calibActuatorList',this.value)" style="width:120px;padding:5px 8px;font-size:0.85em;">
@@ -721,12 +726,22 @@ input[type=checkbox] { width: auto; }
       </div>
     </div>
 
+    <div id="actCalibSection" class="act-calib-section" style="display:none;">
+      <h3>
+        <span>Test & Calibrer</span>
+        <button class="btn btn-danger btn-sm" onclick="actCalibStop()" title="Arret immediat">STOP</button>
+      </h3>
+      <div id="actCalibContent"></div>
+      <div class="hint" style="margin-top:8px;font-style:italic;" id="actCalibNote">Modifiez les parametres ci-dessus, cliquez <b>Appliquer</b> pour sauvegarder, puis testez.</div>
+    </div>
+
     <div class="form-group" style="display:flex;align-items:flex-end;gap:16px;">
       <label><input type="checkbox" id="actEnabled" checked> Actif</label>
     </div>
     <div class="help-box" id="actuatorHelp">Choisissez un preset pour commencer rapidement.</div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal('modalActuator')">Annuler</button>
+      <button class="btn btn-secondary" id="btnApplyActuator" style="display:none;" onclick="applyActuator()">Appliquer</button>
       <button class="btn btn-primary" onclick="saveActuator()">Enregistrer</button>
     </div>
   </div>
@@ -1777,6 +1792,8 @@ function onActBehaviorChange() {
     }
   }
   updateActuatorHelp();
+  // Refresh calibration section if visible
+  if (actCalibActuatorId) renderActCalibContent();
 }
 
 function updateActuatorHelp() {
@@ -1994,6 +2011,7 @@ function showAddActuator() {
   document.getElementById('actMotorEndStop1').value = '255';
   document.getElementById('actMotorEndStop2').value = '255';
   document.getElementById('actEnabled').checked = true;
+  showActCalibSection(false);
   onActTypeChange();
   showModal('modalActuator');
   setTimeout(() => document.getElementById('actName').focus(), 100);
@@ -2050,6 +2068,7 @@ function editActuator(id) {
   document.getElementById('actEnabled').checked = a.enabled;
   onActBusChange();
   onActBehaviorChange();
+  showActCalibSection(true, id);
   showModal('modalActuator');
 }
 
@@ -2207,6 +2226,243 @@ async function duplicateActuator(id) {
 async function testActuator(id) {
   await api('test/actuator', 'POST', {id: id, value: 80});
   toast('Test envoye', 'success');
+}
+
+// ==== Actuator Modal Calibration ====
+let actCalibLiveTimer = null;
+let actCalibActuatorId = null;
+
+function showActCalibSection(visible, actuatorId) {
+  const section = document.getElementById('actCalibSection');
+  const applyBtn = document.getElementById('btnApplyActuator');
+  actCalibActuatorId = actuatorId || null;
+  if (!visible || !actuatorId) {
+    section.style.display = 'none';
+    applyBtn.style.display = 'none';
+    return;
+  }
+  section.style.display = '';
+  applyBtn.style.display = '';
+  renderActCalibContent();
+}
+
+function renderActCalibContent() {
+  const type = parseInt(document.getElementById('actType').value);
+  const behavior = parseInt(document.getElementById('actBehavior').value);
+  const content = document.getElementById('actCalibContent');
+
+  if (!actCalibActuatorId) {
+    content.innerHTML = '<p class="hint">Enregistrez d\'abord l\'actionneur pour pouvoir le tester.</p>';
+    return;
+  }
+
+  let html = '';
+
+  if (type === 1 && behavior === 0) {
+    // Solenoid Strike
+    const tMin = parseInt(document.getElementById('actTimeMin').value) || 8;
+    const tMax = parseInt(document.getElementById('actTimeMax').value) || 30;
+    const initMs = Math.round(tMin + (tMax - tMin) * 80 / 127);
+    html = '<div class="hint" style="margin-bottom:8px;">Velocite → duree activation (' + tMin + '-' + tMax + 'ms).</div>' +
+      '<div class="calib-controls">' +
+        '<label style="font-size:0.8em;color:var(--fg2);min-width:45px;">Force:</label>' +
+        '<input type="range" class="calib-slider" id="actCalibSlider" min="1" max="127" value="80" oninput="updateActCalibDisplay()">' +
+        '<span class="calib-val" id="actCalibDisp">80</span>' +
+        '<button class="btn btn-primary btn-sm" onclick="actCalibTest()">Frapper</button>' +
+      '</div>' +
+      '<div class="act-calib-quick">' +
+        '<button class="btn btn-sm btn-secondary" onclick="actCalibSetAndTest(20)">Faible</button>' +
+        '<button class="btn btn-sm btn-secondary" onclick="actCalibSetAndTest(64)">Moyen</button>' +
+        '<button class="btn btn-sm btn-secondary" onclick="actCalibSetAndTest(100)">Fort</button>' +
+        '<button class="btn btn-sm btn-secondary" onclick="actCalibSetAndTest(127)">Max</button>' +
+      '</div>' +
+      '<div class="act-calib-info" id="actCalibInfo">Duree estimee: ~' + initMs + ' ms</div>';
+  } else if (type === 1 && behavior === 1) {
+    // Solenoid Hold
+    html = '<div class="hint" style="margin-bottom:8px;">Testez le maintien (PWM activation → maintien reduit).</div>' +
+      '<div style="display:flex;gap:8px;">' +
+        '<button class="btn btn-success btn-sm" onclick="actCalibTest(127)">Activer</button>' +
+        '<button class="btn btn-danger btn-sm" onclick="actCalibStop()">Desactiver</button>' +
+      '</div>';
+  } else if (type === 1 && behavior === 9) {
+    // Solenoid Mute
+    html = '<div class="hint" style="margin-bottom:8px;">Testez le mute on/off.</div>' +
+      '<div style="display:flex;gap:8px;">' +
+        '<button class="btn btn-success btn-sm" onclick="actCalibTest(127)">Mute ON</button>' +
+        '<button class="btn btn-danger btn-sm" onclick="actCalibStop()">Mute OFF</button>' +
+      '</div>';
+  } else if (type === 0) {
+    // Servo (all behaviors)
+    const angleMin = parseInt(document.getElementById('actAngleClosed').value) || 0;
+    const angleMax = parseInt(document.getElementById('actAngleOpen').value) || 180;
+    const midAngle = Math.round((angleMin + angleMax) / 2);
+    const initAngle = Math.round(angleMin + (angleMax - angleMin) * 64 / 127);
+    html = '<div class="hint" style="margin-bottom:8px;">Deplacez le curseur pour positionner le servo (' + angleMin + '\u00b0-' + angleMax + '\u00b0).</div>' +
+      '<div class="calib-controls">' +
+        '<label style="font-size:0.8em;color:var(--fg2);min-width:45px;">Angle:</label>' +
+        '<input type="range" class="calib-slider" id="actCalibSlider" min="0" max="127" value="64" oninput="actCalibLiveSend()">' +
+        '<span class="calib-val" id="actCalibDisp">~' + initAngle + '\u00b0</span>' +
+      '</div>' +
+      '<div class="act-calib-quick">' +
+        '<button class="btn btn-sm btn-secondary" onclick="actCalibSetAndTest(0)">Min (' + angleMin + '\u00b0)</button>' +
+        '<button class="btn btn-sm btn-secondary" onclick="actCalibSetAndTest(64)">Centre (~' + midAngle + '\u00b0)</button>' +
+        '<button class="btn btn-sm btn-secondary" onclick="actCalibSetAndTest(127)">Max (' + angleMax + '\u00b0)</button>' +
+      '</div>' +
+      '<div class="act-calib-info"><label><input type="checkbox" id="actCalibLiveMode" checked> Temps reel (servo bouge en glissant le curseur)</label></div>';
+  } else if (type === 2) {
+    // Motor (all behaviors)
+    const pwmMin = parseInt(document.getElementById('actMotorPwmMin').value) || 0;
+    const pwmMax = parseInt(document.getElementById('actMotorPwmMax').value) || 100;
+    const hints = {6:'Rotation optique',10:'Chrono (duree)',11:'Vitesse continue',12:'Balayage',13:'Alternance'};
+    const bhint = hints[behavior] || 'Moteur';
+    const initPwm = Math.round(pwmMin + (pwmMax - pwmMin) * 80 / 127);
+    html = '<div class="hint" style="margin-bottom:8px;">' + bhint + ': PWM ' + pwmMin + '%-' + pwmMax + '%.</div>' +
+      '<div class="calib-controls">' +
+        '<label style="font-size:0.8em;color:var(--fg2);min-width:50px;">Vitesse:</label>' +
+        '<input type="range" class="calib-slider" id="actCalibSlider" min="1" max="127" value="80" oninput="updateActCalibDisplay()">' +
+        '<span class="calib-val" id="actCalibDisp">80</span>' +
+        '<button class="btn btn-success btn-sm" onclick="actCalibTest()">Demarrer</button>' +
+        '<button class="btn btn-danger btn-sm" onclick="actCalibStop()">Arreter</button>' +
+      '</div>' +
+      '<div class="act-calib-quick">' +
+        '<button class="btn btn-sm btn-secondary" onclick="actCalibSetAndTest(30)">Lent</button>' +
+        '<button class="btn btn-sm btn-secondary" onclick="actCalibSetAndTest(64)">Moyen</button>' +
+        '<button class="btn btn-sm btn-secondary" onclick="actCalibSetAndTest(100)">Rapide</button>' +
+        '<button class="btn btn-sm btn-secondary" onclick="actCalibSetAndTest(127)">Max</button>' +
+      '</div>' +
+      '<div class="act-calib-info" id="actCalibInfo">PWM estime: ~' + initPwm + '%</div>';
+  }
+
+  content.innerHTML = html;
+}
+
+function updateActCalibDisplay() {
+  const slider = document.getElementById('actCalibSlider');
+  const disp = document.getElementById('actCalibDisp');
+  const info = document.getElementById('actCalibInfo');
+  if (!slider || !disp) return;
+  const val = parseInt(slider.value);
+  const type = parseInt(document.getElementById('actType').value);
+  const behavior = parseInt(document.getElementById('actBehavior').value);
+
+  if (type === 1 && behavior === 0) {
+    const tMin = parseInt(document.getElementById('actTimeMin').value) || 8;
+    const tMax = parseInt(document.getElementById('actTimeMax').value) || 30;
+    disp.textContent = val;
+    if (info) info.textContent = 'Duree estimee: ~' + Math.round(tMin + (tMax - tMin) * val / 127) + ' ms';
+  } else if (type === 0) {
+    const aMin = parseInt(document.getElementById('actAngleClosed').value) || 0;
+    const aMax = parseInt(document.getElementById('actAngleOpen').value) || 180;
+    disp.textContent = '~' + Math.round(aMin + (aMax - aMin) * val / 127) + '\u00b0';
+  } else if (type === 2) {
+    const pMin = parseInt(document.getElementById('actMotorPwmMin').value) || 0;
+    const pMax = parseInt(document.getElementById('actMotorPwmMax').value) || 100;
+    disp.textContent = val;
+    if (info) info.textContent = 'PWM estime: ~' + Math.round(pMin + (pMax - pMin) * val / 127) + '%';
+  } else {
+    disp.textContent = val;
+  }
+}
+
+async function actCalibTest(overrideVal) {
+  if (!actCalibActuatorId) return;
+  const slider = document.getElementById('actCalibSlider');
+  const val = overrideVal !== undefined ? overrideVal : (slider ? parseInt(slider.value) : 80);
+  await api('test/actuator', 'POST', {id: actCalibActuatorId, value: val});
+}
+
+async function actCalibStop() {
+  if (!actCalibActuatorId) return;
+  await api('test/actuator', 'POST', {id: actCalibActuatorId, value: 0});
+}
+
+function actCalibSetAndTest(val) {
+  const slider = document.getElementById('actCalibSlider');
+  if (slider) {
+    slider.value = val;
+    updateActCalibDisplay();
+  }
+  actCalibTest(val);
+}
+
+// Live mode for servo: throttled test on slider move
+function actCalibLiveSend() {
+  updateActCalibDisplay();
+  const live = document.getElementById('actCalibLiveMode');
+  if (!live || !live.checked) return;
+  if (actCalibLiveTimer) clearTimeout(actCalibLiveTimer);
+  actCalibLiveTimer = setTimeout(function() {
+    actCalibTest();
+    actCalibLiveTimer = null;
+  }, 50);
+}
+
+// Apply actuator: save without closing the modal
+async function applyActuator() {
+  const editId = document.getElementById('editActId').value;
+  if (!editId) { toast('Enregistrez d\'abord l\'actionneur', 'warn'); return; }
+  // Build the same payload as saveActuator
+  let type = parseInt(document.getElementById('actType').value);
+  const behavior = parseInt(document.getElementById('actBehavior').value);
+  if (type === 2 && behavior === 6) type = 3;
+
+  let paramMin, paramMax, paramDefault, cooldownUs;
+  if (type === 1 && behavior === 0) {
+    paramMin = parseInt(document.getElementById('actTimeMin').value);
+    paramMax = parseInt(document.getElementById('actTimeMax').value);
+    paramDefault = Math.floor((paramMin + paramMax) / 2);
+    cooldownUs = document.getElementById('actCooldownEnabled').checked ?
+      parseInt(document.getElementById('actCooldownMs').value) * 10 : 0;
+  } else if (type === 1 && behavior === 1) {
+    paramMin = parseInt(document.getElementById('actHoldPwmActivation').value);
+    paramMax = parseInt(document.getElementById('actHoldPwmHold').value);
+    paramDefault = parseInt(document.getElementById('actHoldPwmMaxTime').value);
+    cooldownUs = parseInt(document.getElementById('actHoldMaxActiveTime').value) * 10;
+  } else if (type === 1 && behavior === 9) {
+    paramMin = 0; paramMax = 1; paramDefault = 0; cooldownUs = 0;
+  } else if (type === 0) {
+    paramMin = parseInt(document.getElementById('actAngleClosed').value);
+    paramMax = parseInt(document.getElementById('actAngleOpen').value);
+    paramDefault = (behavior === 2) ? parseInt(document.getElementById('actAngleDefault').value) : paramMin;
+    cooldownUs = 50;
+  } else if (type === 2) {
+    paramMin = parseInt(document.getElementById('actMotorPwmMin').value);
+    paramMax = parseInt(document.getElementById('actMotorPwmMax').value);
+    paramDefault = Math.floor((paramMin + paramMax) / 2);
+    cooldownUs = 0;
+  } else if (type === 3) {
+    paramMin = parseInt(document.getElementById('actMotorPwmMin').value);
+    paramMax = parseInt(document.getElementById('actMotorPwmMax').value);
+    paramDefault = paramMax;
+    cooldownUs = 0;
+  } else {
+    paramMin = 20; paramMax = 100; paramDefault = 0; cooldownUs = 100;
+  }
+
+  const hwAddr = (type === 2 || type === 3) ?
+    parseInt(document.getElementById('actMotorSensorPin').value) || 0 :
+    parseInt(document.getElementById('actAddr').value);
+
+  const data = {
+    id: parseInt(document.getElementById('actId').value) || 0,
+    name: document.getElementById('actName').value || 'Actuator',
+    type: type, behavior: behavior,
+    bus: parseInt(document.getElementById('actBus').value),
+    hwAddress: hwAddr,
+    hwPin: parseInt(document.getElementById('actPin').value),
+    paramMin: paramMin, paramMax: paramMax, paramDefault: paramDefault,
+    cooldownUs: cooldownUs,
+    enabled: document.getElementById('actEnabled').checked,
+    inverted: (type === 2 || type === 3) ? document.getElementById('actMotorInverted').checked : false,
+    endStopPin1: (type === 2 || type === 3) ? parseInt(document.getElementById('actMotorEndStop1').value) : 255,
+    endStopPin2: (type === 2 || type === 3) ? parseInt(document.getElementById('actMotorEndStop2').value) : 255
+  };
+
+  const result = await api('actuator?id=' + editId, 'PUT', data);
+  if (result === null || result === undefined) return;
+  await loadActuators();
+  renderActCalibContent();
+  toast('Parametres appliques — prets a tester', 'success');
 }
 
 function sortActuators(key) {
@@ -4464,6 +4720,11 @@ function closeModal(id) {
     editNoteOffActions = [];
     editCcBindings = [];
     if (midiLearnActive) { midiLearnActive = false; const btn = document.getElementById('btnMidiLearn'); if (btn) { btn.textContent = 'Learn'; btn.classList.remove('btn-danger'); btn.classList.add('btn-secondary'); } }
+  }
+  // Stop actuator on modal close (safety: avoid leaving motors running)
+  if (id === 'modalActuator' && actCalibActuatorId) {
+    actCalibStop();
+    actCalibActuatorId = null;
   }
 }
 

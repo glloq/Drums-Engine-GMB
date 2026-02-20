@@ -329,7 +329,6 @@ input[type=checkbox] { width: auto; }
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
       <h2>Actionneurs (<span id="actCount">0</span>)</h2>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <input type="text" id="actSearch" placeholder="Filtrer..." oninput="filterList('actuatorList',this.value)" style="width:120px;padding:6px 10px;font-size:0.85em;">
         <button id="btnHideUsed" class="btn btn-sm btn-secondary" onclick="toggleHideUsedActuators()" title="Masquer les actionneurs deja assignes">Cacher utilises</button>
         <select id="actSort" style="padding:6px;font-size:0.85em;" onchange="sortActuators(this.value)">
           <option value="">Trier...</option>
@@ -499,7 +498,6 @@ input[type=checkbox] { width: auto; }
       </h3>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
         <p class="hint" style="margin:0;">Test rapide. Pour calibrer finement, utilisez le bouton Modifier sur chaque actionneur.</p>
-        <button class="btn btn-sm btn-success" onclick="testAllSequential()" title="Teste chaque actionneur un par un">Test Sequence</button>
         <button class="btn btn-sm btn-secondary" onclick="testIntegration()" title="Teste la chaine MIDI complete pour chaque instrument">Test Integration</button>
         <input type="text" placeholder="Filtrer..." oninput="filterList('calibActuatorList',this.value)" style="width:120px;padding:5px 8px;font-size:0.85em;">
       </div>
@@ -544,7 +542,6 @@ input[type=checkbox] { width: auto; }
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;">
         <button class="btn btn-primary" onclick="measureLatencySingle()">Mesurer 1x</button>
         <button class="btn btn-success" onclick="measureLatencyBurst()" id="btnLatencyBurst">Mesurer 5x (moyenne)</button>
-        <button class="btn btn-secondary" onclick="measureLatencyAll()">Tester tous les actionneurs</button>
         <div id="micLevelBar" style="flex:1;height:8px;background:var(--bg);border-radius:4px;overflow:hidden;">
           <div id="micLevelFill" style="height:100%;width:0%;background:var(--success);transition:width 0.1s;"></div>
         </div>
@@ -6282,22 +6279,6 @@ async function updateCalibStatus() {
   } catch(e) {}
 }
 
-async function testAllSequential() {
-  const enabled = actuators.filter(a => a.enabled);
-  if (enabled.length === 0) { toast('Aucun actionneur actif', 'warn'); return; }
-  toast('Test sequentiel: ' + enabled.length + ' actionneurs...', 'success');
-  for (let i = 0; i < enabled.length; i++) {
-    const a = enabled[i];
-    // Highlight current item
-    const card = document.querySelector('.calib-item[data-actid="' + a.id + '"]');
-    if (card) card.style.boxShadow = '0 0 8px var(--success)';
-    await api('test/actuator', 'POST', {id: a.id, value: 80});
-    await new Promise(r => setTimeout(r, 400));
-    if (card) card.style.boxShadow = '';
-  }
-  toast('Test sequentiel termine', 'success');
-}
-
 async function testIntegration() {
   const enabled = instruments.filter(i => i.enabled !== false);
   if (enabled.length === 0) { toast('Aucun instrument actif', 'warn'); return; }
@@ -6445,36 +6426,6 @@ async function measureLatencyBurst() {
     'success'
   );
   toast('Latence moyenne: ' + avg.toFixed(2) + ' ms (' + results.length + '/' + count + ')', 'success');
-}
-
-async function measureLatencyAll() {
-  const sel = document.getElementById('micLatencyActuator');
-  const opts = Array.from(sel.options);
-  if (opts.length === 0) { toast('Aucun actionneur disponible', 'warn'); return; }
-  const threshold = parseInt(document.getElementById('micThreshold').value) || 500;
-  const value = parseInt(document.getElementById('micTestValue').value) || 100;
-  toast('Test de tous les actionneurs (' + opts.length + ')...', 'success');
-  _appendLatencyResult('--- Test complet (' + opts.length + ' actionneurs) ---', '');
-
-  for (let i = 0; i < opts.length; i++) {
-    const actId = parseInt(opts[i].value);
-    const actLabel = opts[i].textContent;
-    sel.value = actId; // highlight current in dropdown
-    try {
-      const r = await api('mic/measure-latency', 'POST', {
-        actuatorId: actId, value, threshold, timeoutMs: 500
-      });
-      if (r && r.detected) {
-        _appendLatencyResult(actLabel + ' → ' + r.latencyMs.toFixed(2) + ' ms | peak=' + r.triggerPeak, 'success');
-      } else {
-        _appendLatencyResult(actLabel + ' → Pas de son detecte', 'error');
-      }
-    } catch(e) {
-      _appendLatencyResult(actLabel + ' → Erreur: ' + e.message, 'error');
-    }
-    if (i < opts.length - 1) await new Promise(r => setTimeout(r, 800));
-  }
-  toast('Test complet termine', 'success');
 }
 
 // Theme toggle

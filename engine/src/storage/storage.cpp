@@ -248,11 +248,9 @@ bool Storage::saveSystemConfig(const JsonObject& cfg) {
   return _writeJson(CONFIG_FILE, doc);
 }
 
-bool Storage::loadSystemConfig(JsonObject& cfg) {
-  JsonDocument doc;
-  if (!_readJson(CONFIG_FILE, doc)) return false;
-  cfg = doc.as<JsonObject>();
-  return true;
+// M3 fix: Caller owns the JsonDocument, so JsonObject references remain valid
+bool Storage::loadSystemConfig(JsonDocument& doc) {
+  return _readJson(CONFIG_FILE, doc);
 }
 
 // ============================================================================
@@ -267,13 +265,11 @@ bool Storage::saveLoop(uint8_t id, const JsonObject& loop) {
   return _writeJson(path, doc);
 }
 
-bool Storage::loadLoop(uint8_t id, JsonObject& loop) {
+// M3 fix: Caller owns the JsonDocument, so JsonObject references remain valid
+bool Storage::loadLoop(uint8_t id, JsonDocument& doc) {
   char path[32];
   snprintf(path, sizeof(path), "%s/loop_%d.json", LOOPS_DIR, id);
-  JsonDocument doc;
-  if (!_readJson(path, doc)) return false;
-  loop = doc.as<JsonObject>();
-  return true;
+  return _readJson(path, doc);
 }
 
 bool Storage::deleteLoop(uint8_t id) {
@@ -340,8 +336,8 @@ bool Storage::_writeJson(const char* path, const JsonDocument& doc) {
     return false;
   }
 
-  // Remove old file, rename tmp to final
-  LittleFS.remove(path);
+  // M4 fix: LittleFS.rename overwrites dest atomically — no need to remove first
+  // Removing first creates a window where both files are gone if power fails
   LittleFS.rename(tmpPath.c_str(), path);
   DBGF("[Storage] Wrote %d bytes to %s\n", written, path);
   return true;

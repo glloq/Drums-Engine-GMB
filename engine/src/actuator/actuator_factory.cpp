@@ -150,6 +150,9 @@ uint8_t ActuatorFactory::rebuildAll() {
   // Nettoyer les enregistrements existants dans le manager
   _manager->clearAll();
 
+  // M10 fix: Clear stale ISR slots before rebuilding motors
+  MotorActuator::clearAllIsrSlots();
+
   // Reset les pools
   _solenoidIdx = 0;
   _servoIdx = 0;

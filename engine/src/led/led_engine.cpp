@@ -438,11 +438,12 @@ RgbColor LedEngine::_blendColors(const RgbColor& idle, const RgbColor& hit, uint
   if (hitAlpha == 0) return idle;
   if (hitAlpha == 255) return hit;
 
+  // M1 fix: Use uint32_t to avoid overflow (max = 255*255 + 255*255 = 130050 > 65535)
   uint8_t invAlpha = 255 - hitAlpha;
   return RgbColor(
-    (uint16_t)(idle.r * invAlpha + hit.r * hitAlpha) / 255,
-    (uint16_t)(idle.g * invAlpha + hit.g * hitAlpha) / 255,
-    (uint16_t)(idle.b * invAlpha + hit.b * hitAlpha) / 255
+    (uint32_t)(idle.r * invAlpha + hit.r * hitAlpha) / 255,
+    (uint32_t)(idle.g * invAlpha + hit.g * hitAlpha) / 255,
+    (uint32_t)(idle.b * invAlpha + hit.b * hitAlpha) / 255
   );
 }
 
@@ -465,17 +466,36 @@ int8_t LedEngine::_findThemeIndex(uint8_t id) const {
 }
 
 uint8_t LedEngine::_nextSegmentId() const {
+  // M2 fix: Avoid wrap to 0 (sentinel) when maxId=255 — find first unused ID
   uint8_t maxId = 0;
   for (uint8_t i = 0; i < _segmentCount; i++) {
     if (_segments[i].id > maxId) maxId = _segments[i].id;
   }
-  return maxId + 1;
+  if (maxId < 254) return maxId + 1;
+  // Fallback: search for an unused ID in 1..255
+  for (uint8_t candidate = 1; candidate != 0; candidate++) {
+    bool used = false;
+    for (uint8_t i = 0; i < _segmentCount; i++) {
+      if (_segments[i].id == candidate) { used = true; break; }
+    }
+    if (!used) return candidate;
+  }
+  return 1;  // Should never happen with MAX_SEGMENTS < 255
 }
 
 uint8_t LedEngine::_nextThemeId() const {
+  // M2 fix: Avoid wrap to 0 (sentinel) when maxId=255
   uint8_t maxId = 0;
   for (uint8_t i = 0; i < _themeCount; i++) {
     if (_themes[i].id > maxId) maxId = _themes[i].id;
   }
-  return maxId + 1;
+  if (maxId < 254) return maxId + 1;
+  for (uint8_t candidate = 1; candidate != 0; candidate++) {
+    bool used = false;
+    for (uint8_t i = 0; i < _themeCount; i++) {
+      if (_themes[i].id == candidate) { used = true; break; }
+    }
+    if (!used) return candidate;
+  }
+  return 1;
 }

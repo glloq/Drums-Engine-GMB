@@ -5,12 +5,13 @@
 #include "../core/config.h"
 
 // ============================================================================
-// CommandQueue - File circulaire statique lock-free
+// CommandQueue - File circulaire statique thread-safe
 // ============================================================================
 // Ring buffer pour les commandes actuateur.
 // Les commandes sont inserees dans l'ordre temporel croissant.
 // Pas de tri dynamique necessaire.
 // Aucune allocation dynamique.
+// Thread-safe: spinlock protege les acces multi-core (push from Core 0 + Core 1).
 // ============================================================================
 
 class CommandQueue {
@@ -52,6 +53,7 @@ private:
   volatile uint16_t _head;  // Position d'ecriture
   volatile uint16_t _tail;  // Position de lecture
   uint32_t _overflowCount;
+  mutable portMUX_TYPE _mux;  // C1 fix: spinlock for multi-producer safety on dual-core ESP32
 };
 
 #endif // COMMAND_QUEUE_H

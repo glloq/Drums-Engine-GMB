@@ -62,6 +62,7 @@ private:
   Scheduler* _scheduler;
   EngineState* _state;
   PipelineLookup _lookup;
+  volatile bool _recompiling = false;  // C4 fix: flag to block Core 1 reads during recompilation
   uint32_t _lastCcDispatchUs[128];
   uint8_t _noteActive[128];  // Counter: 0=inactive, N=N stacked instances active
 

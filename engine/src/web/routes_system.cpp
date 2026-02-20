@@ -378,8 +378,9 @@ void WebServerManager::_handleCreateInstrumentFromTemplate(AsyncWebServerRequest
       return;
     }
   } else if (strcmp(tpl, "hihat") == 0) {
+    // M5 fix: Validate HIHAT_CONTROLLER instead of SERVO_POSITION for hi-hat template
     if (!requireSlot(0, ActuatorType::SOLENOID, ActuatorBehavior::SOLENOID_STRIKE) ||
-        !requireSlot(1, ActuatorType::SERVO, ActuatorBehavior::SERVO_POSITION)) {
+        !requireSlot(1, ActuatorType::SERVO, ActuatorBehavior::HIHAT_CONTROLLER)) {
       _sendError(req, 400, templateErr);
       return;
     }
@@ -761,11 +762,13 @@ void WebServerManager::_handleTestCC(AsyncWebServerRequest* req, uint8_t* data, 
   if (deserializeJson(doc, data, len)) { _sendError(req, 400, "Invalid JSON"); return; }
   uint8_t cc = doc["cc"] | 7;
   uint8_t val = doc["value"] | 127;
+  // M8 fix: Respect channel from JSON body instead of hardcoding channel 10
+  uint8_t channel = doc["channel"] | 10;
 
   // Send CC event directly to EventProcessor
   MidiEvent ev;
   ev.type = MIDI_EVT_CC;
-  ev.channel = 10; // Default drums channel
+  ev.channel = channel;
   ev.data1 = cc;
   ev.data2 = val;
   ev.timestamp = micros();
@@ -846,8 +849,9 @@ void WebServerManager::_handleValidateConfig(AsyncWebServerRequest* req) {
   } else {
     uint8_t noActions = 0;
     uint8_t disabledInstr = 0;
-    // Check for duplicate MIDI notes
-    uint8_t noteCh[128][16] = {};
+    // M6 fix: Use static to avoid 2KB stack allocation (ESP32 stack is limited)
+    static uint8_t noteCh[128][16];
+    memset(noteCh, 0, sizeof(noteCh));
     for (uint8_t i = 0; i < instrCount; i++) {
       const InstrumentConfig* instr = _instrMgr->getInstrument(i);
       if (!instr) continue;
@@ -945,7 +949,7 @@ void WebServerManager::_handleFactoryReset(AsyncWebServerRequest* req) {
   const char* files[] = {
     CONFIG_FILE, ACTUATORS_FILE, INSTRUMENTS_FILE,
     LEDS_FILE, THEMES_FILE, "/midi.json", "/loops.json",
-    "/error.log"
+    "/error.log", "/auth.json"  // M7 fix: also delete auth config
   };
   int deleted = 0;
   for (const char* f : files) {
@@ -953,6 +957,20 @@ void WebServerManager::_handleFactoryReset(AsyncWebServerRequest* req) {
       LittleFS.remove(f);
       deleted++;
     }
+  }
+  // M7 fix: Delete all loop files in /loops/ directory
+  File dir = LittleFS.open(LOOPS_DIR);
+  if (dir && dir.isDirectory()) {
+    File file = dir.openNextFile();
+    while (file) {
+      String path = String(file.path());
+      file.close();
+      LittleFS.remove(path.c_str());
+      deleted++;
+      file = dir.openNextFile();
+    }
+    dir.close();
+    LittleFS.rmdir(LOOPS_DIR);
   }
   DBGF("[System] Factory reset: %d files deleted\n", deleted);
   _sendError(req, 200, "Factory reset done, rebooting...");

@@ -162,8 +162,11 @@ void MidiEngine::_onPitchBend(byte channel, int value) {
     MidiEvent ev;
     ev.type = MIDI_EVT_PITCH_BEND;
     ev.channel = channel;
-    ev.data1 = (uint8_t)((value >> 7) & 0x7F); // MSB
-    ev.data2 = (uint8_t)(value & 0x7F);         // LSB
+    // H5 fix: Convert signed value (-8192..8191) to unsigned 14-bit (0..16383)
+    // before splitting into MSB/LSB — right-shift of negative values is implementation-defined
+    uint16_t unsigned14 = (uint16_t)(value + 8192);
+    ev.data1 = (uint8_t)((unsigned14 >> 7) & 0x7F); // MSB
+    ev.data2 = (uint8_t)(unsigned14 & 0x7F);         // LSB
     ev.timestamp = micros();
     _instance->_eventProc->processMidiEvent(ev);
   } else {

@@ -89,6 +89,10 @@ private:
   void _detachOpticalISR();                  // Disarm the interrupt
   void _updateOpticalTracking(uint32_t nowUs);
   bool _checkEndStops();                     // Returns true if any end stop triggered
+
+public:
+  // M10 fix: Clear all ISR slots (called before rebuildAll to prevent stale references)
+  static void clearAllIsrSlots();
 };
 
 #endif // MOTOR_ACTUATOR_H

@@ -65,7 +65,11 @@ void LoopEngine::update() {
   unsigned long now = micros();
   unsigned long elapsed = now - _lastTickTime;
 
-  while (elapsed >= _tickIntervalUs) {
+  // H7 fix: Cap catch-up ticks to prevent blocking Core 0 after a stall
+  uint16_t maxCatchUp = 96;  // ~1 beat at 96ppq
+  uint16_t ticksProcessed = 0;
+  while (elapsed >= _tickIntervalUs && ticksProcessed < maxCatchUp) {
+    ticksProcessed++;
     elapsed -= _tickIntervalUs;
     // Fix #15: Fractional accumulator to prevent timing drift
     _tickRemainderAccum += _tickRemainderPerTick;
@@ -90,6 +94,10 @@ void LoopEngine::update() {
       _dispatchEvent(loop.events[_nextEventIndex]);
       _nextEventIndex++;
     }
+  }
+  // H7 fix: If catch-up was capped, skip remaining elapsed time to avoid infinite catch-up
+  if (ticksProcessed >= maxCatchUp && elapsed >= _tickIntervalUs) {
+    _lastTickTime = now;
   }
 }
 
@@ -172,8 +180,10 @@ bool LoopEngine::deleteLoop(uint8_t index) {
   }
   _loopCount--;
 
-  // Fix #20: Adjust _currentLoop index after delete
-  if (_currentLoop >= _loopCount && _loopCount > 0) {
+  // H6 fix: Adjust _currentLoop when a lower-index loop is deleted (array shifted down)
+  if (_playing && _currentLoop > index) {
+    _currentLoop--;
+  } else if (_currentLoop >= _loopCount && _loopCount > 0) {
     _currentLoop = _loopCount - 1;
   }
   return true;

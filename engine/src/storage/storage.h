@@ -41,11 +41,13 @@ public:
 
   // System config
   bool saveSystemConfig(const JsonObject& cfg);
-  bool loadSystemConfig(JsonObject& cfg);
+  // M3 fix: Take JsonDocument& to avoid dangling JsonObject references
+  bool loadSystemConfig(JsonDocument& doc);
 
   // Loops
   bool saveLoop(uint8_t id, const JsonObject& loop);
-  bool loadLoop(uint8_t id, JsonObject& loop);
+  // M3 fix: Take JsonDocument& to avoid dangling JsonObject references
+  bool loadLoop(uint8_t id, JsonDocument& doc);
   bool deleteLoop(uint8_t id);
   bool listLoops(JsonArray& arr);
 

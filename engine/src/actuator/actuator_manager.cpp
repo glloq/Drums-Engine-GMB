@@ -86,6 +86,9 @@ void ActuatorManager::clearAll() {
   memset(_actuators, 0, sizeof(_actuators));
   memset(_idMap, 0xFF, sizeof(_idMap));
   _count = 0;
+  portENTER_CRITICAL(&_actMgrMux);
+  _activeCount = 0;
+  portEXIT_CRITICAL(&_actMgrMux);
 }
 
 void ActuatorManager::initAll() {
@@ -178,16 +181,32 @@ uint8_t ActuatorManager::checkWatchdog() {
   uint32_t now = micros();
   uint8_t stopped = 0;
 
+  // C2 fix: Do NOT hold spinlock during checkTimeout() — it calls stop()
+  // which does I2C writes (slow, can cause ESP32 panic if inside critical section).
+  // Instead, snapshot active actuators under lock, then check outside lock.
+  Actuator* toCheck[MAX_ACTUATORS];
+  uint8_t checkCount = 0;
+
   portENTER_CRITICAL(&_actMgrMux);
   for (uint8_t i = 0; i < _count; i++) {
     if (_actuators[i] && _actuators[i]->isActive()) {
-      if (_actuators[i]->checkTimeout(now)) {
-        stopped++;
-      }
+      toCheck[checkCount++] = _actuators[i];
     }
   }
-  if (stopped > 0) _updateActiveCountLocked();
   portEXIT_CRITICAL(&_actMgrMux);
+
+  // Check timeouts outside critical section (safe for I2C)
+  for (uint8_t i = 0; i < checkCount; i++) {
+    if (toCheck[i]->checkTimeout(now)) {
+      stopped++;
+    }
+  }
+
+  if (stopped > 0) {
+    portENTER_CRITICAL(&_actMgrMux);
+    _updateActiveCountLocked();
+    portEXIT_CRITICAL(&_actMgrMux);
+  }
   return stopped;
 }
 

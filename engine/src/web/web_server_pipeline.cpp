@@ -441,6 +441,13 @@ void WebServerManager::_handleSetPipelineBlocks(AsyncWebServerRequest* req, uint
     }
   }
 
+  // H8 fix: Validate instrument config before saving (prevents invalid actuator refs etc.)
+  const char* validErr = nullptr;
+  if (!_validateInstrumentConfig(*inst, validErr)) {
+    _sendError(req, 400, validErr ? validErr : "Invalid instrument config after pipeline update");
+    return;
+  }
+
   // Save instruments and recompile
   _storage->saveInstruments(*_instrMgr);
   _recompileLookupFromInstruments();

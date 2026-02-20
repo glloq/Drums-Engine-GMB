@@ -486,9 +486,10 @@ void loadLoops() {
   if (storage.listLoops(arr)) {
     for (JsonObject loopInfo : arr) {
       uint8_t id = loopInfo["id"] | 0;
+      // M3 fix: loadLoop now takes JsonDocument& to avoid dangling references
       JsonDocument loopDoc;
-      JsonObject loopObj = loopDoc.to<JsonObject>();
-      if (storage.loadLoop(id, loopObj)) {
+      if (storage.loadLoop(id, loopDoc)) {
+        JsonObject loopObj = loopDoc.as<JsonObject>();
         const char* name = loopObj["name"] | "Loop";
         uint16_t bpm = loopObj["bpm"] | MIDI_BPM_DEFAULT;
         uint8_t bars = loopObj["bars"] | 1;

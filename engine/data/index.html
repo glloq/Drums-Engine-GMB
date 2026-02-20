@@ -1550,6 +1550,14 @@ let ledThemes = [];
 let ledStatus = {};
 
 // ====================================================================
+// Sanitization helper
+// ====================================================================
+function escapeHtml(str) {
+  if (typeof str !== 'string') return String(str);
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+}
+
+// ====================================================================
 // API helper
 // ====================================================================
 async function api(path, method='GET', body=null, silent=false) {
@@ -1728,7 +1736,7 @@ async function initApp() {
   document.querySelectorAll('.modal-overlay').forEach(overlay => {
     if (overlay.id === 'loginOverlay') return;
     overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) overlay.classList.remove('show');
+      if (e.target === overlay) closeModal(overlay.id);
     });
   });
 
@@ -2130,18 +2138,18 @@ function renderActuators() {
     if (a.type===1 && a.cooldownUs > 0 && a.behavior===0) details += ' · Cooldown: '+Math.round(a.cooldownUs*0.1)+'ms';
     if (a.type===1 && a.behavior===1) details += ' · Actif max: '+Math.round(a.cooldownUs*0.1)+'ms';
     const usedBy = actUsedBy[a.id];
-    const usedByHtml = usedBy ? ' · <span style="color:var(--accent);">\u266a ' + usedBy.join(', ') + '</span>' : ' · <span style="color:var(--fg2);opacity:0.6;">non assigne</span>';
+    const usedByHtml = usedBy ? ' · <span style="color:var(--accent);">\u266a ' + usedBy.map(escapeHtml).join(', ') + '</span>' : ' · <span style="color:var(--fg2);opacity:0.6;">non assigne</span>';
     const tIcon = typeIcons[a.type] || '?';
     const tColor = typeColors[a.type] || 'var(--fg2)';
     const disabledStyle = !a.enabled ? 'opacity:0.5;' : '';
-    const borderColor = !a.enabled ? 'var(--danger)' : (a.active ? 'var(--success)' : 'var(--accent2)');
+    const borderColor = !a.enabled ? 'var(--accent)' : (a.active ? 'var(--success)' : 'var(--accent2)');
     return `
     <div class="list-item" style="border-left-color:${borderColor};${disabledStyle}" ondblclick="editActuator(${a.id})" title="Double-clic pour modifier">
       <div class="item-title">
         <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:${tColor};color:#000;font-weight:700;font-size:0.65em;margin-right:4px;">${tIcon}</span>
-        <strong>${a.name}</strong>
-        <span class="badge">${a.typeName}</span>
-        <span class="badge">${a.behaviorName}</span>
+        <strong>${escapeHtml(a.name)}</strong>
+        <span class="badge">${escapeHtml(a.typeName)}</span>
+        <span class="badge">${escapeHtml(a.behaviorName)}</span>
         ${a.active ? '<span class="badge badge-green">ACTIF</span>' : ''}
         ${!a.enabled ? '<span class="badge badge-warn">DESACTIVE</span>' : ''}
       </div>
@@ -2957,8 +2965,8 @@ function populateActuatorSelects() {
   const motorActs = actuators.filter(a => a.type === 2);
   const allActs = actuators;
 
-  const makeOpts = (list, sel) => avail(list).map(a => `<option value="${a.id}" ${a.id===sel?'selected':''}>${a.name}</option>`).join('') || '<option value="255">-- aucun --</option>';
-  const makeOptsOptional = (list, sel) => '<option value="255">-- aucun --</option>' + avail(list).map(a => `<option value="${a.id}" ${a.id===sel?'selected':''}>${a.name}</option>`).join('');
+  const makeOpts = (list, sel) => avail(list).map(a => `<option value="${a.id}" ${a.id===sel?'selected':''}>${escapeHtml(a.name)}</option>`).join('') || '<option value="255">-- aucun --</option>';
+  const makeOptsOptional = (list, sel) => '<option value="255">-- aucun --</option>' + avail(list).map(a => `<option value="${a.id}" ${a.id===sel?'selected':''}>${escapeHtml(a.name)}</option>`).join('');
 
   // Simple
   document.getElementById('instrStrikeAct').innerHTML = makeOpts(strikeActs.length ? strikeActs : allActs, -1);
@@ -3112,8 +3120,8 @@ function renderNoteMap() {
     const inst = noteMap[n];
     const gm = GM_DRUMS[n] || '';
     if (inst) {
-      html += `<div style="padding:4px 6px;border-radius:4px;font-size:0.72em;background:var(--accent);color:#fff;cursor:pointer;line-height:1.3;" onclick="editInstrument(${inst.id})" title="${gm}">
-        <strong>${n}</strong> ${inst.name.substring(0,10)}${!inst.enabled ? ' [OFF]' : ''}</div>`;
+      html += `<div style="padding:4px 6px;border-radius:4px;font-size:0.72em;background:var(--accent);color:#fff;cursor:pointer;line-height:1.3;" onclick="editInstrument(${inst.id})" title="${escapeHtml(gm)}">
+        <strong>${n}</strong> ${escapeHtml(inst.name.substring(0,10))}${!inst.enabled ? ' [OFF]' : ''}</div>`;
     } else if (gm) {
       html += `<div style="padding:4px 6px;border-radius:4px;font-size:0.72em;background:var(--bg);color:var(--fg2);line-height:1.3;opacity:0.6;cursor:pointer;" title="${gm} - Cliquer pour creer" onclick="quickCreateInstrument(${n},'${gm.replace(/'/g, "\\'")}')">
         <strong>${n}</strong> ${gm.substring(0,10)} <span style="color:var(--accent);">+</span></div>`;
@@ -3231,8 +3239,8 @@ function renderInstruments() {
     <div class="list-item" data-midinote="${mNote}" data-complete="${isComplete?1:0}" style="border-left-color:${catColor};transition:box-shadow 0.15s;" ondblclick="editInstrument(${inst.id})" title="Double-clic pour modifier">
       <div class="item-title">
         <span style="color:${statusColor};font-size:0.9em;" title="${isComplete ? 'Complet' : !inst.enabled ? 'Desactive' : !hasActuator ? 'Sans actionneur' : 'Sans actions NoteOn'}">${statusIcon}</span>
-        <strong>${inst.name}</strong>
-        <span class="badge" style="background:${catColor};color:#000;">${inst.category}</span>
+        <strong>${escapeHtml(inst.name)}</strong>
+        <span class="badge" style="background:${catColor};color:#000;">${escapeHtml(inst.category)}</span>
         <span class="badge">${mNote}${noteName ? ' · ' + noteName : ''}</span>
         ${(inst.midiChannel && inst.midiChannel !== 10) ? '<span class="badge" style="background:#607d8b;color:#fff;">Ch.' + inst.midiChannel + '</span>' : ''}
         <span class="badge badge-green">On:${onCount}</span>
@@ -3511,13 +3519,13 @@ function buildActuatorChecklist(selectedIds) {
   el.innerHTML = actuators.map(a => `
     <label>
       <input type="checkbox" value="${a.id}" ${selectedIds.includes(a.id) ? 'checked' : ''}>
-      <span>${a.name} <span style="color:var(--fg2);">(${a.typeName} - ${a.busName})</span></span>
+      <span>${escapeHtml(a.name)} <span style="color:var(--fg2);">(${escapeHtml(a.typeName)} - ${escapeHtml(a.busName)})</span></span>
     </label>
   `).join('');
 }
 
 function actuatorOptions(selected) {
-  return actuators.map(a => `<option value="${a.id}" ${a.id===selected?'selected':''}>${a.name} (#${a.id})</option>`).join('');
+  return actuators.map(a => `<option value="${a.id}" ${a.id===selected?'selected':''}>${escapeHtml(a.name)} (#${a.id})</option>`).join('');
 }
 
 function actionEditorRow(step, idx, type) {
@@ -4791,7 +4799,11 @@ window.addEventListener('beforeunload', (e) => {
 });
 
 async function saveAll() {
-  await api('save', 'POST');
+  const result = await api('save', 'POST');
+  if (!result) {
+    toast('Echec de la sauvegarde', 'error');
+    return;
+  }
   markConfigClean();
   toast('Configuration sauvegardee', 'success');
 }
@@ -5306,7 +5318,7 @@ function showAddSegment() {
   // Populate instrument select
   const instSel = document.getElementById('ledSegInstrument');
   instSel.innerHTML = '<option value="255">Aucun</option>';
-  instruments.forEach(i => { instSel.innerHTML += `<option value="${i.id}">${i.name} (note ${i.midiNote})</option>`; });
+  instruments.forEach(i => { instSel.innerHTML += `<option value="${i.id}">${escapeHtml(i.name)} (note ${i.midiNote})</option>`; });
   showModal('modalLedSegment');
   updateLedSegPreview();
 }
@@ -5912,7 +5924,9 @@ function renderPianoPads() {
       const inst = instruments.find(i => i.midiNote === n && i.enabled !== false);
       if (inst) name = inst.name;
     }
-    pad.innerHTML = '<div class="pad-note">' + n + '</div><div class="pad-name">' + name + '</div>';
+    const padNote = document.createElement('div'); padNote.className = 'pad-note'; padNote.textContent = n;
+    const padName = document.createElement('div'); padName.className = 'pad-name'; padName.textContent = name;
+    pad.appendChild(padNote); pad.appendChild(padName);
 
     pad.addEventListener('mousedown', (e) => { e.preventDefault(); pianoNoteOn(n, pad); });
     pad.addEventListener('mouseup', () => pianoNoteOff(n, pad));
@@ -5981,11 +5995,11 @@ document.addEventListener('keydown', (e) => {
     saveAll();
   }
   if (e.key === 'Escape') {
-    // Close topmost open modal
+    // Close topmost open modal via closeModal() for proper cleanup
     const modals = document.querySelectorAll('.modal-overlay.show');
     if (modals.length > 0) {
       const last = modals[modals.length - 1];
-      last.classList.remove('show');
+      closeModal(last.id);
     }
   }
   // Space = play/pause in loop editor (only when no input focused)
@@ -6100,11 +6114,11 @@ function logMidiEvent(msg) {
   const label = msg.on ? 'ON ' : 'OFF';
   const vel = msg.vel !== undefined ? msg.vel : '';
   const line = document.createElement('div');
-  line.innerHTML = '<span style="color:var(--fg2);">' + ts + '</span> ' +
+  line.innerHTML = '<span style="color:var(--fg2);">' + escapeHtml(ts) + '</span> ' +
     '<span style="color:' + color + ';font-weight:600;">' + label + '</span> ' +
-    '<span style="color:var(--accent);">' + msg.note + '</span> ' +
-    '<span style="color:var(--fg2);">' + noteName + '</span>' +
-    (msg.on && vel ? ' <span style="color:var(--accent2);">vel:' + vel + '</span>' : '');
+    '<span style="color:var(--accent);">' + escapeHtml(msg.note) + '</span> ' +
+    '<span style="color:var(--fg2);">' + escapeHtml(noteName) + '</span>' +
+    (msg.on && vel ? ' <span style="color:var(--accent2);">vel:' + escapeHtml(vel) + '</span>' : '');
   log.appendChild(line);
   // Keep only last 100 entries
   while (log.children.length > 100) log.removeChild(log.firstChild);
@@ -6154,10 +6168,16 @@ function _handleWsNote(note, on, vel) {
   }
 }
 
+let wsReconnectDelay = 1000; // Start at 1s, exponential backoff up to 30s
+const WS_RECONNECT_MAX = 30000;
+
 function connectWebSocket() {
   if (ws && ws.readyState <= 1) return; // already open/connecting
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   ws = new WebSocket(proto + '//' + location.host + '/ws');
+  ws.onopen = () => {
+    wsReconnectDelay = 1000; // Reset backoff on successful connection
+  };
   ws.onmessage = (evt) => {
     try {
       const msg = JSON.parse(evt.data);
@@ -6169,7 +6189,8 @@ function connectWebSocket() {
     } catch(e) {}
   };
   ws.onclose = () => {
-    setTimeout(connectWebSocket, 3000); // Always reconnect for MIDI RX indicator
+    setTimeout(connectWebSocket, wsReconnectDelay);
+    wsReconnectDelay = Math.min(wsReconnectDelay * 2, WS_RECONNECT_MAX);
   };
 }
 
@@ -6186,7 +6207,7 @@ async function loadCalibrationData() {
   const sel = document.getElementById('micLatencyActuator');
   sel.innerHTML = acts.filter(a => a.enabled).map(a => {
     const tNames = ['Servo','Sol.','Motor','Motor'];
-    return '<option value="' + a.id + '">#' + a.id + ' ' + (a.name||'Sans nom') + ' (' + (tNames[a.type]||'?') + ')</option>';
+    return '<option value="' + a.id + '">#' + a.id + ' ' + escapeHtml(a.name||'Sans nom') + ' (' + (tNames[a.type]||'?') + ')</option>';
   }).join('');
   startMicLevelPolling();
 }
@@ -6232,7 +6253,7 @@ function startMicLevelPolling() {
         const pct = Math.min(100, d.level);
         document.getElementById('micLevelFill').style.width = pct + '%';
         document.getElementById('micLevelFill').style.background =
-          pct > 70 ? 'var(--danger)' : pct > 40 ? 'var(--warning)' : 'var(--success)';
+          pct > 70 ? 'var(--accent)' : pct > 40 ? 'var(--warn)' : 'var(--success)';
       }
     } catch(e) {}
   }, 200);
@@ -6256,7 +6277,7 @@ function _appendLatencyResult(text, cls) {
   const div = document.createElement('div');
   div.style.padding = '4px 0';
   div.style.borderBottom = '1px solid var(--bg)';
-  if (cls === 'error') div.style.color = 'var(--danger)';
+  if (cls === 'error') div.style.color = 'var(--accent)';
   else if (cls === 'success') div.style.color = 'var(--success)';
   div.textContent = text;
   list.prepend(div);

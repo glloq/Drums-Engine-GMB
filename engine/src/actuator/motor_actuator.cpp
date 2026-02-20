@@ -10,6 +10,18 @@ MotorActuator::IsrSlot MotorActuator::_isrSlots[MAX_OPTICAL_MOTORS] = {
 uint8_t MotorActuator::_isrSlotPins[MAX_OPTICAL_MOTORS] = {0xFF, 0xFF, 0xFF, 0xFF};
 constexpr void (*MotorActuator::_isrTable[MAX_OPTICAL_MOTORS])();
 
+// M10 fix: Detach all ISR interrupts and clear slot tracking
+void MotorActuator::clearAllIsrSlots() {
+  for (uint8_t i = 0; i < MAX_OPTICAL_MOTORS; i++) {
+    if (_isrSlotPins[i] != 0xFF && _isrSlotPins[i] < 40) {
+      detachInterrupt(digitalPinToInterrupt(_isrSlotPins[i]));
+    }
+    _isrSlotPins[i] = 0xFF;
+    _isrSlots[i].instance = nullptr;
+    _isrSlots[i].edgeCount = 0;
+  }
+}
+
 MotorActuator::MotorActuator(HalDriver* driver)
   : _driver(driver), _currentSpeed(0),
     _sensorPin(0xFF), _dirPin(0xFF), _forward(true),
@@ -85,7 +97,9 @@ void MotorActuator::execute(const ActuatorCommand& cmd) {
       _positionTracking = false;
 
       uint16_t cmdVal = _config.inverted ? (127 - cmd.value) : cmd.value;
-      uint16_t speed = map(cmdVal, 0, 127, _config.paramMin, _config.paramMax);
+      // M9 fix: value=0 should stop the motor, not run at paramMin
+      if (cmdVal == 0) { stop(); break; }
+      uint16_t speed = map(cmdVal, 1, 127, _config.paramMin, _config.paramMax);
 
       switch (_config.behavior) {
 

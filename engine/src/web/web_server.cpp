@@ -293,13 +293,15 @@ void WebServerManager::_setupRoutes() {
       _sendJson(req, 200, doc);
     });
 
+  // H2 fix: Add index==0 guard to prevent re-processing on chunked bodies
   _server.on("/api/loop/chain", HTTP_POST,
-    [this](AsyncWebServerRequest* req) {},
+    [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
     NULL,
     [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
-      if (!_rateLimiter.checkRate(req)) return;
-      if (!_auth.checkAuth(req)) return;
-      _handlePlayChain(req, data, len);
+      if (index == 0) {
+        if (!_auth.checkAuth(req)) return;
+        _handlePlayChain(req, data, len);
+      }
     });
 
   // --- System API ---
@@ -588,9 +590,9 @@ void WebServerManager::_onWsEvent(AsyncWebSocket* server, AsyncWebSocketClient* 
     case WS_EVT_DATA: {
       AwsFrameInfo* info = (AwsFrameInfo*)arg;
       if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
-        data[len] = 0;
+        // C3 fix: Use length-limited deserialize instead of data[len]=0 heap overflow
         JsonDocument doc;
-        if (!deserializeJson(doc, (char*)data)) {
+        if (!deserializeJson(doc, (const char*)data, len)) {
           const char* action = doc["action"];
           if (action && strcmp(action, "ping") == 0) {
             client->text("{\"action\":\"pong\"}");
@@ -630,7 +632,8 @@ uint8_t WebServerManager::_extractId(AsyncWebServerRequest* req, const char* par
   if (req->hasParam(param)) {
     return req->getParam(param)->value().toInt();
   }
-  return 0;
+  // H1 fix: Return 0xFF (invalid sentinel) instead of 0 to avoid silent wrong-resource access
+  return 0xFF;
 }
 
 void WebServerManager::_recompileLookupFromInstruments() {

@@ -64,6 +64,7 @@
 
 // --- Safety ---
 #define SOLENOID_MAX_ON_US       500000    // 500ms max solenoid activation (thermal)
+#define SERVO_MAX_PULSE_US       200000    // H3 fix: 200ms max servo strike (prevents gear damage)
 #define MOTOR_MAX_CONTINUOUS_US  5000000   // 5s max continuous motor run
 #define MAX_CONCURRENT_ACTIVE    8         // Max simultaneously active actuators
 #define WATCHDOG_CHECK_US        100000    // Check watchdog every 100ms

@@ -142,7 +142,8 @@ bool ServoActuator::checkTimeout(uint32_t nowUs) {
       return false;
     }
     uint32_t elapsed = nowUs - _activationStartUs;
-    if (elapsed >= SOLENOID_MAX_ON_US) {
+    // H3 fix: Use SERVO_MAX_PULSE_US (200ms) instead of SOLENOID_MAX_ON_US (500ms)
+    if (elapsed >= SERVO_MAX_PULSE_US) {
       DBGF("[Safety] Servo '%s' timeout after %lu us - forced stop\n",
            _config.name, (unsigned long)elapsed);
       stop();

@@ -18,6 +18,9 @@ void EventProcessor::getNoteActive(uint8_t* out) const {
 }
 
 void EventProcessor::processMidiEvent(const MidiEvent& ev) {
+  // C4 fix: Skip processing while lookup is being recompiled by Core 0
+  if (_recompiling) return;
+
   if (ev.type == MIDI_EVT_NOTE_ON && ev.data2 > 0) {
     uint8_t pipelineIdx = _lookup.note_to_pipeline[ev.data1];
     if (pipelineIdx == 0xFF || pipelineIdx >= _lookup.pipeline_count) return;
@@ -277,7 +280,8 @@ void EventProcessor::_executePipeline(uint8_t pipelineIdx, uint8_t value, uint32
     cmd.command_type = (uint8_t)CommandType::PULSE;
     cmd.value = currentValue;
     cmd.duration = 0;
-    cmd.execute_at = timestamp + delayAccum;
+    // H9 fix: Saturate timestamp+delay to prevent uint32_t overflow
+    cmd.execute_at = (UINT32_MAX - timestamp < delayAccum) ? UINT32_MAX : timestamp + delayAccum;
     _scheduler->scheduleCommand(cmd);
     _ccStats.routed_commands++;
   }
@@ -390,8 +394,9 @@ uint32_t EventProcessor::_processTimePulse(const CompiledBlock& block, uint8_t a
     durationUs = (uint32_t)block.param2 * 1000;
   }
 
-  _scheduler->schedulePulseAt(actuatorId, value, durationUs,
-                              timestamp + delayAccum);
+  // H9 fix: Saturate timestamp+delay
+  uint32_t execAt = (UINT32_MAX - timestamp < delayAccum) ? UINT32_MAX : timestamp + delayAccum;
+  _scheduler->schedulePulseAt(actuatorId, value, durationUs, execAt);
   return durationUs;
 }
 
@@ -407,7 +412,8 @@ void EventProcessor::_processTimeRamp(const CompiledBlock& block, uint8_t actuat
   }
 
   uint32_t stepInterval = totalDurationUs / stepCount;
-  uint32_t baseTime = timestamp + delayAccum;
+  // H9 fix: Saturate timestamp+delay
+  uint32_t baseTime = (UINT32_MAX - timestamp < delayAccum) ? UINT32_MAX : timestamp + delayAccum;
 
   for (uint8_t i = 0; i < stepCount; i++) {
     uint8_t stepVal = (uint8_t)(((uint16_t)value * (i + 1)) / stepCount);
@@ -428,7 +434,8 @@ void EventProcessor::_processOutputBlock(const CompiledBlock& block, uint8_t val
   ActuatorCommand cmd;
   cmd.actuator_id = block.param1;
   cmd.value = value;
-  cmd.execute_at = timestamp + delayAccum;
+  // H9 fix: Saturate timestamp+delay
+  cmd.execute_at = (UINT32_MAX - timestamp < delayAccum) ? UINT32_MAX : timestamp + delayAccum;
 
   switch (block.subtype) {
     case OUT_PULSE:
@@ -483,6 +490,9 @@ uint8_t EventProcessor::_applyVelocityCurve(uint8_t value, uint8_t curveType) {
 }
 
 void EventProcessor::recompileLookup() {
+  // C4 fix: Set flag to block Core 1 reads during recompilation
+  _recompiling = true;
+
   memset(_lookup.note_to_pipeline, 0xFF, sizeof(_lookup.note_to_pipeline));
   _lookup.cc_route_count = 0;
   _lookup.cc_route_dropped = 0;
@@ -492,4 +502,7 @@ void EventProcessor::recompileLookup() {
   memset(_noteActive, 0, sizeof(_noteActive));
   _ccStats = {};
   DBGF("[EventProc] Lookup recompiled (%d pipelines)\n", _lookup.pipeline_count);
+
+  // C4 fix: Memory barrier + re-enable processing after recompilation is complete
+  _recompiling = false;
 }

@@ -329,7 +329,7 @@ input[type=checkbox] { width: auto; }
   <div class="tab" data-tab="leds" id="tabLeds" style="display:none;">LEDs</div>
   <div class="tab" data-tab="mappings">Traitement MIDI</div>
   <div class="tab" data-tab="piano">Piano</div>
-  <div class="tab" data-tab="calibration">Calibration</div>
+  <div class="tab" data-tab="calibration" id="tabCalibration" style="display:none;">Latence</div>
 </div>
 
 <div class="content">
@@ -496,34 +496,9 @@ input[type=checkbox] { width: auto; }
     </div>
   </div>
 
-  <!-- ====== CALIBRATION TAB ====== -->
+  <!-- ====== CALIBRATION / LATENCY TAB (visible only when mic connected) ====== -->
   <div class="panel" id="tab-calibration">
     <div class="card">
-      <h3 style="display:flex;justify-content:space-between;align-items:center;">
-        <span>Calibration Actionneurs <span class="badge" id="calibActCount">0</span> <span class="badge badge-green" id="calibActiveCount" style="font-size:0.75em;">0</span> actifs</span>
-        <div style="display:flex;gap:6px;">
-          <button class="btn btn-danger btn-sm" onclick="emergencyStopAll()" style="font-weight:700;">STOP ALL</button>
-          <button class="btn btn-secondary btn-sm" onclick="midiPanic()" title="Envoie NoteOff sur toutes les notes">MIDI Panic</button>
-        </div>
-      </h3>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
-        <p class="hint" style="margin:0;">Test rapide. Pour calibrer finement, utilisez le bouton Modifier sur chaque actionneur.</p>
-        <button class="btn btn-sm btn-secondary" onclick="testIntegration()" title="Teste la chaine MIDI complete pour chaque instrument">Test Integration</button>
-        <input type="text" placeholder="Filtrer..." oninput="filterList('calibActuatorList',this.value)" style="width:120px;padding:5px 8px;font-size:0.85em;">
-      </div>
-      <div id="calibActuatorList"></div>
-    </div>
-    <div class="card" style="margin-top:16px;">
-      <h3>Test Rapide Instruments</h3>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
-        <p class="hint" style="margin:0;">Declenchez un instrument complet avec une velocity choisie.</p>
-        <input type="text" placeholder="Filtrer..." oninput="filterList('calibInstrumentList',this.value)" style="width:120px;padding:5px 8px;font-size:0.85em;">
-      </div>
-      <div id="calibInstrumentList"></div>
-    </div>
-
-    <!-- Microphone Latency Measurement (only visible if INMP441 detected) -->
-    <div class="card" style="margin-top:16px;display:none;" id="calibMicSection">
       <h3 style="display:flex;justify-content:space-between;align-items:center;">
         <span>Mesure de Latence (Micro INMP441)</span>
         <span class="badge badge-green" id="micStatusBadge">Connecte</span>
@@ -1681,7 +1656,11 @@ async function loginSubmit() {
   }
   document.getElementById('loginError').textContent = '';
   try {
-    const r = await fetch('/api/auth-token?pin=' + encodeURIComponent(pin));
+    const r = await fetch('/api/auth-token', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({pin: pin})
+    });
     const data = await r.json();
     if (r.ok && data.token) {
       apiToken = data.token;
@@ -1757,6 +1736,14 @@ async function initApp() {
   const showLeds = localStorage.getItem('showLedsTab') === '1';
   document.getElementById('settShowLedsTab').checked = showLeds;
   document.getElementById('tabLeds').style.display = showLeds ? '' : 'none';
+
+  // Show calibration/latency tab only if microphone is connected
+  try {
+    const micData = await api('mic/status');
+    if (micData && micData.connected) {
+      document.getElementById('tabCalibration').style.display = '';
+    }
+  } catch(e) {}
 
   // Restore last active tab from sessionStorage
   const lastTab = sessionStorage.getItem('lastTab');
@@ -2782,7 +2769,11 @@ async function changePin() {
   if (result) {
     toast('PIN mis a jour', 'success');
     // Re-fetch token with new PIN
-    const r = await fetch('/api/auth-token?pin=' + encodeURIComponent(newPin));
+    const r = await fetch('/api/auth-token', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({pin: newPin})
+    });
     const data = await r.json();
     if (data.token) {
       apiToken = data.token;
@@ -5079,7 +5070,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     if (tab.dataset.tab === 'mappings') refreshMappings();
     if (tab.dataset.tab === 'leds') loadLedData();
     if (tab.dataset.tab === 'piano') renderPianoPads();
-    if (tab.dataset.tab === 'calibration') { loadCalibrationData(); startCalibPolling(); } else { stopCalibPolling(); stopMicLevelPolling(); }
+    if (tab.dataset.tab === 'calibration') { loadCalibrationData(); } else { stopMicLevelPolling(); }
     // Stop piano live polling when leaving piano tab
     if (tab.dataset.tab !== 'piano' && pianoLiveActive) {
       document.getElementById('pianoLiveToggle').checked = false;
@@ -6188,195 +6179,16 @@ function connectWebSocket() {
 
 async function loadCalibrationData() {
   const actData = await api('actuators');
-  const instrData = await api('instruments');
-  if (!actData || !instrData) return;
-
-  // API returns arrays directly, not wrapped objects
+  if (!actData) return;
   const acts = Array.isArray(actData) ? actData : (actData.actuators || []);
-  const instrs = Array.isArray(instrData) ? instrData : (instrData.instruments || []);
 
-  // Check if INMP441 mic is connected and show/hide latency section
-  try {
-    const micData = await api('mic/status');
-    if (micData && micData.connected) {
-      document.getElementById('calibMicSection').style.display = '';
-      // Populate actuator dropdown for latency measurement
-      const sel = document.getElementById('micLatencyActuator');
-      sel.innerHTML = acts.filter(a => a.enabled).map(a => {
-        const tNames = ['Servo','Sol.','Motor','Motor'];
-        return '<option value="' + a.id + '">#' + a.id + ' ' + (a.name||'Sans nom') + ' (' + (tNames[a.type]||'?') + ')</option>';
-      }).join('');
-      startMicLevelPolling();
-    } else {
-      document.getElementById('calibMicSection').style.display = 'none';
-      stopMicLevelPolling();
-    }
-  } catch(e) {
-    document.getElementById('calibMicSection').style.display = 'none';
-  }
-
-  document.getElementById('calibActCount').textContent = acts.length;
-
-  // Render actuator calibration list
-  const actList = document.getElementById('calibActuatorList');
-  if (acts.length === 0) {
-    actList.innerHTML = '<div class="empty-state">Aucun actionneur configure</div>';
-  } else {
-    actList.innerHTML = acts.map(a => {
-      const typeName = ['Servo','Solenoide','PWM Motor','Motor Optical'][a.type] || 'Inconnu';
-      const behavNames = ['Sol.Strike','Sol.Hold','Servo Pos','Servo Strike','Comb/Brush',
-        'Pitch Bend','Motor Optical','Hi-Hat Ctrl','Servo Mute','Sol.Mute',
-        'Motor Timed','Motor Speed','Motor Sweep','Motor Alt.'];
-      const behavName = behavNames[a.behavior] || '?';
-      // Type-specific label and hints
-      let sliderLabel = 'Valeur';
-      let hint = '';
-      if (a.type === 0) { // Servo
-        sliderLabel = 'Position';
-        hint = 'Angle: ' + a.paramMin + '°-' + a.paramMax + '° (repos: ' + a.paramDefault + '°)';
-      } else if (a.type === 1) { // Solenoid
-        sliderLabel = a.behavior === 0 ? 'Force' : 'Valeur';
-        hint = a.behavior === 0 ? 'Duree: ' + a.paramMin + '-' + a.paramMax + 'ms | Cooldown: ' + Math.round(a.cooldownUs * 0.1) + 'ms' :
-               a.behavior === 1 ? 'PWM act: ' + a.paramMin + ' hold: ' + a.paramMax + ' | Trans: ' + a.paramDefault + 'ms' :
-               'On/Off toggle';
-      } else if (a.type === 2) { // Motor
-        sliderLabel = 'Vitesse';
-        hint = 'PWM: ' + a.paramMin + '%-' + a.paramMax + '%' + (a.inverted ? ' [INV]' : '');
-      }
-      const border = a.active ? 'var(--success)' : 'var(--accent2)';
-      // Type-specific quick buttons
-      let quickBtns = '';
-      if (a.type === 0) { // Servo: min/center/max quick positions
-        quickBtns = '<div style="display:flex;gap:4px;margin-top:6px;">' +
-          '<button class="btn btn-sm btn-secondary" onclick="calibQuickVal(' + a.id + ',0)">Min (0)</button>' +
-          '<button class="btn btn-sm btn-secondary" onclick="calibQuickVal(' + a.id + ',64)">Centre (64)</button>' +
-          '<button class="btn btn-sm btn-secondary" onclick="calibQuickVal(' + a.id + ',127)">Max (127)</button>' +
-          '</div>';
-      }
-      return '<div class="calib-item" data-actid="' + a.id + '" style="border-left-color:' + border + ';">' +
-        '<h4><span>#' + a.id + ' ' + (a.name||'Sans nom') + '</span>' +
-        '<span class="badge">' + typeName + ' / ' + behavName + '</span>' +
-        '<span class="badge badge-green" id="calibActive' + a.id + '" style="display:' + (a.active ? 'inline-block' : 'none') + ';">ACTIF</span></h4>' +
-        '<div class="calib-controls">' +
-          '<label style="font-size:0.8em;color:var(--fg2);min-width:55px;">' + sliderLabel + ':</label>' +
-          '<input type="range" class="calib-slider" id="calibVal' + a.id + '" min="0" max="127" value="80" ' +
-            'oninput="document.getElementById(\'calibDisp' + a.id + '\').textContent=this.value">' +
-          '<span class="calib-val" id="calibDisp' + a.id + '">80</span>' +
-          '<button class="btn btn-primary btn-sm" onclick="calibTestActuator(' + a.id + ')">Tester</button>' +
-          '<button class="btn btn-danger btn-sm" onclick="calibStopActuator(' + a.id + ')">Stop</button>' +
-        '</div>' +
-        quickBtns +
-        (hint ? '<div style="margin-top:6px;font-size:0.78em;color:var(--fg2);">' + hint + '</div>' : '') +
-      '</div>';
-    }).join('');
-  }
-
-  // Render instrument test list
-  const instrList = document.getElementById('calibInstrumentList');
-  if (instrs.length === 0) {
-    instrList.innerHTML = '<div class="empty-state">Aucun instrument configure</div>';
-  } else {
-    instrList.innerHTML = instrs.map(inst => {
-      // Find linked actuator names
-      const actIds = inst.actuatorIds || [];
-      const actNames = actIds.map(aid => {
-        const a = acts.find(x => x.id === aid);
-        return a ? ('#' + a.id + ' ' + (a.name||'?')) : '#' + aid;
-      });
-      const actInfo = actNames.length ? actNames.join(', ') : 'Aucun';
-      return '<div class="calib-item" data-instid="' + inst.id + '">' +
-        '<h4><span>' + (inst.name||'Sans nom') + '</span>' +
-        '<span class="badge">Note ' + inst.midiNote + ' | CH ' + inst.midiChannel + '</span></h4>' +
-        '<div style="font-size:0.78em;color:var(--fg2);margin-bottom:6px;">Actionneurs: ' + actInfo + '</div>' +
-        '<div class="calib-controls">' +
-          '<label style="font-size:0.8em;color:var(--fg2);min-width:50px;">Velocity:</label>' +
-          '<input type="range" class="calib-slider" id="calibInstVel' + inst.id + '" min="1" max="127" value="80" ' +
-            'oninput="document.getElementById(\'calibInstDisp' + inst.id + '\').textContent=this.value">' +
-          '<span class="calib-val" id="calibInstDisp' + inst.id + '">80</span>' +
-          '<button class="btn btn-success btn-sm" onclick="calibTestInstrument(' + inst.id + ')">Tester</button>' +
-          '<button class="btn btn-secondary btn-sm" onclick="calibSweepInstrument(' + inst.id + ')" title="Test progressif de velocity">Sweep</button>' +
-        '</div>' +
-      '</div>';
-    }).join('');
-  }
-}
-
-async function calibTestActuator(id) {
-  const val = parseInt(document.getElementById('calibVal' + id).value) || 80;
-  await api('test/actuator', 'POST', {id, value:val});
-  toast('Actuateur #' + id + ' teste (val=' + val + ')', 'success');
-}
-
-async function calibStopActuator(id) {
-  await api('test/actuator', 'POST', {id, value:0});
-}
-
-function calibQuickVal(id, val) {
-  document.getElementById('calibVal' + id).value = val;
-  document.getElementById('calibDisp' + id).textContent = val;
-  api('test/actuator', 'POST', {id, value: val});
-}
-
-async function calibTestInstrument(id) {
-  const vel = parseInt(document.getElementById('calibInstVel' + id).value) || 80;
-  await api('test/instrument', 'POST', {id, velocity:vel});
-  toast('Instrument #' + id + ' teste (vel=' + vel + ')', 'success');
-}
-
-async function calibSweepInstrument(id) {
-  const velocities = [20, 40, 60, 80, 100, 120, 127];
-  toast('Sweep velocity: ' + velocities.join(' → '), 'success');
-  for (let i = 0; i < velocities.length; i++) {
-    await api('test/instrument', 'POST', {id, velocity: velocities[i]});
-    await new Promise(r => setTimeout(r, 400));
-  }
-}
-
-// Real-time actuator status polling (calibration tab)
-let calibPollTimer = null;
-function startCalibPolling() {
-  stopCalibPolling();
-  calibPollTimer = setInterval(updateCalibStatus, 500);
-}
-function stopCalibPolling() {
-  if (calibPollTimer) { clearInterval(calibPollTimer); calibPollTimer = null; }
-}
-async function updateCalibStatus() {
-  try {
-    const resp = await fetch('/api/actuators/status');
-    if (!resp.ok) return;
-    const statuses = await resp.json();
-    let activeCount = 0;
-    statuses.forEach(s => {
-      const badge = document.getElementById('calibActive' + s.id);
-      const card = document.querySelector('.calib-item[data-actid="' + s.id + '"]');
-      if (badge) badge.style.display = s.active ? 'inline-block' : 'none';
-      if (card) card.style.borderLeftColor = s.active ? 'var(--success)' : 'var(--accent2)';
-      if (s.active) activeCount++;
-    });
-    const countEl = document.getElementById('calibActiveCount');
-    if (countEl) countEl.textContent = activeCount;
-  } catch(e) {}
-}
-
-async function testIntegration() {
-  const enabled = instruments.filter(i => i.enabled !== false);
-  if (enabled.length === 0) { toast('Aucun instrument actif', 'warn'); return; }
-  toast('Test integration: ' + enabled.length + ' instruments via MIDI...', 'success');
-  for (let i = 0; i < enabled.length; i++) {
-    const inst = enabled[i];
-    // Flash the instrument card in calibration list
-    const card = document.querySelector('.calib-item[data-instid="' + inst.id + '"]');
-    if (card) card.style.boxShadow = '0 0 8px var(--success)';
-    // Send NoteOn via MIDI pipeline
-    await api('test/note', 'POST', {note: inst.midiNote, velocity: 80, channel: 10});
-    await new Promise(r => setTimeout(r, 300));
-    // Send NoteOff
-    await api('test/note', 'POST', {note: inst.midiNote, velocity: 0, channel: 10, noteOff: true});
-    await new Promise(r => setTimeout(r, 200));
-    if (card) card.style.boxShadow = '';
-  }
-  toast('Test integration termine', 'success');
+  // Populate actuator dropdown for latency measurement
+  const sel = document.getElementById('micLatencyActuator');
+  sel.innerHTML = acts.filter(a => a.enabled).map(a => {
+    const tNames = ['Servo','Sol.','Motor','Motor'];
+    return '<option value="' + a.id + '">#' + a.id + ' ' + (a.name||'Sans nom') + ' (' + (tNames[a.type]||'?') + ')</option>';
+  }).join('');
+  startMicLevelPolling();
 }
 
 async function emergencyStopAll() {

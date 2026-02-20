@@ -129,6 +129,15 @@ void MotorActuator::execute(const ActuatorCommand& cmd) {
                _config.name, speed);
           break;
 
+        case ActuatorBehavior::MOTOR_SPEED:
+          // M1 fix: PULSE on MOTOR_SPEED = timed run using cmd.duration
+          _timedDurationUs = (cmd.duration > 0) ? (uint32_t)cmd.duration * 100 : 500000;
+          _alternateRunning = false;
+          _driver->pwmWrite(_config.hwPin, speed);
+          _currentSpeed = speed;
+          markActivation(now);
+          break;
+
         default:
           break;
       }
@@ -280,16 +289,19 @@ void MotorActuator::_updateOpticalTracking(uint32_t nowUs) {
 
 // ---------------------------------------------------------------------------
 // End stop checking - reads digital pins, returns true if any triggered (LOW)
+// M2 fix: Double-read debounce to avoid false triggers from noise
 // ---------------------------------------------------------------------------
 bool MotorActuator::_checkEndStops() {
   if (_config.endStopPin1 != 0xFF && _config.endStopPin1 < 40) {
     if (digitalRead(_config.endStopPin1) == LOW) {
-      return true;
+      delayMicroseconds(50);
+      if (digitalRead(_config.endStopPin1) == LOW) return true;
     }
   }
   if (_config.endStopPin2 != 0xFF && _config.endStopPin2 < 40) {
     if (digitalRead(_config.endStopPin2) == LOW) {
-      return true;
+      delayMicroseconds(50);
+      if (digitalRead(_config.endStopPin2) == LOW) return true;
     }
   }
   return false;
@@ -372,8 +384,9 @@ bool MotorActuator::checkTimeout(uint32_t nowUs) {
     return !_active;
   }
 
-  // --- MOTOR_TIMED : arret apres duree ecoulee ---
-  if (_config.behavior == ActuatorBehavior::MOTOR_TIMED && _timedDurationUs > 0) {
+  // --- MOTOR_TIMED / MOTOR_SPEED (with PULSE duration) : arret apres duree ecoulee ---
+  if ((_config.behavior == ActuatorBehavior::MOTOR_TIMED ||
+       _config.behavior == ActuatorBehavior::MOTOR_SPEED) && _timedDurationUs > 0) {
     uint32_t elapsed = nowUs - _activationStartUs;
     if (elapsed >= _timedDurationUs) {
       DBGF("[Actuator] Motor '%s' timed done (%lu us)\n",

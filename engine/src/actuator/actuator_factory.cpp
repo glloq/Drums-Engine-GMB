@@ -163,6 +163,7 @@ HalDriver* ActuatorFactory::_getDriver(HardwareBus bus, uint8_t hwAddress) {
   switch (bus) {
     case HardwareBus::MCP23017: {
       if (!_mcpDrivers) return nullptr;
+      if (hwAddress < MCP_BASE_ADDRESS) return nullptr;  // C4 fix: prevent underflow
       uint8_t idx = hwAddress - MCP_BASE_ADDRESS;
       if (idx < _mcpCount && _mcpDrivers[idx].isReady()) {
         return &_mcpDrivers[idx];
@@ -188,6 +189,7 @@ HalDriver* ActuatorFactory::_getDriver(HardwareBus bus, uint8_t hwAddress) {
 
 PCA9685Driver* ActuatorFactory::_getPcaDriver(uint8_t hwAddress) {
   if (!_pcaDrivers) return nullptr;
+  if (hwAddress < PCA_BASE_ADDRESS) return nullptr;  // C4 fix: prevent underflow
   uint8_t idx = hwAddress - PCA_BASE_ADDRESS;
   if (idx < _pcaCount && _pcaDrivers[idx].isReady()) {
     return &_pcaDrivers[idx];

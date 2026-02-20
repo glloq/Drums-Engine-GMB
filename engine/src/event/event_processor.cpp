@@ -87,48 +87,49 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
 
     const CompiledPipeline& pipeline = _lookup.pipelines[pipelineIdx];
 
-    // Decrement stack counter; only fire noteOff actions when last instance releases
+    // C3 fix: Atomic read-check-modify to prevent race between cores
+    bool fireNoteOff = false;
     portENTER_CRITICAL(&_noteActiveMux);
     uint8_t noteOffCount = _noteActive[ev.data1];
     if (noteOffCount == 0) {
       portEXIT_CRITICAL(&_noteActiveMux);
       return;  // No active note — ignore spurious NoteOff
     }
-    portEXIT_CRITICAL(&_noteActiveMux);
-
     if (noteOffCount > 1 &&
         pipeline.retrigger_mode == (uint8_t)RetriggerMode::STACK) {
-      portENTER_CRITICAL(&_noteActiveMux);
-      if (_noteActive[ev.data1] > 0) _noteActive[ev.data1]--;
+      _noteActive[ev.data1]--;
       portEXIT_CRITICAL(&_noteActiveMux);
       return;  // Other instances still active, don't fire noteOff yet
     }
-
-    if (pipeline.note_off_count > 0) {
-      _scheduler->scheduleActionSteps(pipeline.note_off_actions, pipeline.note_off_count,
-                                      ev.data2, ev.timestamp, _state->raw().variables);
-    } else if (pipeline.output_actuator_id != 0xFF) {
-      ActuatorCommand cmd;
-      cmd.actuator_id = pipeline.output_actuator_id;
-      cmd.command_type = (uint8_t)CommandType::OFF;
-      cmd.value = 0;
-      cmd.duration = 0;
-      cmd.execute_at = ev.timestamp;
-      _scheduler->scheduleCommand(cmd);
-    }
-
-    // Push LED NoteOff event (fade out animation)
-    if (_ledQueue) {
-      LedEvent ledEv;
-      ledEv.midiNote = ev.data1;
-      ledEv.velocity = ev.data2;
-      ledEv.noteOn = false;
-      ledEv.segmentId = 0xFF;
-      _ledQueue->push(ledEv);
-    }
-    portENTER_CRITICAL(&_noteActiveMux);
+    // Last instance releasing — zero counter and fire noteOff
     _noteActive[ev.data1] = 0;
+    fireNoteOff = true;
     portEXIT_CRITICAL(&_noteActiveMux);
+
+    if (fireNoteOff) {
+      if (pipeline.note_off_count > 0) {
+        _scheduler->scheduleActionSteps(pipeline.note_off_actions, pipeline.note_off_count,
+                                        ev.data2, ev.timestamp, _state->raw().variables);
+      } else if (pipeline.output_actuator_id != 0xFF) {
+        ActuatorCommand cmd;
+        cmd.actuator_id = pipeline.output_actuator_id;
+        cmd.command_type = (uint8_t)CommandType::OFF;
+        cmd.value = 0;
+        cmd.duration = 0;
+        cmd.execute_at = ev.timestamp;
+        _scheduler->scheduleCommand(cmd);
+      }
+
+      // Push LED NoteOff event (fade out animation)
+      if (_ledQueue) {
+        LedEvent ledEv;
+        ledEv.midiNote = ev.data1;
+        ledEv.velocity = ev.data2;
+        ledEv.noteOn = false;
+        ledEv.segmentId = 0xFF;
+        _ledQueue->push(ledEv);
+      }
+    }
   }
   else if (ev.type == MIDI_EVT_CC) {
     _processCcEvent(ev);

@@ -8,6 +8,11 @@
 bool ApiAuth::begin() {
   if (_loadToken()) {
     DBGF("[Auth] Token loaded from %s\n", AUTH_TOKEN_FILE);
+    if (_hasPin) {
+      DBGLN("[Auth] PIN protection enabled");
+    } else {
+      DBGLN("[Auth] No PIN set — token endpoint is open");
+    }
     return true;
   }
 
@@ -60,6 +65,30 @@ String ApiAuth::getToken() const {
   return String(_token);
 }
 
+bool ApiAuth::hasPin() const {
+  return _hasPin;
+}
+
+bool ApiAuth::checkPin(const String& pin) const {
+  if (!_hasPin) return true;  // no PIN set = always OK
+  if (pin.length() == 0 || pin.length() > AUTH_PIN_MAX_LEN) return false;
+  return pin.equals(String(_pin));
+}
+
+bool ApiAuth::setPin(const String& pin) {
+  if (pin.length() > AUTH_PIN_MAX_LEN) return false;
+  if (pin.length() == 0) {
+    // Remove PIN
+    _pin[0] = '\0';
+    _hasPin = false;
+  } else {
+    memcpy(_pin, pin.c_str(), pin.length());
+    _pin[pin.length()] = '\0';
+    _hasPin = true;
+  }
+  return _saveAuthFile();
+}
+
 // --- Private helpers --------------------------------------------------------
 
 bool ApiAuth::_loadToken() {
@@ -99,6 +128,17 @@ bool ApiAuth::_loadToken() {
   memcpy(_token, token, AUTH_TOKEN_LEN);
   _token[AUTH_TOKEN_LEN] = '\0';
 
+  // Load PIN if present
+  const char* pin = doc["pin"];
+  if (pin && strlen(pin) > 0 && strlen(pin) <= AUTH_PIN_MAX_LEN) {
+    memcpy(_pin, pin, strlen(pin));
+    _pin[strlen(pin)] = '\0';
+    _hasPin = true;
+  } else {
+    _pin[0] = '\0';
+    _hasPin = false;
+  }
+
   return true;
 }
 
@@ -117,7 +157,14 @@ bool ApiAuth::_generateAndSaveToken() {
   }
   _token[AUTH_TOKEN_LEN] = '\0';
 
-  // Save to LittleFS
+  // No PIN on first generation
+  _pin[0] = '\0';
+  _hasPin = false;
+
+  return _saveAuthFile();
+}
+
+bool ApiAuth::_saveAuthFile() {
   File f = LittleFS.open(AUTH_TOKEN_FILE, "w");
   if (!f) {
     DBGLN("[Auth] Failed to open auth file for writing");
@@ -126,6 +173,9 @@ bool ApiAuth::_generateAndSaveToken() {
 
   JsonDocument doc;
   doc["token"] = _token;
+  if (_hasPin) {
+    doc["pin"] = _pin;
+  }
 
   size_t written = serializeJson(doc, f);
   f.close();

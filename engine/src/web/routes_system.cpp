@@ -615,11 +615,78 @@ void WebServerManager::_handleClearLogs(AsyncWebServerRequest* req) {
 }
 
 void WebServerManager::_handleGetAuthToken(AsyncWebServerRequest* req) {
-  // Only allow from local network (AP gateway or same subnet)
+  // If PIN is set, require it as query parameter
+  if (_auth.hasPin()) {
+    if (!req->hasParam("pin")) {
+      JsonDocument doc;
+      doc["error"] = "PIN required";
+      doc["pinRequired"] = true;
+      _sendJson(req, 401, doc);
+      return;
+    }
+    String pin = req->getParam("pin")->value();
+    if (!_auth.checkPin(pin)) {
+      JsonDocument doc;
+      doc["error"] = "Invalid PIN";
+      doc["pinRequired"] = true;
+      _sendJson(req, 401, doc);
+      return;
+    }
+  }
   JsonDocument doc;
   doc["token"] = _auth.getToken();
-  doc["usage"] = "Authorization: Bearer <token>";
+  doc["pinRequired"] = _auth.hasPin();
   _sendJson(req, 200, doc);
+}
+
+void WebServerManager::_handleLoginStatus(AsyncWebServerRequest* req) {
+  JsonDocument doc;
+  doc["pinRequired"] = _auth.hasPin();
+  _sendJson(req, 200, doc);
+}
+
+void WebServerManager::_handleSetPin(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
+  JsonDocument doc;
+  DeserializationError err = deserializeJson(doc, data, len);
+  if (err) {
+    _sendError(req, 400, "Invalid JSON");
+    return;
+  }
+
+  // If a PIN is already set, require current PIN to change it
+  if (_auth.hasPin()) {
+    const char* currentPin = doc["currentPin"];
+    if (!currentPin || !_auth.checkPin(String(currentPin))) {
+      _sendError(req, 401, "Current PIN is incorrect");
+      return;
+    }
+  }
+
+  const char* newPin = doc["pin"];
+  if (!newPin) {
+    // Remove PIN
+    _auth.setPin("");
+    JsonDocument resp;
+    resp["message"] = "PIN removed";
+    resp["pinRequired"] = false;
+    _sendJson(req, 200, resp);
+    return;
+  }
+
+  String pinStr(newPin);
+  if (pinStr.length() < 4 || pinStr.length() > 16) {
+    _sendError(req, 400, "PIN must be 4-16 characters");
+    return;
+  }
+
+  if (_auth.setPin(pinStr)) {
+    JsonDocument resp;
+    resp["message"] = "PIN set successfully";
+    resp["pinRequired"] = true;
+    _sendJson(req, 200, resp);
+  } else {
+    _sendError(req, 500, "Failed to save PIN");
+  }
 }
 
 void WebServerManager::_handleGetMidiChannels(AsyncWebServerRequest* req) {

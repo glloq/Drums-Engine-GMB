@@ -1,4 +1,5 @@
 #include "actuator_manager.h"
+#include "servo_actuator.h"
 #include "../scheduler/scheduler.h"
 
 // Spinlock for _activeCount shared between Core 0 (web/watchdog) and Core 1 (scheduler dispatch)
@@ -160,6 +161,14 @@ void ActuatorManager::testActuator(uint8_t id, uint8_t value) {
     default:
       break;
   }
+}
+
+void ActuatorManager::testServoAngle(uint8_t id, uint8_t angle) {
+  Actuator* act = getActuator(id);
+  if (!act) return;
+  if (act->getConfig().type != ActuatorType::SERVO) return;
+  DBGF("[ActMgr] Test servo '%s' raw angle=%d\n", act->getConfig().name, angle);
+  static_cast<ServoActuator*>(act)->moveToRawAngle(angle);
 }
 
 // --- Safety ---

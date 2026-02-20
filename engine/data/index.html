@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Drums Engine</title>
 <style>
 :root {
@@ -215,11 +218,31 @@ input[type=checkbox] { width: auto; }
 .calib-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .calib-slider { flex: 2; min-width: 100px; }
 .calib-val { min-width: 32px; text-align: center; font-weight: 600; font-size: 0.9em; }
+/* Servo gauge */
+.servo-gauge { background:var(--bg);border-radius:var(--radius);padding:12px;margin:8px 0; }
+.servo-gauge-bar { position:relative;height:32px;background:linear-gradient(90deg,var(--bg2),var(--accent2));border-radius:6px;margin:8px 0;overflow:visible; }
+.servo-gauge-bar .gauge-fill { position:absolute;top:0;left:0;height:100%;background:var(--accent);border-radius:6px 0 0 6px;transition:width 0.05s; }
+.servo-gauge-bar .gauge-handle { position:absolute;top:-4px;width:4px;height:40px;background:var(--fg);border-radius:2px;transform:translateX(-2px);pointer-events:none; }
+.servo-gauge-ticks { display:flex;justify-content:space-between;font-size:0.7em;color:var(--fg2);padding:0 2px; }
+.servo-angle-input { width:60px;text-align:center;font-size:1.1em;font-weight:700;padding:6px;border:2px solid var(--accent);border-radius:var(--radius); }
+.servo-save-btns { display:flex;gap:6px;flex-wrap:wrap;margin-top:8px; }
+.servo-save-btns button { font-size:0.78em; }
+.servo-range-marker { position:absolute;top:0;height:100%;border-left:2px dashed var(--success);opacity:0.6;pointer-events:none; }
 /* Modal calibration section */
 .act-calib-section { border: 1px solid var(--accent2); border-radius: var(--radius); padding: 12px; margin-bottom: 12px; background: rgba(83,52,131,0.08); }
 .act-calib-section h3 { font-size: 0.95em; margin: 0 0 8px 0; display: flex; justify-content: space-between; align-items: center; }
 .act-calib-quick { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
 .act-calib-info { font-size: 0.78em; color: var(--fg2); margin-top: 6px; }
+
+/* Login screen */
+.login-overlay { position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center; }
+.login-box { background:var(--bg2);border-radius:12px;padding:32px 28px;max-width:360px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.5);text-align:center; }
+.login-box h1 { font-size:1.4em;margin-bottom:4px;color:var(--accent); }
+.login-box .login-subtitle { font-size:0.85em;color:var(--fg2);margin-bottom:24px; }
+.login-box input[type=password], .login-box input[type=text] { text-align:center;font-size:1.2em;letter-spacing:4px;padding:12px;margin-bottom:12px; }
+.login-box .btn { width:100%;padding:12px;font-size:1em;margin-bottom:8px; }
+.login-error { color:var(--accent);font-size:0.85em;min-height:20px;margin-bottom:8px; }
+.login-box .login-version { font-size:0.7em;color:var(--fg2);margin-top:16px;opacity:0.5; }
 
 @media (max-width: 600px) {
   .content { padding: 8px; }
@@ -257,6 +280,32 @@ input[type=checkbox] { width: auto; }
 </head>
 <body>
 
+<!-- ====== LOGIN SCREEN ====== -->
+<div class="login-overlay" id="loginOverlay" style="display:none;">
+  <div class="login-box">
+    <h1>Drums Engine</h1>
+    <div class="login-subtitle">Connexion au controleur</div>
+    <div id="loginSetupMode" style="display:none;">
+      <p style="font-size:0.85em;color:var(--fg2);margin-bottom:12px;">Premiere connexion : choisissez un code PIN (4-16 caracteres)</p>
+      <input type="password" id="loginNewPin" placeholder="Nouveau PIN" maxlength="16" autocomplete="new-password">
+      <input type="password" id="loginConfirmPin" placeholder="Confirmer le PIN" maxlength="16" autocomplete="new-password">
+      <div class="login-error" id="loginSetupError"></div>
+      <button class="btn btn-primary" onclick="loginSetupPin()">Definir le PIN</button>
+      <button class="btn btn-secondary" onclick="loginSkipPin()">Continuer sans PIN</button>
+    </div>
+    <div id="loginPinMode" style="display:none;">
+      <input type="password" id="loginPin" placeholder="Code PIN" maxlength="16" autocomplete="current-password"
+        onkeydown="if(event.key==='Enter')loginSubmit()">
+      <div class="login-error" id="loginError"></div>
+      <button class="btn btn-primary" onclick="loginSubmit()">Connexion</button>
+    </div>
+    <div id="loginLoading">
+      <p style="color:var(--fg2);">Connexion...</p>
+    </div>
+    <div class="login-version">Drums Engine MIDI</div>
+  </div>
+</div>
+
 <div class="header">
   <h1>Drums Engine <span id="saveDot" style="display:none;width:8px;height:8px;border-radius:50%;background:var(--warn);display:none;vertical-align:middle;" title="Modifications non sauvegardees"></span></h1>
   <div style="display:flex;align-items:center;gap:4px;">
@@ -290,7 +339,6 @@ input[type=checkbox] { width: auto; }
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
       <h2>Actionneurs (<span id="actCount">0</span>)</h2>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <input type="text" id="actSearch" placeholder="Filtrer..." oninput="filterList('actuatorList',this.value)" style="width:120px;padding:6px 10px;font-size:0.85em;">
         <button id="btnHideUsed" class="btn btn-sm btn-secondary" onclick="toggleHideUsedActuators()" title="Masquer les actionneurs deja assignes">Cacher utilises</button>
         <select id="actSort" style="padding:6px;font-size:0.85em;" onchange="sortActuators(this.value)">
           <option value="">Trier...</option>
@@ -460,7 +508,6 @@ input[type=checkbox] { width: auto; }
       </h3>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
         <p class="hint" style="margin:0;">Test rapide. Pour calibrer finement, utilisez le bouton Modifier sur chaque actionneur.</p>
-        <button class="btn btn-sm btn-success" onclick="testAllSequential()" title="Teste chaque actionneur un par un">Test Sequence</button>
         <button class="btn btn-sm btn-secondary" onclick="testIntegration()" title="Teste la chaine MIDI complete pour chaque instrument">Test Integration</button>
         <input type="text" placeholder="Filtrer..." oninput="filterList('calibActuatorList',this.value)" style="width:120px;padding:5px 8px;font-size:0.85em;">
       </div>
@@ -505,7 +552,6 @@ input[type=checkbox] { width: auto; }
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;">
         <button class="btn btn-primary" onclick="measureLatencySingle()">Mesurer 1x</button>
         <button class="btn btn-success" onclick="measureLatencyBurst()" id="btnLatencyBurst">Mesurer 5x (moyenne)</button>
-        <button class="btn btn-secondary" onclick="measureLatencyAll()">Tester tous les actionneurs</button>
         <div id="micLevelBar" style="flex:1;height:8px;background:var(--bg);border-radius:4px;overflow:hidden;">
           <div id="micLevelFill" style="height:100%;width:0%;background:var(--success);transition:width 0.1s;"></div>
         </div>
@@ -1171,6 +1217,33 @@ input[type=checkbox] { width: auto; }
       </label>
     </div>
 
+    <!-- Security / PIN -->
+    <div class="card" style="margin-top:12px;">
+      <h3>Securite</h3>
+      <div id="pinStatus" style="font-size:0.85em;margin-bottom:8px;"></div>
+      <div id="pinChangeSection">
+        <div class="form-row">
+          <div class="form-group" id="pinCurrentGroup" style="display:none;">
+            <label>PIN actuel</label>
+            <input type="password" id="settCurrentPin" placeholder="PIN actuel" maxlength="16">
+          </div>
+          <div class="form-group">
+            <label>Nouveau PIN</label>
+            <input type="password" id="settNewPin" placeholder="4-16 caracteres" maxlength="16">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:6px;">
+          <button class="btn btn-primary btn-sm" onclick="changePin()">Definir le PIN</button>
+          <button class="btn btn-danger btn-sm" id="btnRemovePin" style="display:none;" onclick="removePin()">Supprimer le PIN</button>
+        </div>
+      </div>
+      <div class="hint" style="margin-top:6px;">Le PIN est demande a chaque connexion pour proteger l'acces.</div>
+      <div style="margin-top:10px;border-top:1px solid rgba(255,255,255,0.1);padding-top:10px;">
+        <button class="btn btn-secondary btn-sm" onclick="logoutSession()">Deconnexion</button>
+        <span class="hint" style="margin-left:6px;">Oublie le token de session sur ce navigateur</span>
+      </div>
+    </div>
+
     <!-- Import/Export -->
     <div class="card" style="margin-top:12px;">
       <h3>Sauvegarde / Restauration</h3>
@@ -1528,22 +1601,153 @@ async function api(path, method='GET', body=null, silent=false) {
 }
 
 // ====================================================================
-// Init
+// Login & Init
 // ====================================================================
-async function init() {
-  // Fetch API auth token (required for POST/PUT/DELETE)
-  const authData = await api('auth-token');
-  if (authData && authData.token) apiToken = authData.token;
 
+async function init() {
+  // Check login status first
+  try {
+    const r = await fetch('/api/login-status');
+    const status = await r.json();
+
+    if (status.pinRequired) {
+      // PIN is set: show login screen
+      const savedToken = localStorage.getItem('drumsApiToken');
+      if (savedToken) {
+        // Try saved token
+        apiToken = savedToken;
+        const check = await api('status', 'GET', null, true);
+        if (check) {
+          // Token still valid, proceed
+          hideLogin();
+          await initApp();
+          return;
+        }
+        // Token invalid, clear and show login
+        localStorage.removeItem('drumsApiToken');
+        apiToken = '';
+      }
+      showLoginPin();
+    } else {
+      // No PIN: check if first connection (offer to set one)
+      const hasSkipped = localStorage.getItem('drumsSkipPin');
+      if (!hasSkipped) {
+        showLoginSetup();
+      } else {
+        // Auto-connect without PIN
+        const authData = await api('auth-token');
+        if (authData && authData.token) {
+          apiToken = authData.token;
+          localStorage.setItem('drumsApiToken', apiToken);
+        }
+        hideLogin();
+        await initApp();
+      }
+    }
+  } catch (e) {
+    // Network error: try to load anyway (might be first connection)
+    hideLogin();
+    await initApp();
+  }
+}
+
+function showLoginPin() {
+  document.getElementById('loginOverlay').style.display = '';
+  document.getElementById('loginLoading').style.display = 'none';
+  document.getElementById('loginSetupMode').style.display = 'none';
+  document.getElementById('loginPinMode').style.display = '';
+  document.getElementById('loginError').textContent = '';
+  setTimeout(function() { document.getElementById('loginPin').focus(); }, 100);
+}
+
+function showLoginSetup() {
+  document.getElementById('loginOverlay').style.display = '';
+  document.getElementById('loginLoading').style.display = 'none';
+  document.getElementById('loginPinMode').style.display = 'none';
+  document.getElementById('loginSetupMode').style.display = '';
+  document.getElementById('loginSetupError').textContent = '';
+  setTimeout(function() { document.getElementById('loginNewPin').focus(); }, 100);
+}
+
+function hideLogin() {
+  document.getElementById('loginOverlay').style.display = 'none';
+}
+
+async function loginSubmit() {
+  const pin = document.getElementById('loginPin').value;
+  if (!pin) {
+    document.getElementById('loginError').textContent = 'Entrez le code PIN';
+    return;
+  }
+  document.getElementById('loginError').textContent = '';
+  try {
+    const r = await fetch('/api/auth-token?pin=' + encodeURIComponent(pin));
+    const data = await r.json();
+    if (r.ok && data.token) {
+      apiToken = data.token;
+      localStorage.setItem('drumsApiToken', apiToken);
+      hideLogin();
+      await initApp();
+    } else {
+      document.getElementById('loginError').textContent = 'Code PIN incorrect';
+      document.getElementById('loginPin').value = '';
+      document.getElementById('loginPin').focus();
+    }
+  } catch (e) {
+    document.getElementById('loginError').textContent = 'Erreur de connexion';
+  }
+}
+
+async function loginSetupPin() {
+  const pin1 = document.getElementById('loginNewPin').value;
+  const pin2 = document.getElementById('loginConfirmPin').value;
+  const err = document.getElementById('loginSetupError');
+
+  if (!pin1) { err.textContent = 'Entrez un code PIN'; return; }
+  if (pin1.length < 4) { err.textContent = 'Le PIN doit faire au moins 4 caracteres'; return; }
+  if (pin1 !== pin2) { err.textContent = 'Les codes PIN ne correspondent pas'; return; }
+
+  // First get the token (no PIN required yet)
+  const authData = await api('auth-token');
+  if (!authData || !authData.token) {
+    err.textContent = 'Erreur de connexion au controleur';
+    return;
+  }
+  apiToken = authData.token;
+
+  // Set the PIN
+  const result = await api('pin', 'POST', { pin: pin1 });
+  if (result) {
+    localStorage.setItem('drumsApiToken', apiToken);
+    hideLogin();
+    await initApp();
+    toast('PIN defini. Il sera demande a chaque connexion.', 'success');
+  } else {
+    err.textContent = 'Erreur lors de la definition du PIN';
+  }
+}
+
+async function loginSkipPin() {
+  localStorage.setItem('drumsSkipPin', '1');
+  const authData = await api('auth-token');
+  if (authData && authData.token) {
+    apiToken = authData.token;
+    localStorage.setItem('drumsApiToken', apiToken);
+  }
+  hideLogin();
+  await initApp();
+}
+
+async function initApp() {
   populateMidiSelects();
   await Promise.all([loadMidiNotes(), loadCapabilities(), loadActuators(), loadInstruments(), loadLoops(), loadLedData()]);
   refreshStatus();
   setInterval(refreshStatus, 5000);
-  // Auto-connect WebSocket for MIDI RX indicator
   connectWebSocket();
 
-  // Click overlay backdrop to close modals
+  // Click overlay backdrop to close modals (skip login overlay)
   document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    if (overlay.id === 'loginOverlay') return;
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) overlay.classList.remove('show');
     });
@@ -2292,23 +2496,39 @@ function renderActCalibContent() {
         '<button class="btn btn-danger btn-sm" onclick="actCalibStop()">Mute OFF</button>' +
       '</div>';
   } else if (type === 0) {
-    // Servo (all behaviors)
+    // Servo — gauge en degres (0-180) avec envoi direct d'angle brut
     const angleMin = parseInt(document.getElementById('actAngleClosed').value) || 0;
     const angleMax = parseInt(document.getElementById('actAngleOpen').value) || 180;
-    const midAngle = Math.round((angleMin + angleMax) / 2);
-    const initAngle = Math.round(angleMin + (angleMax - angleMin) * 64 / 127);
-    html = '<div class="hint" style="margin-bottom:8px;">Deplacez le curseur pour positionner le servo (' + angleMin + '\u00b0-' + angleMax + '\u00b0).</div>' +
-      '<div class="calib-controls">' +
-        '<label style="font-size:0.8em;color:var(--fg2);min-width:45px;">Angle:</label>' +
-        '<input type="range" class="calib-slider" id="actCalibSlider" min="0" max="127" value="64" oninput="actCalibLiveSend()">' +
-        '<span class="calib-val" id="actCalibDisp">~' + initAngle + '\u00b0</span>' +
+    const defAngle = parseInt(document.getElementById('actAngleDefault').value) || Math.round((angleMin + angleMax) / 2);
+    const initAngle = Math.min(180, Math.max(0, defAngle));
+    html = '<div class="hint" style="margin-bottom:4px;">Jauge 0\u00b0-180\u00b0 : deplacez pour positionner le servo en temps reel.</div>' +
+      '<div class="servo-gauge">' +
+        '<div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;">' +
+          '<input type="range" id="servoGaugeSlider" min="0" max="180" value="' + initAngle + '" style="flex:1;min-width:120px;" oninput="servoGaugeLive(this.value)">' +
+          '<input type="number" id="servoGaugeAngle" class="servo-angle-input" min="0" max="180" value="' + initAngle + '" onchange="servoGaugeSet(this.value)">' +
+          '<span style="font-size:0.9em;font-weight:600;">\u00b0</span>' +
+        '</div>' +
+        '<div class="servo-gauge-bar" id="servoGaugeBar">' +
+          '<div class="gauge-fill" id="servoGaugeFill" style="width:' + Math.round(initAngle * 100 / 180) + '%;"></div>' +
+          '<div class="gauge-handle" id="servoGaugeHandle" style="left:' + Math.round(initAngle * 100 / 180) + '%;"></div>' +
+          (angleMin > 0 ? '<div class="servo-range-marker" style="left:' + Math.round(angleMin * 100 / 180) + '%" title="Min: ' + angleMin + '\u00b0"></div>' : '') +
+          (angleMax < 180 ? '<div class="servo-range-marker" style="left:' + Math.round(angleMax * 100 / 180) + '%" title="Max: ' + angleMax + '\u00b0"></div>' : '') +
+        '</div>' +
+        '<div class="servo-gauge-ticks"><span>0\u00b0</span><span>45\u00b0</span><span>90\u00b0</span><span>135\u00b0</span><span>180\u00b0</span></div>' +
       '</div>' +
-      '<div class="act-calib-quick">' +
-        '<button class="btn btn-sm btn-secondary" onclick="actCalibSetAndTest(0)">Min (' + angleMin + '\u00b0)</button>' +
-        '<button class="btn btn-sm btn-secondary" onclick="actCalibSetAndTest(64)">Centre (~' + midAngle + '\u00b0)</button>' +
-        '<button class="btn btn-sm btn-secondary" onclick="actCalibSetAndTest(127)">Max (' + angleMax + '\u00b0)</button>' +
+      '<div class="act-calib-quick" style="margin-top:6px;">' +
+        '<button class="btn btn-sm btn-secondary" onclick="servoGaugeSet(0)">0\u00b0</button>' +
+        '<button class="btn btn-sm btn-secondary" onclick="servoGaugeSet(45)">45\u00b0</button>' +
+        '<button class="btn btn-sm btn-secondary" onclick="servoGaugeSet(90)">90\u00b0</button>' +
+        '<button class="btn btn-sm btn-secondary" onclick="servoGaugeSet(135)">135\u00b0</button>' +
+        '<button class="btn btn-sm btn-secondary" onclick="servoGaugeSet(180)">180\u00b0</button>' +
       '</div>' +
-      '<div class="act-calib-info"><label><input type="checkbox" id="actCalibLiveMode" checked> Temps reel (servo bouge en glissant le curseur)</label></div>';
+      '<div class="servo-save-btns">' +
+        '<span style="font-size:0.8em;color:var(--fg2);margin-right:4px;">Sauver position comme :</span>' +
+        '<button class="btn btn-sm btn-primary" onclick="servoSaveAngle(\'min\')">Angle Min</button>' +
+        '<button class="btn btn-sm btn-primary" onclick="servoSaveAngle(\'default\')">Angle Repos</button>' +
+        '<button class="btn btn-sm btn-primary" onclick="servoSaveAngle(\'max\')">Angle Max</button>' +
+      '</div>';
   } else if (type === 2) {
     // Motor (all behaviors)
     const pwmMin = parseInt(document.getElementById('actMotorPwmMin').value) || 0;
@@ -2397,6 +2617,60 @@ function actCalibLiveSend() {
   }, 50);
 }
 
+// ====================================================================
+// Servo Gauge — controle direct en degres
+// ====================================================================
+let servoGaugeTimer = null;
+
+function servoGaugeUpdateUI(angle) {
+  angle = Math.max(0, Math.min(180, parseInt(angle) || 0));
+  const slider = document.getElementById('servoGaugeSlider');
+  const input = document.getElementById('servoGaugeAngle');
+  const fill = document.getElementById('servoGaugeFill');
+  const handle = document.getElementById('servoGaugeHandle');
+  if (slider) slider.value = angle;
+  if (input) input.value = angle;
+  const pct = Math.round(angle * 100 / 180) + '%';
+  if (fill) fill.style.width = pct;
+  if (handle) handle.style.left = pct;
+}
+
+function servoGaugeLive(angle) {
+  angle = Math.max(0, Math.min(180, parseInt(angle) || 0));
+  servoGaugeUpdateUI(angle);
+  if (servoGaugeTimer) clearTimeout(servoGaugeTimer);
+  servoGaugeTimer = setTimeout(function() {
+    servoGaugeSendAngle(angle);
+    servoGaugeTimer = null;
+  }, 50);
+}
+
+function servoGaugeSet(angle) {
+  angle = Math.max(0, Math.min(180, parseInt(angle) || 0));
+  servoGaugeUpdateUI(angle);
+  servoGaugeSendAngle(angle);
+}
+
+async function servoGaugeSendAngle(angle) {
+  if (!actCalibActuatorId) return;
+  await api('test/actuator', 'POST', {id: actCalibActuatorId, angle: angle});
+}
+
+function servoSaveAngle(which) {
+  const angle = parseInt(document.getElementById('servoGaugeAngle').value) || 0;
+  if (which === 'min') {
+    document.getElementById('actAngleClosed').value = angle;
+    toast('Angle Min = ' + angle + '\u00b0', 'success');
+  } else if (which === 'max') {
+    document.getElementById('actAngleOpen').value = angle;
+    toast('Angle Max = ' + angle + '\u00b0', 'success');
+  } else if (which === 'default') {
+    document.getElementById('actAngleDefault').value = angle;
+    toast('Angle Repos = ' + angle + '\u00b0', 'success');
+  }
+  renderActCalibContent();
+}
+
 // Apply actuator: save without closing the modal
 async function applyActuator() {
   const editId = document.getElementById('editActId').value;
@@ -2476,6 +2750,73 @@ function sortActuators(key) {
 }
 
 let _hideUsedActuators = false;
+// ====================================================================
+// PIN / Security management
+// ====================================================================
+async function loadPinStatus() {
+  try {
+    const r = await fetch('/api/login-status');
+    const data = await r.json();
+    const hasPin = data.pinRequired;
+    document.getElementById('pinStatus').innerHTML = hasPin ?
+      '<span style="color:var(--success);">PIN actif</span> — la connexion est protegee.' :
+      '<span style="color:var(--warn);">Aucun PIN</span> — l\'acces est ouvert a tous sur le reseau.';
+    document.getElementById('pinCurrentGroup').style.display = hasPin ? '' : 'none';
+    document.getElementById('btnRemovePin').style.display = hasPin ? '' : 'none';
+  } catch(e) {}
+}
+
+async function changePin() {
+  const current = document.getElementById('settCurrentPin').value;
+  const newPin = document.getElementById('settNewPin').value;
+  if (!newPin || newPin.length < 4) {
+    toast('Le PIN doit faire au moins 4 caracteres', 'error');
+    return;
+  }
+  const body = { pin: newPin };
+  // Include current PIN if one is set
+  if (document.getElementById('pinCurrentGroup').style.display !== 'none') {
+    body.currentPin = current;
+  }
+  const result = await api('pin', 'POST', body);
+  if (result) {
+    toast('PIN mis a jour', 'success');
+    // Re-fetch token with new PIN
+    const r = await fetch('/api/auth-token?pin=' + encodeURIComponent(newPin));
+    const data = await r.json();
+    if (data.token) {
+      apiToken = data.token;
+      localStorage.setItem('drumsApiToken', apiToken);
+    }
+    localStorage.removeItem('drumsSkipPin');
+    document.getElementById('settCurrentPin').value = '';
+    document.getElementById('settNewPin').value = '';
+    loadPinStatus();
+  }
+}
+
+async function removePin() {
+  const current = document.getElementById('settCurrentPin').value;
+  if (!current) {
+    toast('Entrez le PIN actuel pour le supprimer', 'error');
+    return;
+  }
+  const result = await api('pin', 'POST', { pin: null, currentPin: current });
+  if (result) {
+    toast('PIN supprime', 'success');
+    localStorage.setItem('drumsSkipPin', '1');
+    document.getElementById('settCurrentPin').value = '';
+    loadPinStatus();
+  }
+}
+
+function logoutSession() {
+  localStorage.removeItem('drumsApiToken');
+  localStorage.removeItem('drumsSkipPin');
+  apiToken = '';
+  location.reload();
+}
+
 function toggleLedsTab(show) {
   document.getElementById('tabLeds').style.display = show ? '' : 'none';
   localStorage.setItem('showLedsTab', show ? '1' : '0');
@@ -4709,7 +5050,7 @@ async function importConfig(file) {
 // ====================================================================
 function showModal(id) {
   document.getElementById(id).classList.add('show');
-  if (id === 'modalSettings') { loadWifiSettings(); loadMidiChannels(); refreshStatus(); document.getElementById('settHideUsedActuators').checked = hideUsedActuators; }
+  if (id === 'modalSettings') { loadWifiSettings(); loadMidiChannels(); refreshStatus(); loadPinStatus(); document.getElementById('settHideUsedActuators').checked = hideUsedActuators; }
   if (id === 'modalLoopEditor') { renderLoops(); }
 }
 function closeModal(id) {
@@ -6018,22 +6359,6 @@ async function updateCalibStatus() {
   } catch(e) {}
 }
 
-async function testAllSequential() {
-  const enabled = actuators.filter(a => a.enabled);
-  if (enabled.length === 0) { toast('Aucun actionneur actif', 'warn'); return; }
-  toast('Test sequentiel: ' + enabled.length + ' actionneurs...', 'success');
-  for (let i = 0; i < enabled.length; i++) {
-    const a = enabled[i];
-    // Highlight current item
-    const card = document.querySelector('.calib-item[data-actid="' + a.id + '"]');
-    if (card) card.style.boxShadow = '0 0 8px var(--success)';
-    await api('test/actuator', 'POST', {id: a.id, value: 80});
-    await new Promise(r => setTimeout(r, 400));
-    if (card) card.style.boxShadow = '';
-  }
-  toast('Test sequentiel termine', 'success');
-}
-
 async function testIntegration() {
   const enabled = instruments.filter(i => i.enabled !== false);
   if (enabled.length === 0) { toast('Aucun instrument actif', 'warn'); return; }
@@ -6181,36 +6506,6 @@ async function measureLatencyBurst() {
     'success'
   );
   toast('Latence moyenne: ' + avg.toFixed(2) + ' ms (' + results.length + '/' + count + ')', 'success');
-}
-
-async function measureLatencyAll() {
-  const sel = document.getElementById('micLatencyActuator');
-  const opts = Array.from(sel.options);
-  if (opts.length === 0) { toast('Aucun actionneur disponible', 'warn'); return; }
-  const threshold = parseInt(document.getElementById('micThreshold').value) || 500;
-  const value = parseInt(document.getElementById('micTestValue').value) || 100;
-  toast('Test de tous les actionneurs (' + opts.length + ')...', 'success');
-  _appendLatencyResult('--- Test complet (' + opts.length + ' actionneurs) ---', '');
-
-  for (let i = 0; i < opts.length; i++) {
-    const actId = parseInt(opts[i].value);
-    const actLabel = opts[i].textContent;
-    sel.value = actId; // highlight current in dropdown
-    try {
-      const r = await api('mic/measure-latency', 'POST', {
-        actuatorId: actId, value, threshold, timeoutMs: 500
-      });
-      if (r && r.detected) {
-        _appendLatencyResult(actLabel + ' → ' + r.latencyMs.toFixed(2) + ' ms | peak=' + r.triggerPeak, 'success');
-      } else {
-        _appendLatencyResult(actLabel + ' → Pas de son detecte', 'error');
-      }
-    } catch(e) {
-      _appendLatencyResult(actLabel + ' → Erreur: ' + e.message, 'error');
-    }
-    if (i < opts.length - 1) await new Promise(r => setTimeout(r, 800));
-  }
-  toast('Test complet termine', 'success');
 }
 
 // Theme toggle

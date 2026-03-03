@@ -3,21 +3,26 @@
 
 #include "../core/types.h"
 #include "../core/config.h"
+#include <freertos/portmacro.h>
 
 // ============================================================================
-// CommandQueue - File circulaire statique lock-free
+// CommandQueue - File circulaire statique avec spinlock
 // ============================================================================
 // Ring buffer pour les commandes actuateur.
 // Les commandes sont inserees dans l'ordre temporel croissant.
 // Pas de tri dynamique necessaire.
 // Aucune allocation dynamique.
+//
+// Thread safety: push() est appele depuis Core 0 (web test, loop playback)
+// ET Core 1 (EventProcessor MIDI). Un spinlock protege les ecritures.
+// pop() est appele uniquement depuis Core 1 (scheduler tick).
 // ============================================================================
 
 class CommandQueue {
 public:
   CommandQueue();
 
-  // Ajouter une commande dans la queue
+  // Ajouter une commande dans la queue (thread-safe, spinlock protected)
   // Retourne true si ajout reussi, false si queue pleine
   bool push(const ActuatorCommand& cmd);
 
@@ -52,6 +57,7 @@ private:
   volatile uint16_t _head;  // Position d'ecriture
   volatile uint16_t _tail;  // Position de lecture
   uint32_t _overflowCount;
+  portMUX_TYPE _pushMux;    // Spinlock pour push() multi-core
 };
 
 #endif // COMMAND_QUEUE_H

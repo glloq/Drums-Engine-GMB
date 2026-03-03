@@ -1,9 +1,12 @@
 #include "command_queue.h"
 
 CommandQueue::CommandQueue()
-  : _head(0), _tail(0), _overflowCount(0) {}
+  : _head(0), _tail(0), _overflowCount(0), _pushMux(portMUX_INITIALIZER_UNLOCKED) {}
 
 bool CommandQueue::push(const ActuatorCommand& cmd) {
+  // Spinlock: push() is called from both Core 0 (web/loop) and Core 1 (MIDI/EventProcessor)
+  portENTER_CRITICAL(&_pushMux);
+
   uint16_t nextHead = (_head + 1) % COMMAND_QUEUE_SIZE;
 
   if (nextHead == _tail) {
@@ -14,16 +17,19 @@ bool CommandQueue::push(const ActuatorCommand& cmd) {
       _buffer[_head] = cmd;
       _head = nextHead;
       _overflowCount++;
+      portEXIT_CRITICAL(&_pushMux);
       return true;
     }
     // Queue pleine
     _overflowCount++;
+    portEXIT_CRITICAL(&_pushMux);
     DBGF("[Queue] OVERFLOW! (count=%lu)\n", _overflowCount);
     return false;
   }
 
   _buffer[_head] = cmd;
   _head = nextHead;
+  portEXIT_CRITICAL(&_pushMux);
   return true;
 }
 

@@ -51,8 +51,9 @@ bool ApiAuth::checkAuth(AsyncWebServerRequest* req) {
   String provided = authHeader.substring(7);
   provided.trim();
 
+  // Case-sensitive comparison for full token entropy (64 bits hex)
   if (provided.length() != AUTH_TOKEN_LEN ||
-      !provided.equalsIgnoreCase(_token)) {
+      !provided.equals(_token)) {
     req->send(401, "application/json",
               "{\"error\":\"Invalid API token\"}");
     return false;
@@ -165,7 +166,9 @@ bool ApiAuth::_generateAndSaveToken() {
 }
 
 bool ApiAuth::_saveAuthFile() {
-  File f = LittleFS.open(AUTH_TOKEN_FILE, "w");
+  // Atomic write: write to .tmp then rename to avoid corruption on crash
+  const char* tmpPath = AUTH_TOKEN_FILE ".tmp";
+  File f = LittleFS.open(tmpPath, "w");
   if (!f) {
     DBGLN("[Auth] Failed to open auth file for writing");
     return false;
@@ -180,7 +183,14 @@ bool ApiAuth::_saveAuthFile() {
   size_t written = serializeJson(doc, f);
   f.close();
 
-  return written > 0;
+  if (written == 0) {
+    LittleFS.remove(tmpPath);
+    return false;
+  }
+
+  LittleFS.remove(AUTH_TOKEN_FILE);
+  LittleFS.rename(tmpPath, AUTH_TOKEN_FILE);
+  return true;
 }
 
 // ============================================================================

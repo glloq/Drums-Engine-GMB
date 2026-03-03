@@ -1,6 +1,7 @@
 #include "web_server.h"
 #include "../hal/i2c_scanner.h"
 #include "../core/error_log.h"
+#include <LittleFS.h>
 
 // --- System ---
 
@@ -846,15 +847,15 @@ void WebServerManager::_handleValidateConfig(AsyncWebServerRequest* req) {
   } else {
     uint8_t noActions = 0;
     uint8_t disabledInstr = 0;
-    // Check for duplicate MIDI notes
-    uint8_t noteCh[128][16] = {};
+    // Check for duplicate MIDI notes (use heap to avoid 2KB stack allocation)
+    uint8_t* noteCh = (uint8_t*)calloc(128 * 16, sizeof(uint8_t));
     for (uint8_t i = 0; i < instrCount; i++) {
-      const InstrumentConfig* instr = _instrMgr->getInstrument(i);
+      const InstrumentConfig* instr = _instrMgr->getInstrumentByIndex(i);
       if (!instr) continue;
       if (!instr->enabled) disabledInstr++;
       if (instr->noteOnCount == 0) noActions++;
       uint8_t ch = instr->midiChannel < 16 ? instr->midiChannel : 0;
-      if (instr->midiNote < 128) noteCh[instr->midiNote][ch]++;
+      if (instr->midiNote < 128 && noteCh) noteCh[instr->midiNote * 16 + ch]++;
     }
     if (noActions > 0) {
       char buf[64];
@@ -866,14 +867,17 @@ void WebServerManager::_handleValidateConfig(AsyncWebServerRequest* req) {
       snprintf(buf, sizeof(buf), "%d instrument(s) disabled", disabledInstr);
       warnings.add(buf);
     }
-    for (uint8_t n = 0; n < 128; n++) {
-      for (uint8_t c = 0; c < 16; c++) {
-        if (noteCh[n][c] > 1) {
-          char buf[80];
-          snprintf(buf, sizeof(buf), "Duplicate MIDI note %d on channel %d (%d instruments)", n, c + 1, noteCh[n][c]);
-          warnings.add(buf);
+    if (noteCh) {
+      for (uint8_t n = 0; n < 128; n++) {
+        for (uint8_t c = 0; c < 16; c++) {
+          if (noteCh[n * 16 + c] > 1) {
+            char buf[80];
+            snprintf(buf, sizeof(buf), "Duplicate MIDI note %d on channel %d (%d instruments)", n, c + 1, noteCh[n * 16 + c]);
+            warnings.add(buf);
+          }
         }
       }
+      free(noteCh);
     }
     char buf[64];
     snprintf(buf, sizeof(buf), "%d instrument(s) configured", instrCount);
@@ -887,7 +891,7 @@ void WebServerManager::_handleValidateConfig(AsyncWebServerRequest* req) {
       const ActuatorConfig& actCfg = _actFactory->getConfig(a);
       bool used = false;
       for (uint8_t i = 0; i < instrCount && !used; i++) {
-        const InstrumentConfig* instr = _instrMgr->getInstrument(i);
+        const InstrumentConfig* instr = _instrMgr->getInstrumentByIndex(i);
         if (!instr) continue;
         for (uint8_t j = 0; j < instr->noteOnCount && !used; j++) {
           if (instr->noteOnActions[j].actuator_id == actCfg.id) used = true;
@@ -945,7 +949,7 @@ void WebServerManager::_handleFactoryReset(AsyncWebServerRequest* req) {
   const char* files[] = {
     CONFIG_FILE, ACTUATORS_FILE, INSTRUMENTS_FILE,
     LEDS_FILE, THEMES_FILE, "/midi.json", "/loops.json",
-    "/error.log"
+    "/error.log", AUTH_TOKEN_FILE
   };
   int deleted = 0;
   for (const char* f : files) {
@@ -954,6 +958,21 @@ void WebServerManager::_handleFactoryReset(AsyncWebServerRequest* req) {
       deleted++;
     }
   }
+
+  // Also clean loop files in /loops/ directory
+  File dir = LittleFS.open(LOOPS_DIR);
+  if (dir && dir.isDirectory()) {
+    File file = dir.openNextFile();
+    while (file) {
+      String path = String(LOOPS_DIR) + "/" + file.name();
+      file.close();
+      LittleFS.remove(path.c_str());
+      deleted++;
+      file = dir.openNextFile();
+    }
+    dir.close();
+  }
+
   DBGF("[System] Factory reset: %d files deleted\n", deleted);
   _sendError(req, 200, "Factory reset done, rebooting...");
 

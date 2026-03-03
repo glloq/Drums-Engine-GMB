@@ -607,15 +607,21 @@ void WebServerManager::_wsBroadcast(const char* type, const JsonObject& data) {
   JsonDocument doc;
   doc["type"] = type;
   doc["data"] = data;
-  String msg;
-  serializeJson(doc, msg);
-  _ws.textAll(msg);
+  // Use stack buffer to avoid heap fragmentation from String allocations
+  char buf[512];
+  size_t len = serializeJson(doc, buf, sizeof(buf));
+  if (len > 0 && len < sizeof(buf)) {
+    _ws.textAll(buf, len);
+  }
 }
 
 // --- Helpers ---
 
 void WebServerManager::_sendJson(AsyncWebServerRequest* req, int code, const JsonDocument& doc) {
+  // Pre-allocate String with known size to avoid reallocation fragmentation
+  size_t len = measureJson(doc);
   String json;
+  json.reserve(len + 1);
   serializeJson(doc, json);
   req->send(code, "application/json", json);
 }
@@ -628,9 +634,11 @@ void WebServerManager::_sendError(AsyncWebServerRequest* req, int code, const ch
 
 uint8_t WebServerManager::_extractId(AsyncWebServerRequest* req, const char* param) {
   if (req->hasParam(param)) {
-    return req->getParam(param)->value().toInt();
+    int val = req->getParam(param)->value().toInt();
+    if (val < 0 || val > 254) return 0xFF;  // 0xFF = invalid sentinel
+    return (uint8_t)val;
   }
-  return 0;
+  return 0xFF;  // 0xFF = missing param sentinel (0 is a valid ID)
 }
 
 void WebServerManager::_recompileLookupFromInstruments() {

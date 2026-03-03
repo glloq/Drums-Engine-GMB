@@ -5,6 +5,7 @@
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include <AppleMIDI.h>
+#include <atomic>
 #include "../core/config.h"
 #include "../core/types.h"
 #include "../event/event_processor.h"
@@ -42,19 +43,19 @@ public:
     return (_channelMask >> (channel - 1)) & 1;
   }
 
-  // Stats
-  uint32_t getNotesReceived() const { return _notesReceived; }
-  uint32_t getNotesSent() const { return _notesSent; }
+  // Stats (atomic: accessed from both Core 0 and Core 1 callbacks)
+  uint32_t getNotesReceived() const { return _notesReceived.load(std::memory_order_relaxed); }
+  uint32_t getNotesSent() const { return _notesSent.load(std::memory_order_relaxed); }
   void resetStats();
 
 private:
   EventProcessor* _eventProc;
   InstrumentManager* _instrumentMgr;
-  bool _connected;
-  uint8_t _sessionCount;
-  unsigned long _lastActivity;
-  uint32_t _notesReceived;
-  uint32_t _notesSent;
+  volatile bool _connected;
+  volatile uint8_t _sessionCount;
+  volatile unsigned long _lastActivity;
+  std::atomic<uint32_t> _notesReceived;
+  std::atomic<uint32_t> _notesSent;
   uint16_t _channelMask = 0xFFFF;  // Default: all channels allowed
 
   // Use pipeline mode if pipelines are compiled

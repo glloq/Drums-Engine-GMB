@@ -1558,8 +1558,13 @@ async function api(path, method='GET', body=null, silent=false) {
     opts.headers['Authorization'] = 'Bearer ' + apiToken;
   }
   if (body) opts.body = JSON.stringify(body);
+  // Timeout: abort fetch after 10s to prevent hanging requests
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  opts.signal = controller.signal;
   try {
     const r = await fetch('/api/' + path, opts);
+    clearTimeout(timeout);
     const payload = await r.json();
     if (!r.ok) {
       if (!silent) {
@@ -1570,7 +1575,11 @@ async function api(path, method='GET', body=null, silent=false) {
     }
     return payload;
   } catch(e) {
-    if (!silent) toast('Erreur reseau: ' + e.message, 'error');
+    clearTimeout(timeout);
+    if (!silent) {
+      const msg = e.name === 'AbortError' ? 'Timeout (serveur inaccessible)' : e.message;
+      toast('Erreur reseau: ' + msg, 'error');
+    }
     return null;
   }
 }
@@ -1725,12 +1734,16 @@ async function initApp() {
   connectWebSocket();
 
   // Click overlay backdrop to close modals (skip login overlay)
-  document.querySelectorAll('.modal-overlay').forEach(overlay => {
-    if (overlay.id === 'loginOverlay') return;
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) overlay.classList.remove('show');
+  // Guard against duplicate listeners on re-init
+  if (!window._modalListenersInit) {
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+      if (overlay.id === 'loginOverlay') return;
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) overlay.classList.remove('show');
+      });
     });
-  });
+    window._modalListenersInit = true;
+  }
 
   // Restore preferences
   const showLeds = localStorage.getItem('showLedsTab') === '1';
@@ -4790,6 +4803,14 @@ window.addEventListener('beforeunload', (e) => {
   if (configDirty) { e.preventDefault(); e.returnValue = ''; }
 });
 
+// Cleanup timers and WebSocket on page unload to prevent memory leaks
+window.addEventListener('unload', () => {
+  if (typeof loopPlayheadTimer !== 'undefined' && loopPlayheadTimer) clearInterval(loopPlayheadTimer);
+  if (typeof pianoLiveInterval !== 'undefined' && pianoLiveInterval) clearInterval(pianoLiveInterval);
+  if (typeof micPollTimer !== 'undefined' && micPollTimer) clearInterval(micPollTimer);
+  if (ws) { ws.onclose = null; ws.close(); }
+});
+
 async function saveAll() {
   await api('save', 'POST');
   markConfigClean();
@@ -6154,10 +6175,15 @@ function _handleWsNote(note, on, vel) {
   }
 }
 
+let _wsReconnectDelay = 1000;  // Exponential backoff starting at 1s
+
 function connectWebSocket() {
   if (ws && ws.readyState <= 1) return; // already open/connecting
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   ws = new WebSocket(proto + '//' + location.host + '/ws');
+  ws.onopen = () => {
+    _wsReconnectDelay = 1000;  // Reset backoff on successful connection
+  };
   ws.onmessage = (evt) => {
     try {
       const msg = JSON.parse(evt.data);
@@ -6166,10 +6192,17 @@ function connectWebSocket() {
       } else if (msg.type === 'midi_notes' && Array.isArray(msg.notes)) {
         msg.notes.forEach(n => _handleWsNote(n.n, n.on, n.v));
       }
-    } catch(e) {}
+    } catch(e) {
+      console.warn('[WS] Parse error:', e.message);
+    }
+  };
+  ws.onerror = (err) => {
+    console.warn('[WS] Connection error');
   };
   ws.onclose = () => {
-    setTimeout(connectWebSocket, 3000); // Always reconnect for MIDI RX indicator
+    // Exponential backoff: 1s, 2s, 4s, 8s, max 15s
+    setTimeout(connectWebSocket, _wsReconnectDelay);
+    _wsReconnectDelay = Math.min(_wsReconnectDelay * 2, 15000);
   };
 }
 

@@ -37,7 +37,7 @@ void MidiEngine::update() {
 
 void MidiEngine::sendNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {
   MIDI.sendNoteOn(note, velocity, channel);
-  _notesSent++;
+  _notesSent.fetch_add(1, std::memory_order_relaxed);
   _lastActivity = millis();
 
   // Dispatch local
@@ -56,7 +56,7 @@ void MidiEngine::sendNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {
 
 void MidiEngine::sendNoteOff(uint8_t channel, uint8_t note) {
   MIDI.sendNoteOff(note, 0, channel);
-  _notesSent++;
+  _notesSent.fetch_add(1, std::memory_order_relaxed);
   _lastActivity = millis();
 
   if (_usePipelineMode()) {
@@ -73,8 +73,8 @@ void MidiEngine::sendNoteOff(uint8_t channel, uint8_t note) {
 }
 
 void MidiEngine::resetStats() {
-  _notesReceived = 0;
-  _notesSent = 0;
+  _notesReceived.store(0, std::memory_order_relaxed);
+  _notesSent.store(0, std::memory_order_relaxed);
 }
 
 bool MidiEngine::_usePipelineMode() const {
@@ -99,9 +99,15 @@ void MidiEngine::_onDisconnected(const ssrc_t& ssrc) {
 
 void MidiEngine::_onNoteOn(byte channel, byte note, byte velocity) {
   if (!_instance) return;
-  _instance->_notesReceived++;
+  _instance->_notesReceived.fetch_add(1, std::memory_order_relaxed);
   _instance->_lastActivity = millis();
   if (!_instance->isChannelAllowed(channel)) return;
+
+  // MIDI spec: NoteOn with velocity=0 should be treated as NoteOff
+  if (velocity == 0) {
+    _onNoteOff(channel, note, 64);
+    return;
+  }
 
   if (_instance->_usePipelineMode()) {
     MidiEvent ev;
@@ -118,7 +124,7 @@ void MidiEngine::_onNoteOn(byte channel, byte note, byte velocity) {
 
 void MidiEngine::_onNoteOff(byte channel, byte note, byte velocity) {
   if (!_instance) return;
-  _instance->_notesReceived++;
+  _instance->_notesReceived.fetch_add(1, std::memory_order_relaxed);
   _instance->_lastActivity = millis();
   if (!_instance->isChannelAllowed(channel)) return;
 

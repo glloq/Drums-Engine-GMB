@@ -298,12 +298,15 @@ struct CompiledPipeline {
   uint8_t cc_binding_count;
   uint8_t retrigger_mode;
   uint8_t alternate_group_count; // 0 = no alternation, N = N groups round-robin
+  uint8_t midi_channel;          // 0 = omni (all channels), 1..16 = specific channel
+  uint8_t next_for_note;         // Chain: 0xFF = end. Same MIDI note, different channels.
 
   CompiledPipeline()
     : block_count(0), output_actuator_id(0xFF),
       note_on_count(0), note_off_count(0), cc_binding_count(0),
       retrigger_mode((uint8_t)RetriggerMode::IGNORE),
-      alternate_group_count(0) {
+      alternate_group_count(0),
+      midi_channel(0), next_for_note(0xFF) {
     memset(blocks, 0, sizeof(blocks));
   }
 };

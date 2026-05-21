@@ -64,6 +64,7 @@
 
 // MIDI
 #include "midi/midi_engine.h"
+#include "midi/uart_midi.h"
 
 // Loop
 #include "loop/loop_engine.h"
@@ -145,6 +146,7 @@ MicINMP441 mic;
 // Application
 InstrumentManager instrumentManager(&actuatorManager, &scheduler);
 MidiEngine midiEngine(&eventProcessor, &instrumentManager);
+UartMidi uartMidi;
 LoopEngine loopEngine(&instrumentManager);
 Storage storage;
 WiFiManager wifiManager;
@@ -195,8 +197,9 @@ void rtCoreTask(void* param) {
   uint32_t lastWatchdogCheck = 0;
 
   for (;;) {
-    // Recevoir MIDI
+    // Recevoir MIDI (rtpMIDI sur WiFi + UART MIDI hardware)
     midiEngine.update();
+    uartMidi.update();
 
     // Scheduler: dispatcher commandes pretes
     if (schedulerTimerFired.load(std::memory_order_acquire)) {
@@ -374,6 +377,8 @@ void compilePipelines() {
     pipeline.note_off_count = 0;
     pipeline.cc_binding_count = 0;
     pipeline.retrigger_mode = inst->retriggerMode;
+    pipeline.next_for_note = 0xFF;
+    pipeline.midi_channel = (inst->midiChannel > 16) ? 0 : inst->midiChannel;
 
     // Prefer explicit action model when instrument already provides it
     if (inst->noteOnCount > 0 || inst->noteOffCount > 0) {
@@ -432,8 +437,17 @@ void compilePipelines() {
       }
     }
 
-    // Mapper la note MIDI vers ce pipeline
-    lookup.note_to_pipeline[inst->midiNote] = pipeIdx;
+    // Mapper la note MIDI vers ce pipeline (chaîné: multi-channel sur même note).
+    uint8_t head = lookup.note_to_pipeline[inst->midiNote];
+    if (head == 0xFF) {
+      lookup.note_to_pipeline[inst->midiNote] = pipeIdx;
+    } else {
+      uint8_t cur = head;
+      while (lookup.pipelines[cur].next_for_note != 0xFF) {
+        cur = lookup.pipelines[cur].next_for_note;
+      }
+      lookup.pipelines[cur].next_for_note = pipeIdx;
+    }
     inst->pipelineId = pipeIdx;
     lookup.pipeline_count++;
   }
@@ -475,6 +489,11 @@ void compilePipelines() {
 
   DBGF("[Pipeline] Compiled %d pipelines from %d instruments, %d CC routes\n",
        lookup.pipeline_count, instrumentManager.getInstrumentCount(), lookup.cc_route_count);
+  if (lookup.cc_route_dropped > 0) {
+    DBGF("[Pipeline] WARNING: %d CC routes dropped (MAX_CC_ROUTES=%d full)\n",
+         lookup.cc_route_dropped, MAX_CC_ROUTES);
+    ErrorLog::warn("CC route table full: some CC bindings ignored");
+  }
 }
 
 // ============================================================================
@@ -603,14 +622,23 @@ void initTask(void* param) {
   // 8. MIDI over WiFi
   midiEngine.begin();
 
-  // 8b. Load MIDI channel filter from storage
+  // 8b. Load MIDI channel filter + UART MIDI config from storage
+  bool uartMidiEnabled = true;  // default ON; failure to open Serial2 is non-fatal
   {
     JsonDocument midiCfg;
     if (storage.loadJsonFile("/midi.json", midiCfg)) {
       uint16_t mask = midiCfg["channelMask"] | 0xFFFF;
       midiEngine.setChannelMask(mask);
       DBGF("[Config] MIDI channel mask: 0x%04X\n", mask);
+      uartMidiEnabled = midiCfg["uartEnabled"] | true;
     }
+  }
+
+  // 8c. UART MIDI (hardware DIN/TRS) — Serial2 @ 31250 baud
+  if (uartMidiEnabled) {
+    uartMidi.begin(&midiEngine);
+  } else {
+    DBGLN("[Config] UART MIDI disabled by config");
   }
 
   // 8b. Microphone (INMP441) — optional, auto-detected
@@ -622,6 +650,7 @@ void initTask(void* param) {
 
   // 9. Web Server (includes auth, rate-limiting, WiFi API, logs API)
   webServer.setMicrophone(&mic);
+  webServer.setUartMidi(&uartMidi);
   webServer.setRecompileCallback(compilePipelines);
   webServer.begin();
   wifiManager.registerRoutes(&webServer.getServer());

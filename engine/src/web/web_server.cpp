@@ -400,6 +400,31 @@ void WebServerManager::_setupRoutes() {
       }
     });
 
+  // MIDI transport status (rtpMIDI + UART)
+  _server.on("/api/midi/transport", HTTP_GET,
+    [this](AsyncWebServerRequest* req) { _handleGetMidiTransport(req); });
+
+  _server.on("/api/midi/transport", HTTP_PUT,
+    [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) {
+        if (!_auth.checkAuth(req)) return;
+        _handleSetMidiTransport(req, data, len);
+      }
+    });
+
+  // Bulk-create a General MIDI drum kit (note 35..81)
+  _server.on("/api/instruments/from-gm-kit", HTTP_POST,
+    [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) {
+        if (!_auth.checkAuth(req)) return;
+        _handleCreateGmKit(req, data, len);
+      }
+    });
+
   // --- LED Strips API ---
   _server.on("/api/led/strips", HTTP_GET,
     [this](AsyncWebServerRequest* req) { _handleGetLedStrips(req); });
@@ -630,6 +655,25 @@ void WebServerManager::_sendError(AsyncWebServerRequest* req, int code, const ch
   JsonDocument doc;
   doc["message"] = msg;
   _sendJson(req, code, doc);
+}
+
+bool WebServerManager::_parseJsonBody(AsyncWebServerRequest* req, uint8_t* data, size_t len,
+                                     JsonDocument& doc) {
+  if (len > MAX_REQUEST_BODY) {
+    char buf[80];
+    snprintf(buf, sizeof(buf), "Payload too large (%u > %u bytes)",
+             (unsigned)len, (unsigned)MAX_REQUEST_BODY);
+    _sendError(req, 413, buf);
+    return false;
+  }
+  DeserializationError err = deserializeJson(doc, data, len);
+  if (err) {
+    char buf[96];
+    snprintf(buf, sizeof(buf), "Invalid JSON: %s", err.c_str());
+    _sendError(req, 400, buf);
+    return false;
+  }
+  return true;
 }
 
 uint8_t WebServerManager::_extractId(AsyncWebServerRequest* req, const char* param) {

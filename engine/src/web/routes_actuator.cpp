@@ -50,7 +50,7 @@ void WebServerManager::_handleGetActuatorStatus(AsyncWebServerRequest* req) {
 
 void WebServerManager::_handleCreateActuator(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
   JsonDocument doc;
-  if (deserializeJson(doc, data, len)) { _sendError(req, 400, "Invalid JSON"); return; }
+  if (!_parseJsonBody(req, data, len, doc)) return;
 
   ActuatorConfig cfg;
   cfg.id = doc["id"] | 0;
@@ -91,7 +91,7 @@ void WebServerManager::_handleCreateActuator(AsyncWebServerRequest* req, uint8_t
 void WebServerManager::_handleUpdateActuator(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
   uint8_t id = _extractId(req, "id");
   JsonDocument doc;
-  if (deserializeJson(doc, data, len)) { _sendError(req, 400, "Invalid JSON"); return; }
+  if (!_parseJsonBody(req, data, len, doc)) return;
 
   ActuatorConfig* cfg = _actFactory->findConfig(id);
   if (!cfg) { _sendError(req, 404, "Actuator config not found"); return; }
@@ -137,7 +137,7 @@ void WebServerManager::_handleDeleteActuator(AsyncWebServerRequest* req) {
 
 void WebServerManager::_handleTestActuator(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
   JsonDocument doc;
-  if (deserializeJson(doc, data, len)) { _sendError(req, 400, "Invalid JSON"); return; }
+  if (!_parseJsonBody(req, data, len, doc)) return;
   uint8_t id = doc["id"] | 0;
 
   // Raw angle mode: bypass paramMin/paramMax for servo calibration

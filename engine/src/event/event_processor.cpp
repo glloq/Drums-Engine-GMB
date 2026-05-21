@@ -3,6 +3,8 @@
 
 // Spinlock for _noteActive[] shared between Core 0 (LoopEngine) and Core 1 (MIDI RT)
 static portMUX_TYPE _noteActiveMux = portMUX_INITIALIZER_UNLOCKED;
+// Separate spinlock for _lastCcDispatchUs[] (CC anti-flood throttling table)
+static portMUX_TYPE _ccDispatchMux = portMUX_INITIALIZER_UNLOCKED;
 
 EventProcessor::EventProcessor(Scheduler* scheduler, EngineState* state)
   : _scheduler(scheduler), _state(state) {
@@ -19,57 +21,61 @@ void EventProcessor::getNoteActive(uint8_t* out) const {
 
 void EventProcessor::processMidiEvent(const MidiEvent& ev) {
   if (ev.type == MIDI_EVT_NOTE_ON && ev.data2 > 0) {
+    // Iterate over chained pipelines for this MIDI note, filter by channel.
+    // Multiple instruments can share a note when on different MIDI channels.
     uint8_t pipelineIdx = _lookup.note_to_pipeline[ev.data1];
-    if (pipelineIdx == 0xFF || pipelineIdx >= _lookup.pipeline_count) return;
+    bool firedAny = false;
+    uint8_t safetyHops = MAX_PIPELINES;  // cycle guard against corrupt chains
+    while (pipelineIdx != 0xFF && pipelineIdx < _lookup.pipeline_count && safetyHops > 0) {
+      safetyHops--;
+      const CompiledPipeline& pipeline = _lookup.pipelines[pipelineIdx];
+      uint8_t nextIdx = pipeline.next_for_note;
 
-    const CompiledPipeline& pipeline = _lookup.pipelines[pipelineIdx];
+      // Channel filter: 0 = omni, otherwise must match (MIDI channel is 1..16)
+      if (pipeline.midi_channel != 0 && pipeline.midi_channel != ev.channel) {
+        pipelineIdx = nextIdx;
+        continue;
+      }
 
-    portENTER_CRITICAL(&_noteActiveMux);
-    uint8_t noteCount = _noteActive[ev.data1];
-    portEXIT_CRITICAL(&_noteActiveMux);
+      portENTER_CRITICAL(&_noteActiveMux);
+      uint8_t noteCount = _noteActive[ev.data1];
+      portEXIT_CRITICAL(&_noteActiveMux);
 
-    if (noteCount > 0) {
-      if (pipeline.retrigger_mode == (uint8_t)RetriggerMode::IGNORE) {
-        return;
+      if (noteCount > 0) {
+        if (pipeline.retrigger_mode == (uint8_t)RetriggerMode::IGNORE) {
+          pipelineIdx = nextIdx;
+          continue;
+        }
+        if (pipeline.retrigger_mode == (uint8_t)RetriggerMode::RESET && pipeline.note_off_count > 0) {
+          _scheduler->scheduleActionSteps(pipeline.note_off_actions, pipeline.note_off_count,
+                                          ev.data2, ev.timestamp, _state->raw().variables);
+          portENTER_CRITICAL(&_noteActiveMux);
+          _noteActive[ev.data1] = 0;  // Reset counter before re-triggering
+          portEXIT_CRITICAL(&_noteActiveMux);
+        }
       }
-      if (pipeline.retrigger_mode == (uint8_t)RetriggerMode::RESET && pipeline.note_off_count > 0) {
-        _scheduler->scheduleActionSteps(pipeline.note_off_actions, pipeline.note_off_count,
-                                        ev.data2, ev.timestamp, _state->raw().variables);
-        portENTER_CRITICAL(&_noteActiveMux);
-        _noteActive[ev.data1] = 0;  // Reset counter before re-triggering
-        portEXIT_CRITICAL(&_noteActiveMux);
-      }
-      // STACK: counter will increment below, allowing proper NoteOff tracking
-    }
 
-    if (pipeline.note_on_count > 0) {
-      uint8_t activeGroup = 0;
-      if (pipeline.alternate_group_count > 0) {
-        // Round-robin: advance counter, get active group (1-based)
-        uint8_t rr = _state->advanceRoundRobin(pipelineIdx, pipeline.alternate_group_count);
-        activeGroup = rr + 1; // advanceRoundRobin returns 0-based, groups are 1-based
+      if (pipeline.note_on_count > 0) {
+        uint8_t activeGroup = 0;
+        if (pipeline.alternate_group_count > 0) {
+          uint8_t rr = _state->advanceRoundRobin(pipelineIdx, pipeline.alternate_group_count);
+          activeGroup = rr + 1;
+        }
+        _scheduler->scheduleActionSteps(pipeline.note_on_actions, pipeline.note_on_count,
+                                        ev.data2, ev.timestamp, _state->raw().variables,
+                                        activeGroup);
+      } else {
+        _executePipeline(pipelineIdx, ev.data2, ev.timestamp, ev.data1);
       }
-      _scheduler->scheduleActionSteps(pipeline.note_on_actions, pipeline.note_on_count,
-                                      ev.data2, ev.timestamp, _state->raw().variables,
-                                      activeGroup);
-      // Push LED event (Core 1 → Core 0, lock-free)
-      if (_ledQueue) {
-        LedEvent ledEv;
-        ledEv.midiNote = ev.data1;
-        ledEv.velocity = ev.data2;
-        ledEv.noteOn = true;
-        ledEv.segmentId = 0xFF; // Broadcast: LedEngine will resolve via note lookup
-        _ledQueue->push(ledEv);
-      }
+      firedAny = true;
       portENTER_CRITICAL(&_noteActiveMux);
       if (_noteActive[ev.data1] < 255) _noteActive[ev.data1]++;
       portEXIT_CRITICAL(&_noteActiveMux);
-      return;
+
+      pipelineIdx = nextIdx;
     }
 
-    _executePipeline(pipelineIdx, ev.data2, ev.timestamp, ev.data1);
-    // Push LED event for pipeline-path notes too
-    if (_ledQueue) {
+    if (firedAny && _ledQueue) {
       LedEvent ledEv;
       ledEv.midiNote = ev.data1;
       ledEv.velocity = ev.data2;
@@ -77,58 +83,75 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
       ledEv.segmentId = 0xFF;
       _ledQueue->push(ledEv);
     }
-    portENTER_CRITICAL(&_noteActiveMux);
-    if (_noteActive[ev.data1] < 255) _noteActive[ev.data1]++;
-    portEXIT_CRITICAL(&_noteActiveMux);
   }
   else if (ev.type == MIDI_EVT_NOTE_OFF || (ev.type == MIDI_EVT_NOTE_ON && ev.data2 == 0)) {
     uint8_t pipelineIdx = _lookup.note_to_pipeline[ev.data1];
-    if (pipelineIdx == 0xFF || pipelineIdx >= _lookup.pipeline_count) return;
+    bool firedAny = false;
+    bool zeroedCounter = false;
+    uint8_t safetyHopsOff = MAX_PIPELINES;
 
-    const CompiledPipeline& pipeline = _lookup.pipelines[pipelineIdx];
+    while (pipelineIdx != 0xFF && pipelineIdx < _lookup.pipeline_count && safetyHopsOff > 0) {
+      safetyHopsOff--;
+      const CompiledPipeline& pipeline = _lookup.pipelines[pipelineIdx];
+      uint8_t nextIdx = pipeline.next_for_note;
 
-    // C3 fix: Atomic read-check-modify to prevent race between cores
-    bool fireNoteOff = false;
-    portENTER_CRITICAL(&_noteActiveMux);
-    uint8_t noteOffCount = _noteActive[ev.data1];
-    if (noteOffCount == 0) {
-      portEXIT_CRITICAL(&_noteActiveMux);
-      return;  // No active note — ignore spurious NoteOff
-    }
-    if (noteOffCount > 1 &&
-        pipeline.retrigger_mode == (uint8_t)RetriggerMode::STACK) {
-      _noteActive[ev.data1]--;
-      portEXIT_CRITICAL(&_noteActiveMux);
-      return;  // Other instances still active, don't fire noteOff yet
-    }
-    // Last instance releasing — zero counter and fire noteOff
-    _noteActive[ev.data1] = 0;
-    fireNoteOff = true;
-    portEXIT_CRITICAL(&_noteActiveMux);
-
-    if (fireNoteOff) {
-      if (pipeline.note_off_count > 0) {
-        _scheduler->scheduleActionSteps(pipeline.note_off_actions, pipeline.note_off_count,
-                                        ev.data2, ev.timestamp, _state->raw().variables);
-      } else if (pipeline.output_actuator_id != 0xFF) {
-        ActuatorCommand cmd;
-        cmd.actuator_id = pipeline.output_actuator_id;
-        cmd.command_type = (uint8_t)CommandType::OFF;
-        cmd.value = 0;
-        cmd.duration = 0;
-        cmd.execute_at = ev.timestamp;
-        _scheduler->scheduleCommand(cmd);
+      if (pipeline.midi_channel != 0 && pipeline.midi_channel != ev.channel) {
+        pipelineIdx = nextIdx;
+        continue;
       }
 
-      // Push LED NoteOff event (fade out animation)
-      if (_ledQueue) {
-        LedEvent ledEv;
-        ledEv.midiNote = ev.data1;
-        ledEv.velocity = ev.data2;
-        ledEv.noteOn = false;
-        ledEv.segmentId = 0xFF;
-        _ledQueue->push(ledEv);
+      // Only decrement/zero the active counter once per note (it is shared
+      // across all chained pipelines on the same note).
+      bool fireNoteOff = false;
+      if (!zeroedCounter) {
+        portENTER_CRITICAL(&_noteActiveMux);
+        uint8_t noteOffCount = _noteActive[ev.data1];
+        if (noteOffCount == 0) {
+          portEXIT_CRITICAL(&_noteActiveMux);
+          pipelineIdx = nextIdx;
+          continue;
+        }
+        if (noteOffCount > 1 &&
+            pipeline.retrigger_mode == (uint8_t)RetriggerMode::STACK) {
+          _noteActive[ev.data1]--;
+          portEXIT_CRITICAL(&_noteActiveMux);
+          pipelineIdx = nextIdx;
+          continue;
+        }
+        _noteActive[ev.data1] = 0;
+        fireNoteOff = true;
+        zeroedCounter = true;
+        portEXIT_CRITICAL(&_noteActiveMux);
+      } else {
+        fireNoteOff = true;
       }
+
+      if (fireNoteOff) {
+        if (pipeline.note_off_count > 0) {
+          _scheduler->scheduleActionSteps(pipeline.note_off_actions, pipeline.note_off_count,
+                                          ev.data2, ev.timestamp, _state->raw().variables);
+        } else if (pipeline.output_actuator_id != 0xFF) {
+          ActuatorCommand cmd;
+          cmd.actuator_id = pipeline.output_actuator_id;
+          cmd.command_type = (uint8_t)CommandType::OFF;
+          cmd.value = 0;
+          cmd.duration = 0;
+          cmd.execute_at = ev.timestamp;
+          _scheduler->scheduleCommand(cmd);
+        }
+        firedAny = true;
+      }
+
+      pipelineIdx = nextIdx;
+    }
+
+    if (firedAny && _ledQueue) {
+      LedEvent ledEv;
+      ledEv.midiNote = ev.data1;
+      ledEv.velocity = ev.data2;
+      ledEv.noteOn = false;
+      ledEv.segmentId = 0xFF;
+      _ledQueue->push(ledEv);
     }
   }
   else if (ev.type == MIDI_EVT_CC) {
@@ -171,13 +194,17 @@ void EventProcessor::_processCcEvent(const MidiEvent& ev) {
     _state->setVariable(ev.data1, ev.data2);
   }
 
-  // Anti-flood: max 1 dispatch batch per CC every 5ms
+  // Anti-flood: max 1 dispatch batch per CC every 5ms.
+  // Atomic read-check-update under spinlock — CCs from both cores share this table.
+  portENTER_CRITICAL(&_ccDispatchMux);
   uint32_t lastTs = _lastCcDispatchUs[ev.data1];
   if (lastTs != 0 && (ev.timestamp - lastTs) < 5000) {
+    portEXIT_CRITICAL(&_ccDispatchMux);
     _ccStats.throttled++;
     return;
   }
   _lastCcDispatchUs[ev.data1] = ev.timestamp;
+  portEXIT_CRITICAL(&_ccDispatchMux);
 
   uint8_t first = _lookup.cc_to_first[ev.data1];
   uint8_t count = _lookup.cc_to_count[ev.data1];

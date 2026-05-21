@@ -28,7 +28,7 @@ void WebServerManager::_handleGetLoop(AsyncWebServerRequest* req) {
 
 void WebServerManager::_handleCreateLoop(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
   JsonDocument doc;
-  if (deserializeJson(doc, data, len)) { _sendError(req, 400, "Invalid JSON"); return; }
+  if (!_parseJsonBody(req, data, len, doc)) return;
 
   const char* name = doc["name"] | "New Loop";
   uint16_t bpm = doc["bpm"] | MIDI_BPM_DEFAULT;
@@ -64,7 +64,7 @@ void WebServerManager::_handleCreateLoop(AsyncWebServerRequest* req, uint8_t* da
 void WebServerManager::_handleUpdateLoop(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
   uint8_t id = _extractId(req, "id");
   JsonDocument doc;
-  if (deserializeJson(doc, data, len)) { _sendError(req, 400, "Invalid JSON"); return; }
+  if (!_parseJsonBody(req, data, len, doc)) return;
 
   Loop* loop = _loopEngine->getLoop(id);
   if (!loop) { _sendError(req, 404, "Loop not found"); return; }
@@ -100,7 +100,7 @@ void WebServerManager::_handleStopLoop(AsyncWebServerRequest* req) {
 
 void WebServerManager::_handlePlayChain(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
   JsonDocument doc;
-  if (deserializeJson(doc, data, len)) { _sendError(req, 400, "Invalid JSON"); return; }
+  if (!_parseJsonBody(req, data, len, doc)) return;
 
   JsonArray ids = doc["loopIds"].as<JsonArray>();
   if (ids.isNull() || ids.size() == 0) { _sendError(req, 400, "loopIds required"); return; }

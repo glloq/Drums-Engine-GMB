@@ -134,10 +134,7 @@ void WebServerManager::_handleGetLedStrips(AsyncWebServerRequest* req) {
 
 void WebServerManager::_handleConfigureLedStrip(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
   JsonDocument doc;
-  if (deserializeJson(doc, data, len)) {
-    _sendError(req, 400, "Invalid JSON");
-    return;
-  }
+  if (!_parseJsonBody(req, data, len, doc)) return;
 
   uint8_t stripIdx = doc["id"] | 0xFF;
   if (stripIdx >= LED_MAX_STRIPS) {
@@ -190,10 +187,7 @@ void WebServerManager::_handleDeleteLedStrip(AsyncWebServerRequest* req) {
 
 void WebServerManager::_handleTestLedStrip(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
   JsonDocument doc;
-  if (deserializeJson(doc, data, len)) {
-    _sendError(req, 400, "Invalid JSON");
-    return;
-  }
+  if (!_parseJsonBody(req, data, len, doc)) return;
 
   uint8_t stripIdx = doc["id"] | 0xFF;
   if (stripIdx >= LED_MAX_STRIPS) {
@@ -229,10 +223,7 @@ void WebServerManager::_handleGetLedSegments(AsyncWebServerRequest* req) {
 
 void WebServerManager::_handleCreateLedSegment(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
   JsonDocument doc;
-  if (deserializeJson(doc, data, len)) {
-    _sendError(req, 400, "Invalid JSON");
-    return;
-  }
+  if (!_parseJsonBody(req, data, len, doc)) return;
 
   LedSegmentConfig seg;
   segmentConfigFromJson(doc.as<JsonObject>(), seg);
@@ -256,10 +247,7 @@ void WebServerManager::_handleUpdateLedSegment(AsyncWebServerRequest* req, uint8
   uint8_t id = _extractId(req, "id");
 
   JsonDocument doc;
-  if (deserializeJson(doc, data, len)) {
-    _sendError(req, 400, "Invalid JSON");
-    return;
-  }
+  if (!_parseJsonBody(req, data, len, doc)) return;
 
   LedSegmentConfig seg;
   segmentConfigFromJson(doc.as<JsonObject>(), seg);
@@ -293,10 +281,7 @@ void WebServerManager::_handleDeleteLedSegment(AsyncWebServerRequest* req) {
 
 void WebServerManager::_handleTestLedSegment(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
   JsonDocument doc;
-  if (deserializeJson(doc, data, len)) {
-    _sendError(req, 400, "Invalid JSON");
-    return;
-  }
+  if (!_parseJsonBody(req, data, len, doc)) return;
 
   uint8_t segId = doc["id"] | 0xFF;
   uint8_t brightness = doc["brightness"] | 255;
@@ -330,10 +315,7 @@ void WebServerManager::_handleGetLedThemes(AsyncWebServerRequest* req) {
 
 void WebServerManager::_handleCreateLedTheme(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
   JsonDocument doc;
-  if (deserializeJson(doc, data, len)) {
-    _sendError(req, 400, "Invalid JSON");
-    return;
-  }
+  if (!_parseJsonBody(req, data, len, doc)) return;
 
   LedThemeConfig theme;
   themeConfigFromJson(doc.as<JsonObject>(), theme);
@@ -357,10 +339,7 @@ void WebServerManager::_handleUpdateLedTheme(AsyncWebServerRequest* req, uint8_t
   uint8_t id = _extractId(req, "id");
 
   JsonDocument doc;
-  if (deserializeJson(doc, data, len)) {
-    _sendError(req, 400, "Invalid JSON");
-    return;
-  }
+  if (!_parseJsonBody(req, data, len, doc)) return;
 
   LedThemeConfig theme;
   themeConfigFromJson(doc.as<JsonObject>(), theme);
@@ -394,10 +373,7 @@ void WebServerManager::_handleDeleteLedTheme(AsyncWebServerRequest* req) {
 
 void WebServerManager::_handleSetActiveLedTheme(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
   JsonDocument doc;
-  if (deserializeJson(doc, data, len)) {
-    _sendError(req, 400, "Invalid JSON");
-    return;
-  }
+  if (!_parseJsonBody(req, data, len, doc)) return;
 
   uint8_t themeId = doc["id"] | 0xFF;
   _ledEngine->setActiveTheme(themeId);
@@ -426,10 +402,7 @@ void WebServerManager::_handleGetLedStatus(AsyncWebServerRequest* req) {
 
 void WebServerManager::_handleSetLedBrightness(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
   JsonDocument doc;
-  if (deserializeJson(doc, data, len)) {
-    _sendError(req, 400, "Invalid JSON");
-    return;
-  }
+  if (!_parseJsonBody(req, data, len, doc)) return;
 
   uint8_t brightness = doc["brightness"] | 128;
   _ledEngine->setMasterBrightness(brightness);

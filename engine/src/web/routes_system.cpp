@@ -20,6 +20,14 @@ void WebServerManager::_handleGetStatus(AsyncWebServerRequest* req) {
   obj["midi_notes_rx"] = _midiEngine->getNotesReceived();
   obj["midi_notes_tx"] = _midiEngine->getNotesSent();
   obj["midi_channel_mask"] = _midiEngine->getChannelMask();
+  obj["midi_overflow"] = _midiEngine->getMidiOverflowCount();
+  if (_uartMidi) {
+    obj["midi_uart_enabled"] = _uartMidi->isEnabled();
+    obj["midi_uart_bytes_rx"] = _uartMidi->getBytesReceived();
+    obj["midi_uart_msgs_rx"] = _uartMidi->getMessagesDispatched();
+  } else {
+    obj["midi_uart_enabled"] = false;
+  }
 
   // Actuators
   obj["actuator_count"] = _actMgr->getCount();
@@ -312,10 +320,7 @@ void WebServerManager::_handleGetTemplates(AsyncWebServerRequest* req) {
 
 void WebServerManager::_handleCreateInstrumentFromTemplate(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
   JsonDocument doc;
-  if (deserializeJson(doc, data, len)) {
-    _sendError(req, 400, "Invalid JSON");
-    return;
-  }
+  if (!_parseJsonBody(req, data, len, doc)) return;
 
   const char* tpl = doc["template"] | "";
   if (!tpl || tpl[0] == '\0') {
@@ -646,10 +651,7 @@ void WebServerManager::_handlePostAuthToken(AsyncWebServerRequest* req, uint8_t*
     return;
   }
   JsonDocument body;
-  if (deserializeJson(body, data, len)) {
-    _sendError(req, 400, "Invalid JSON");
-    return;
-  }
+  if (!_parseJsonBody(req, data, len, body)) return;
   const char* pin = body["pin"];
   if (!pin || !_auth.checkPin(String(pin))) {
     JsonDocument doc;
@@ -672,11 +674,7 @@ void WebServerManager::_handleLoginStatus(AsyncWebServerRequest* req) {
 
 void WebServerManager::_handleSetPin(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
   JsonDocument doc;
-  DeserializationError err = deserializeJson(doc, data, len);
-  if (err) {
-    _sendError(req, 400, "Invalid JSON");
-    return;
-  }
+  if (!_parseJsonBody(req, data, len, doc)) return;
 
   // If a PIN is already set, require current PIN to change it
   if (_auth.hasPin()) {
@@ -727,7 +725,7 @@ void WebServerManager::_handleGetMidiChannels(AsyncWebServerRequest* req) {
 
 void WebServerManager::_handleSetMidiChannels(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
   JsonDocument doc;
-  if (deserializeJson(doc, data, len)) { _sendError(req, 400, "Invalid JSON"); return; }
+  if (!_parseJsonBody(req, data, len, doc)) return;
 
   uint16_t mask = 0;
   if (doc.containsKey("channelMask")) {
@@ -757,9 +755,165 @@ void WebServerManager::_handleSetMidiChannels(AsyncWebServerRequest* req, uint8_
   _sendJson(req, 200, resp);
 }
 
+void WebServerManager::_handleGetMidiTransport(AsyncWebServerRequest* req) {
+  JsonDocument doc;
+  doc["rtpMidi"]["connected"] = _midiEngine->isConnected();
+  doc["rtpMidi"]["sessions"] = _midiEngine->getSessionCount();
+  doc["rtpMidi"]["port"] = RTP_MIDI_PORT;
+  doc["rtpMidi"]["sessionName"] = MIDI_SESSION_NAME;
+
+  bool uartOn = _uartMidi && _uartMidi->isEnabled();
+  doc["uart"]["enabled"] = uartOn;
+  if (uartOn) {
+    doc["uart"]["baud"] = UART_MIDI_BAUD;
+    doc["uart"]["rxPin"] = UART_MIDI_RX_PIN;
+    doc["uart"]["txPin"] = UART_MIDI_TX_PIN;
+    doc["uart"]["bytesRx"] = _uartMidi->getBytesReceived();
+    doc["uart"]["messagesRx"] = _uartMidi->getMessagesDispatched();
+  }
+  doc["midiOverflow"] = _midiEngine->getMidiOverflowCount();
+  doc["channelMask"] = _midiEngine->getChannelMask();
+
+  _sendJson(req, 200, doc);
+}
+
+void WebServerManager::_handleSetMidiTransport(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
+  JsonDocument doc;
+  if (!_parseJsonBody(req, data, len, doc)) return;
+
+  // Persist the uartEnabled flag in /midi.json (channelMask kept untouched).
+  // ArduinoJson auto-promotes the document to an object on first key assignment.
+  JsonDocument saveDoc;
+  _storage->loadJsonFile("/midi.json", saveDoc);
+  if (!doc["uartEnabled"].isNull()) {
+    saveDoc["uartEnabled"] = doc["uartEnabled"].as<bool>();
+  }
+  if (!doc["channelMask"].isNull()) {
+    uint16_t mask = (uint16_t)(doc["channelMask"] | 0xFFFF);
+    saveDoc["channelMask"] = mask;
+    _midiEngine->setChannelMask(mask);
+  }
+  if (!_storage->saveJsonFile("/midi.json", saveDoc)) {
+    _sendError(req, 500, "Failed to persist /midi.json");
+    return;
+  }
+
+  JsonDocument resp;
+  resp["message"] = "Transport settings saved. Reboot to apply UART changes.";
+  resp["uartEnabled"] = (bool)(saveDoc["uartEnabled"] | true);
+  _sendJson(req, 200, resp);
+}
+
+void WebServerManager::_handleCreateGmKit(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
+  JsonDocument doc;
+  if (!_parseJsonBody(req, data, len, doc)) return;
+
+  // Caller provides an array of {note, actuatorId} mappings. We only create
+  // instruments for notes that have a matching actuator — silently skip others.
+  // Optional fields: midiChannel (default 10), category (default "drums").
+  JsonArray mappings = doc["mappings"].as<JsonArray>();
+  if (mappings.isNull() || mappings.size() == 0) {
+    _sendError(req, 400, "mappings array required: [{note, actuatorId}, ...]");
+    return;
+  }
+  uint8_t midiChannel = doc["midiChannel"] | 10;
+  if (midiChannel > 16) {
+    _sendError(req, 400, "midiChannel must be 0..16");
+    return;
+  }
+
+  uint8_t created = 0;
+  uint8_t skipped = 0;
+  JsonDocument resp;
+  JsonArray createdArr = resp["created"].to<JsonArray>();
+  JsonArray skippedArr = resp["skipped"].to<JsonArray>();
+
+  for (JsonObject m : mappings) {
+    uint8_t note = m["note"] | 0xFF;
+    uint8_t actId = m["actuatorId"] | 0xFF;
+    if (note >= 128 || actId == 0xFF) {
+      skipped++;
+      JsonObject s = skippedArr.add<JsonObject>();
+      s["note"] = note;
+      s["reason"] = "missing or invalid note/actuatorId";
+      continue;
+    }
+    ActuatorConfig* actCfg = _actFactory->findConfig(actId);
+    if (!actCfg) {
+      skipped++;
+      JsonObject s = skippedArr.add<JsonObject>();
+      s["note"] = note;
+      s["reason"] = "actuatorId not found";
+      continue;
+    }
+
+    InstrumentConfig inst;
+    // Lookup GM name (best-effort, falls back to "GM <note>")
+    const char* gmName = nullptr;
+    for (uint8_t i = 0; i < GM_DRUM_NOTES_COUNT; i++) {
+      if (GM_DRUM_NOTES[i].note == note) { gmName = GM_DRUM_NOTES[i].name; break; }
+    }
+    if (gmName) {
+      strlcpy(inst.name, gmName, sizeof(inst.name));
+    } else {
+      snprintf(inst.name, sizeof(inst.name), "GM Note %d", note);
+    }
+    strlcpy(inst.category, "drums", sizeof(inst.category));
+    inst.midiNote = note;
+    inst.midiChannel = midiChannel;
+    inst.enabled = true;
+    inst.noteOnCount = 1;
+    inst.noteOnActions[0].actuator_id = actId;
+    inst.noteOnActions[0].value_source = (uint8_t)ValueSource::VELOCITY;
+
+    // Choose command type based on actuator type
+    if (actCfg->type == ActuatorType::SOLENOID) {
+      inst.noteOnActions[0].command_type = (uint8_t)CommandType::PULSE;
+      inst.noteOnActions[0].duration_min_ms = actCfg->paramMin;
+      inst.noteOnActions[0].duration_max_ms = actCfg->paramMax;
+    } else if (actCfg->type == ActuatorType::SERVO) {
+      inst.noteOnActions[0].command_type = (uint8_t)CommandType::PULSE;
+    } else {
+      inst.noteOnActions[0].command_type = (uint8_t)CommandType::PWM;
+    }
+    inst.noteOffCount = 1;
+    inst.noteOffActions[0].actuator_id = actId;
+    inst.noteOffActions[0].command_type = (uint8_t)CommandType::OFF;
+    inst.noteOffActions[0].value_source = (uint8_t)ValueSource::FIXED;
+
+    const char* err = nullptr;
+    if (!_validateInstrumentConfig(inst, err)) {
+      skipped++;
+      JsonObject s = skippedArr.add<JsonObject>();
+      s["note"] = note;
+      s["reason"] = err ? err : "validation failed";
+      continue;
+    }
+    if (_instrMgr->addInstrument(inst) < 0) {
+      skipped++;
+      JsonObject s = skippedArr.add<JsonObject>();
+      s["note"] = note;
+      s["reason"] = "max instruments reached";
+      break;
+    }
+    created++;
+    JsonObject c = createdArr.add<JsonObject>();
+    c["note"] = note;
+    c["name"] = inst.name;
+  }
+
+  if (created > 0) {
+    _recompileLookupFromInstruments();
+    _storage->saveInstruments(*_instrMgr);
+  }
+  resp["createdCount"] = created;
+  resp["skippedCount"] = skipped;
+  _sendJson(req, 201, resp);
+}
+
 void WebServerManager::_handleTestCC(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
   JsonDocument doc;
-  if (deserializeJson(doc, data, len)) { _sendError(req, 400, "Invalid JSON"); return; }
+  if (!_parseJsonBody(req, data, len, doc)) return;
   uint8_t cc = doc["cc"] | 7;
   uint8_t val = doc["value"] | 127;
 
@@ -780,7 +934,7 @@ void WebServerManager::_handleTestCC(AsyncWebServerRequest* req, uint8_t* data, 
 
 void WebServerManager::_handleTestNote(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
   JsonDocument doc;
-  if (deserializeJson(doc, data, len)) { _sendError(req, 400, "Invalid JSON"); return; }
+  if (!_parseJsonBody(req, data, len, doc)) return;
   uint8_t note = doc["note"] | 60;
   uint8_t velocity = doc["velocity"] | 80;
   uint8_t channel = doc["channel"] | 10;

@@ -12,6 +12,7 @@
 #include "../actuator/actuator_factory.h"
 #include "../loop/loop_engine.h"
 #include "../midi/midi_engine.h"
+#include "../midi/uart_midi.h"
 #include "../storage/storage.h"
 #include "../scheduler/scheduler.h"
 #include "../event/event_processor.h"
@@ -112,6 +113,9 @@ private:
   void _handleSetPin(AsyncWebServerRequest* req, uint8_t* data, size_t len);
   void _handleGetMidiChannels(AsyncWebServerRequest* req);
   void _handleSetMidiChannels(AsyncWebServerRequest* req, uint8_t* data, size_t len);
+  void _handleCreateGmKit(AsyncWebServerRequest* req, uint8_t* data, size_t len);
+  void _handleGetMidiTransport(AsyncWebServerRequest* req);
+  void _handleSetMidiTransport(AsyncWebServerRequest* req, uint8_t* data, size_t len);
   void _handleFactoryReset(AsyncWebServerRequest* req);
   void _handleValidateConfig(AsyncWebServerRequest* req);
 
@@ -155,6 +159,14 @@ private:
   uint8_t _extractId(AsyncWebServerRequest* req, const char* param);
   void _wsBroadcast(const char* type, const JsonObject& data);
 
+  // Maximum accepted JSON body for any POST/PUT API endpoint. ESP32 has limited
+  // RAM, and a malicious or buggy client must not be able to allocate megabytes.
+  static constexpr size_t MAX_REQUEST_BODY = 8192;
+  // Parse JSON body with payload-size guard and contextual error response.
+  // Returns true on success, false (and sends error) otherwise.
+  bool _parseJsonBody(AsyncWebServerRequest* req, uint8_t* data, size_t len,
+                     JsonDocument& doc);
+
   // WebSocket MIDI note activity broadcast
   uint8_t _wsNoteCache[128] = {};
   uint32_t _wsLastBroadcastUs = 0;
@@ -166,8 +178,10 @@ private:
 
   // Microphone latency measurement
   MicINMP441* _mic = nullptr;
+  UartMidi* _uartMidi = nullptr;
 public:
   void setMicrophone(MicINMP441* mic) { _mic = mic; }
+  void setUartMidi(UartMidi* uart) { _uartMidi = uart; }
 private:
   void _handleGetMicStatus(AsyncWebServerRequest* req);
   void _handleMeasureLatency(AsyncWebServerRequest* req, uint8_t* data, size_t len);

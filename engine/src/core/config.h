@@ -28,6 +28,14 @@
 #define RTP_MIDI_PORT     5004
 #define MIDI_SESSION_NAME "MidiPercussion"
 
+// --- UART MIDI (hardware MIDI DIN/TRS via Serial2) ---
+// ESP32 default Serial2 pins: RX=16, TX=17. Standard MIDI baud = 31250.
+// Enable with UART_MIDI_ENABLED=1 at build time, or via runtime /api/midi/uart.
+#define UART_MIDI_BAUD       31250
+#define UART_MIDI_RX_PIN     16
+#define UART_MIDI_TX_PIN     17
+#define UART_MIDI_RX_BUFFER  256   // bytes; covers ~80 short MIDI msgs of burst
+
 // --- I2C Hardware ---
 #define I2C_SDA           21
 #define I2C_SCL           22

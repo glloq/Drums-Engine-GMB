@@ -169,6 +169,10 @@ bool PipelineCompiler::compileAll(const JsonArray& instruments, PipelineLookup& 
     pipeline.note_off_count = 0;
     pipeline.cc_binding_count = 0;
     pipeline.retrigger_mode = inst["retriggerMode"] | (uint8_t)RetriggerMode::IGNORE;
+    pipeline.next_for_note = 0xFF;
+    uint8_t midiChannel = inst["midiChannel"] | 0;
+    if (midiChannel > 16) midiChannel = 0;  // sanitize
+    pipeline.midi_channel = midiChannel;
 
     JsonArray pipelineBlocks = inst["pipeline"].as<JsonArray>();
     if (pipelineBlocks.isNull()) {
@@ -199,13 +203,28 @@ bool PipelineCompiler::compileAll(const JsonArray& instruments, PipelineLookup& 
 
     parseActionAndCcBindings(inst, pipeline);
 
-    lookup.note_to_pipeline[midiNote] = lookup.pipeline_count;
+    // Chain pipelines that share the same MIDI note (different channels).
+    // First-come becomes head of list; subsequent are appended to the tail.
+    uint8_t head = lookup.note_to_pipeline[midiNote];
+    if (head == 0xFF) {
+      lookup.note_to_pipeline[midiNote] = lookup.pipeline_count;
+    } else {
+      uint8_t cur = head;
+      while (lookup.pipelines[cur].next_for_note != 0xFF) {
+        cur = lookup.pipelines[cur].next_for_note;
+      }
+      lookup.pipelines[cur].next_for_note = lookup.pipeline_count;
+    }
     lookup.pipeline_count++;
   }
 
   buildCcRoutingTable(lookup);
 
   DBGF("[Compiler] Compiled %d pipelines, %d CC routes (%d dropped)\n", lookup.pipeline_count, lookup.cc_route_count, lookup.cc_route_dropped);
+  if (lookup.cc_route_dropped > 0) {
+    DBGF("[Compiler] WARNING: %d CC routes dropped (MAX_CC_ROUTES=%d full) — some CC bindings will not respond\n",
+         lookup.cc_route_dropped, MAX_CC_ROUTES);
+  }
   return true;
 }
 

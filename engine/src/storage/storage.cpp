@@ -245,12 +245,18 @@ bool Storage::loadInstruments(InstrumentManager& mgr) {
 bool Storage::saveSystemConfig(const JsonObject& cfg) {
   JsonDocument doc;
   doc.set(cfg);
+  doc["version"] = 1;  // schema version for forward migrations
   return _writeJson(CONFIG_FILE, doc);
 }
 
 bool Storage::loadSystemConfig(JsonObject& cfg) {
   JsonDocument doc;
   if (!_readJson(CONFIG_FILE, doc)) return false;
+  if (doc["version"].is<int>()) {
+    DBGF("[Storage] System config version %d\n", doc["version"].as<int>());
+  } else {
+    DBGLN("[Storage] System config: no version field (legacy)");
+  }
   cfg = doc.as<JsonObject>();
   return true;
 }

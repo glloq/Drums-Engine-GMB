@@ -245,8 +245,17 @@ void WebServerManager::_handleGetPipelineBlocks(AsyncWebServerRequest* req) {
     return;
   }
 
-  // Find the compiled pipeline for this instrument
-  uint8_t pipelineIdx = _eventProc->getLookup().note_to_pipeline[inst->midiNote];
+  // Find the compiled pipeline for this instrument. With chained note→pipeline
+  // (multi-channel support), walk the list and match the instrument's MIDI channel.
+  const PipelineLookup& lookup = _eventProc->getLookup();
+  uint8_t pipelineIdx = lookup.note_to_pipeline[inst->midiNote];
+  while (pipelineIdx != 0xFF && pipelineIdx < lookup.pipeline_count) {
+    const CompiledPipeline& p = lookup.pipelines[pipelineIdx];
+    uint8_t pchan = p.midi_channel;
+    uint8_t ichan = (inst->midiChannel > 16) ? 0 : inst->midiChannel;
+    if (pchan == ichan) break;
+    pipelineIdx = p.next_for_note;
+  }
 
   JsonDocument doc;
   doc["instrumentId"] = instrId;

@@ -31,9 +31,9 @@ public:
   void sendNoteOff(uint8_t channel, uint8_t note);
 
   // Status
-  bool isConnected() const { return _connected; }
-  uint8_t getSessionCount() const { return _sessionCount; }
-  unsigned long getLastActivity() const { return _lastActivity; }
+  bool isConnected() const { return _connected.load(std::memory_order_relaxed); }
+  uint8_t getSessionCount() const { return _sessionCount.load(std::memory_order_relaxed); }
+  unsigned long getLastActivity() const { return _lastActivity.load(std::memory_order_relaxed); }
 
   // MIDI channel filter (bitmask: bit 0 = ch1, bit 9 = ch10, 0xFFFF = all)
   uint16_t getChannelMask() const { return _channelMask; }
@@ -46,16 +46,22 @@ public:
   // Stats (atomic: accessed from both Core 0 and Core 1 callbacks)
   uint32_t getNotesReceived() const { return _notesReceived.load(std::memory_order_relaxed); }
   uint32_t getNotesSent() const { return _notesSent.load(std::memory_order_relaxed); }
+  uint32_t getMidiOverflowCount() const { return _midiOverflowCount.load(std::memory_order_relaxed); }
   void resetStats();
+
+  // External input ingest (e.g. UART MIDI). Thread-safe (atomic stats).
+  void ingestExternalMidi(const MidiEvent& ev);
+  void notifyOverflow() { _midiOverflowCount.fetch_add(1, std::memory_order_relaxed); }
 
 private:
   EventProcessor* _eventProc;
   InstrumentManager* _instrumentMgr;
-  volatile bool _connected;
-  volatile uint8_t _sessionCount;
-  volatile unsigned long _lastActivity;
+  std::atomic<bool> _connected;
+  std::atomic<uint8_t> _sessionCount;
+  std::atomic<unsigned long> _lastActivity;
   std::atomic<uint32_t> _notesReceived;
   std::atomic<uint32_t> _notesSent;
+  std::atomic<uint32_t> _midiOverflowCount;   // MIDI msgs dropped (e.g. UART buffer overflow)
   uint16_t _channelMask = 0xFFFF;  // Default: all channels allowed
 
   // Use pipeline mode if pipelines are compiled

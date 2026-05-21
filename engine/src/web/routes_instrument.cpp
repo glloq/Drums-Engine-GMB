@@ -22,7 +22,7 @@ void WebServerManager::_handleGetInstrument(AsyncWebServerRequest* req) {
 
 void WebServerManager::_handleCreateInstrument(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
   JsonDocument doc;
-  if (deserializeJson(doc, data, len)) { _sendError(req, 400, "Invalid JSON"); return; }
+  if (!_parseJsonBody(req, data, len, doc)) return;
 
   InstrumentConfig inst;
   _instrMgr->instrumentFromJson(doc.as<JsonObject>(), inst);
@@ -48,7 +48,7 @@ void WebServerManager::_handleCreateInstrument(AsyncWebServerRequest* req, uint8
 void WebServerManager::_handleUpdateInstrument(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
   uint8_t id = _extractId(req, "id");
   JsonDocument doc;
-  if (deserializeJson(doc, data, len)) { _sendError(req, 400, "Invalid JSON"); return; }
+  if (!_parseJsonBody(req, data, len, doc)) return;
 
   InstrumentConfig inst;
   _instrMgr->instrumentFromJson(doc.as<JsonObject>(), inst);
@@ -81,7 +81,7 @@ void WebServerManager::_handleDeleteInstrument(AsyncWebServerRequest* req) {
 
 void WebServerManager::_handleTestInstrument(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
   JsonDocument doc;
-  if (deserializeJson(doc, data, len)) { _sendError(req, 400, "Invalid JSON"); return; }
+  if (!_parseJsonBody(req, data, len, doc)) return;
   uint8_t id = doc["id"] | 0;
   uint8_t vel = doc["velocity"] | 80;
   _instrMgr->testInstrument(id, vel);
@@ -90,10 +90,7 @@ void WebServerManager::_handleTestInstrument(AsyncWebServerRequest* req, uint8_t
 
 void WebServerManager::_handleTestInstrumentAction(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
   JsonDocument doc;
-  if (deserializeJson(doc, data, len)) {
-    _sendError(req, 400, "Invalid JSON");
-    return;
-  }
+  if (!_parseJsonBody(req, data, len, doc)) return;
 
   uint8_t id = doc["id"] | 0xFF;
   const char* eventType = doc["event"] | "on";

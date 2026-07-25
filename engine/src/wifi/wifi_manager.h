@@ -9,6 +9,7 @@
 #include <ArduinoJson.h>
 #include <ESPAsyncWebServer.h>
 #include "../core/config.h"
+#include "../web/api_auth.h"
 
 // ============================================================================
 // WiFiManager - Gestion WiFi avec credentials LittleFS + portail captif
@@ -39,8 +40,10 @@ public:
   // Doit etre appele apres LittleFS.begin()
   bool begin();
 
-  // Enregistrer les routes API sur un serveur web existant
-  void registerRoutes(AsyncWebServer* server);
+  // Enregistrer les routes API sur un serveur web existant.
+  // auth / rateLimiter : partages avec le WebServerManager pour proteger
+  // POST /api/wifi (P0 #2). Ne jamais enregistrer cette route sans auth.
+  void registerRoutes(AsyncWebServer* server, ApiAuth* auth, RateLimiter* rateLimiter);
 
   // Appeler regulierement pour traiter les requetes DNS captives
   void update();
@@ -62,6 +65,10 @@ private:
   String _hostname;
   DNSServer _dnsServer;
   bool _dnsRunning;
+
+  // Auth partagee avec WebServerManager (P0 #2)
+  ApiAuth* _auth = nullptr;
+  RateLimiter* _rateLimiter = nullptr;
 
   // Charger les credentials depuis /wifi.json
   bool _loadCredentials();

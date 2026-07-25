@@ -44,6 +44,11 @@ public:
   // Get API token for display at boot
   String getApiToken() const { return _auth.getToken(); }
 
+  // Expose the shared auth + rate limiter so externally-registered routes
+  // (e.g. WiFiManager's /api/wifi) can enforce the same protection (P0 #2).
+  ApiAuth* getAuth() { return &_auth; }
+  RateLimiter* getRateLimiter() { return &_rateLimiter; }
+
 private:
   AsyncWebServer _server;
   AsyncWebSocket _ws;
@@ -113,6 +118,7 @@ private:
   void _handleGetMidiChannels(AsyncWebServerRequest* req);
   void _handleSetMidiChannels(AsyncWebServerRequest* req, uint8_t* data, size_t len);
   void _handleFactoryReset(AsyncWebServerRequest* req);
+  void _handlePanic(AsyncWebServerRequest* req);
   void _handleValidateConfig(AsyncWebServerRequest* req);
 
   // LED Strips

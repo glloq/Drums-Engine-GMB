@@ -51,6 +51,9 @@ public:
   // Get active note states (thread-safe snapshot)
   void getNoteActive(uint8_t* out) const;
 
+  // Emergency stop: reset NoteOn / retrigger counters (thread-safe).
+  void panicReset();
+
   // Recharger/compiler les tables
   void recompileLookup();
 

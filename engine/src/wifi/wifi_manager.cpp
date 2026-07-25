@@ -60,15 +60,27 @@ void WiFiManager::switchToAP() {
 // registerRoutes() - Enregistrer les endpoints API WiFi
 // ============================================================================
 
-void WiFiManager::registerRoutes(AsyncWebServer* server) {
+void WiFiManager::registerRoutes(AsyncWebServer* server, ApiAuth* auth, RateLimiter* rateLimiter) {
+  _auth = auth;
+  _rateLimiter = rateLimiter;
+
   server->on("/api/wifi", HTTP_GET,
     [this](AsyncWebServerRequest* req) { _handleGetWifi(req); });
 
+  // SECURITY (P0 #2): changing WiFi credentials (and the reboot it triggers)
+  // must require the API token and pass the rate limiter — otherwise anyone
+  // on the LAN or the ESP32 AP could hijack the controller's network config
+  // or force reboot loops.
   server->on("/api/wifi", HTTP_POST,
-    [](AsyncWebServerRequest* req) {},
+    [this](AsyncWebServerRequest* req) {
+      if (_rateLimiter && !_rateLimiter->checkRate(req)) return;
+    },
     nullptr,
     [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
-      if (index == 0) _handlePostWifi(req, data, len);
+      if (index == 0) {
+        if (_auth && !_auth->checkAuth(req)) return;
+        _handlePostWifi(req, data, len);
+      }
     });
 
   // Captive portal: rediriger les requetes de detection de portail

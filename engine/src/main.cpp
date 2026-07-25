@@ -624,7 +624,8 @@ void initTask(void* param) {
   webServer.setMicrophone(&mic);
   webServer.setRecompileCallback(compilePipelines);
   webServer.begin();
-  wifiManager.registerRoutes(&webServer.getServer());
+  wifiManager.registerRoutes(&webServer.getServer(),
+                             webServer.getAuth(), webServer.getRateLimiter());
 
   // 10. FreeRTOS tasks
   // RT Core: Scheduler + MIDI sur Core 1, priorite haute

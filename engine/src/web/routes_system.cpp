@@ -980,3 +980,44 @@ void WebServerManager::_handleFactoryReset(AsyncWebServerRequest* req) {
   delay(500);
   ESP.restart();
 }
+
+// ============================================================================
+// Emergency Stop / Panic (P0 #3)
+// ============================================================================
+// Immediately and reliably stops all motion. Unlike sending value=0 test
+// commands (which a solenoid interprets as a min-duration pulse, a servo as
+// its min position, and a motor as remapped PWM), this drives every actuator
+// OFF directly and clears everything that could re-trigger them.
+//
+// Order matters:
+//   1. Stop loop playback   -> no new loop-generated NoteOn events.
+//   2. Clear scheduler queue -> pending ON commands never dispatch.
+//   3. stopAll() actuators   -> direct hardware OFF, bypassing the queue.
+//   4. Reset NoteOn/retrigger state -> next NoteOn re-triggers cleanly.
+//   5. Refresh the active-count cache.
+// The stop path never goes through the normal command queue, so it stays
+// effective even when the queue is saturated.
+void WebServerManager::_handlePanic(AsyncWebServerRequest* req) {
+  // 1. Halt loop playback (Core 0) so no further events are generated.
+  if (_loopEngine) _loopEngine->stop();
+
+  // 2. Drop every pending command so no queued ON fires after we stop.
+  if (_scheduler) _scheduler->cancelAll();
+
+  // 3. Force all actuators OFF directly (not via the queue).
+  if (_actMgr) {
+    _actMgr->stopAll();
+    _actMgr->updateActiveCount();
+  }
+
+  // 4. Reset NoteOn / retrigger counters so a subsequent NoteOn works.
+  if (_eventProc) _eventProc->panicReset();
+
+  DBGLN("[System] PANIC: all actuators stopped, queue cleared, loops halted");
+  ErrorLog::info("Panic: emergency stop triggered");
+
+  JsonDocument doc;
+  doc["message"] = "Emergency stop: all actuators halted";
+  doc["stopped"] = true;
+  _sendJson(req, 200, doc);
+}

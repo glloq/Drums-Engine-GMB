@@ -81,9 +81,18 @@ Base URL: `http://<ip-esp32>/`
 - `POST /api/save`
 - `GET /api/validate` — verification automatique de la configuration (issues, warnings, ok)
 
+### Arret d'urgence
+- `POST /api/panic` — arret d'urgence (auth requise). Arrete immediatement tous
+  les actionneurs via `ActuatorManager::stopAll()`, vide la queue du scheduler,
+  stoppe les boucles et remet a zero l'etat NoteOn/retrigger. Ne passe **pas**
+  par la queue normale : reste efficace meme si la queue est saturee. A utiliser
+  a la place de commandes `test/actuator value=0` (qui ne sont pas un OFF fiable).
+
 ### WiFi
 - `GET /api/wifi` — statut WiFi (mode, ssid, ip, rssi)
-- `POST /api/wifi` — configurer credentials WiFi (redemarrage auto)
+- `POST /api/wifi` — configurer credentials WiFi (redemarrage auto). **Auth
+  requise** + rate-limiting (P0 #2) : la modification des identifiants et le
+  redemarrage qu'elle declenche ne sont plus accessibles sans le token API.
 
 ### MIDI Configuration
 - `GET /api/midi/channels` — canaux MIDI actifs (bitmask + array)

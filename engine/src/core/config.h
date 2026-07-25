@@ -102,7 +102,11 @@
 #define LOOPS_DIR         "/loops"
 
 // --- Debug ---
+// DEBUG_SERIAL can be overridden from the build (e.g. -DDEBUG_SERIAL=0 for the
+// native/unit-test environment, which has no Serial).
+#ifndef DEBUG_SERIAL
 #define DEBUG_SERIAL      true
+#endif
 #define DEBUG_BAUD        115200
 
 #if DEBUG_SERIAL

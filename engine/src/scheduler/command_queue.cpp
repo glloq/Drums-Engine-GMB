@@ -1,77 +1,129 @@
 #include "command_queue.h"
 
 CommandQueue::CommandQueue()
-  : _head(0), _tail(0), _overflowCount(0), _pushMux(portMUX_INITIALIZER_UNLOCKED) {}
+  : _count(0), _overflowCount(0), _mux(portMUX_INITIALIZER_UNLOCKED) {}
+
+// Insert keeping the buffer sorted ascending by execute_at.
+// Caller must hold _mux and guarantee _count < COMMAND_QUEUE_SIZE.
+void CommandQueue::_insertLocked(const ActuatorCommand& cmd) {
+  // Find insertion index: first element that executes strictly AFTER cmd.
+  // Using >= keeps insertion stable (FIFO among equal timestamps).
+  uint16_t i = _count;
+  while (i > 0 && _before(cmd.execute_at, _buffer[i - 1].execute_at)) {
+    _buffer[i] = _buffer[i - 1];
+    i--;
+  }
+  _buffer[i] = cmd;
+  _count++;
+}
 
 bool CommandQueue::push(const ActuatorCommand& cmd) {
-  // Spinlock: push() is called from both Core 0 (web/loop) and Core 1 (MIDI/EventProcessor)
-  portENTER_CRITICAL(&_pushMux);
+  portENTER_CRITICAL(&_mux);
 
-  uint16_t nextHead = (_head + 1) % COMMAND_QUEUE_SIZE;
-
-  if (nextHead == _tail) {
-    // H3 fix: OFF commands must not be dropped (safety critical).
-    // Drop the oldest command to make room for OFF.
-    if (cmd.command_type == (uint8_t)CommandType::OFF) {
-      _tail = (_tail + 1) % COMMAND_QUEUE_SIZE;  // Evict oldest
-      _buffer[_head] = cmd;
-      _head = nextHead;
+  if (_count >= COMMAND_QUEUE_SIZE) {
+    // Full. OFF commands are safety-critical and must not be dropped:
+    // evict the least-urgent command (the tail, greatest execute_at) to
+    // make room. Non-OFF commands are rejected.
+    if ((CommandType)cmd.command_type == CommandType::OFF) {
+      _count--;  // drop tail (latest / least urgent)
+      _insertLocked(cmd);
       _overflowCount++;
-      portEXIT_CRITICAL(&_pushMux);
+      portEXIT_CRITICAL(&_mux);
       return true;
     }
-    // Queue pleine
     _overflowCount++;
-    portEXIT_CRITICAL(&_pushMux);
+    portEXIT_CRITICAL(&_mux);
     DBGF("[Queue] OVERFLOW! (count=%lu)\n", _overflowCount);
     return false;
   }
 
-  _buffer[_head] = cmd;
-  _head = nextHead;
-  portEXIT_CRITICAL(&_pushMux);
+  _insertLocked(cmd);
+  portEXIT_CRITICAL(&_mux);
+  return true;
+}
+
+bool CommandQueue::pushPair(const ActuatorCommand& on, const ActuatorCommand& off) {
+  portENTER_CRITICAL(&_mux);
+
+  // Reserve two slots up-front: insert both or neither so an actuator can
+  // never be turned ON without its scheduled OFF (P0 #7).
+  if (_count > COMMAND_QUEUE_SIZE - 2) {
+    _overflowCount++;
+    portEXIT_CRITICAL(&_mux);
+    DBGF("[Queue] OVERFLOW (pair rejected, count=%lu)\n", _overflowCount);
+    return false;
+  }
+
+  _insertLocked(on);
+  _insertLocked(off);
+  portEXIT_CRITICAL(&_mux);
   return true;
 }
 
 bool CommandQueue::pop(ActuatorCommand& cmd) {
-  if (_tail == _head) return false;  // Queue vide
-
-  cmd = _buffer[_tail];
-  _tail = (_tail + 1) % COMMAND_QUEUE_SIZE;
+  portENTER_CRITICAL(&_mux);
+  if (_count == 0) {
+    portEXIT_CRITICAL(&_mux);
+    return false;
+  }
+  cmd = _buffer[0];
+  // Shift the remaining elements down (n <= 128, trivial cost).
+  for (uint16_t i = 1; i < _count; i++) {
+    _buffer[i - 1] = _buffer[i];
+  }
+  _count--;
+  portEXIT_CRITICAL(&_mux);
   return true;
 }
 
 bool CommandQueue::peek(ActuatorCommand& cmd) const {
-  if (_tail == _head) return false;
-  cmd = _buffer[_tail];
+  portENTER_CRITICAL(&_mux);
+  if (_count == 0) {
+    portEXIT_CRITICAL(&_mux);
+    return false;
+  }
+  cmd = _buffer[0];
+  portEXIT_CRITICAL(&_mux);
   return true;
 }
 
 bool CommandQueue::hasDue(uint32_t now) const {
-  if (_tail == _head) return false;
-  return ((int32_t)(now - _buffer[_tail].execute_at) >= 0);
+  portENTER_CRITICAL(&_mux);
+  bool due = (_count > 0) && ((int32_t)(now - _buffer[0].execute_at) >= 0);
+  portEXIT_CRITICAL(&_mux);
+  return due;
 }
 
 uint16_t CommandQueue::count() const {
-  if (_head >= _tail) {
-    return _head - _tail;
-  }
-  return COMMAND_QUEUE_SIZE - _tail + _head;
+  portENTER_CRITICAL(&_mux);
+  uint16_t c = _count;
+  portEXIT_CRITICAL(&_mux);
+  return c;
 }
 
 bool CommandQueue::isEmpty() const {
-  return _head == _tail;
+  portENTER_CRITICAL(&_mux);
+  bool e = (_count == 0);
+  portEXIT_CRITICAL(&_mux);
+  return e;
 }
 
 bool CommandQueue::isFull() const {
-  return ((_head + 1) % COMMAND_QUEUE_SIZE) == _tail;
+  portENTER_CRITICAL(&_mux);
+  bool f = (_count >= COMMAND_QUEUE_SIZE);
+  portEXIT_CRITICAL(&_mux);
+  return f;
 }
 
 void CommandQueue::clear() {
-  _head = 0;
-  _tail = 0;
+  portENTER_CRITICAL(&_mux);
+  _count = 0;
+  portEXIT_CRITICAL(&_mux);
 }
 
 float CommandQueue::usage() const {
-  return (float)count() / COMMAND_QUEUE_SIZE * 100.0f;
+  portENTER_CRITICAL(&_mux);
+  float u = (float)_count / COMMAND_QUEUE_SIZE * 100.0f;
+  portEXIT_CRITICAL(&_mux);
+  return u;
 }

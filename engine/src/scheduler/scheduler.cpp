@@ -9,7 +9,7 @@ void Scheduler::begin() {
   _queue.clear();
   _dispatchCount = 0;
   resetJitterStats();
-  DBGLN("[Scheduler] Started (queue lock-free, timestamps us)");
+  DBGLN("[Scheduler] Started (time-sorted queue, spinlock-protected, timestamps us)");
 }
 
 bool Scheduler::scheduleCommand(const ActuatorCommand& cmd) {
@@ -32,8 +32,6 @@ bool Scheduler::schedulePulseAt(uint8_t actuatorId, uint16_t value,
   cmdOn.duration = (durationUnits > UINT16_MAX) ? UINT16_MAX : (uint16_t)durationUnits;
   cmdOn.execute_at = executeAt;
 
-  if (!_queue.push(cmdOn)) return false;
-
   // Commande OFF programmee apres la duree
   ActuatorCommand cmdOff;
   cmdOff.actuator_id = actuatorId;
@@ -42,7 +40,10 @@ bool Scheduler::schedulePulseAt(uint8_t actuatorId, uint16_t value,
   cmdOff.duration = 0;
   cmdOff.execute_at = executeAt + durationUs;
 
-  return _queue.push(cmdOff);
+  // P0 #7: insert ON+OFF transactionally so an actuator is never turned ON
+  // without its scheduled OFF (which would leave it energized until the
+  // watchdog trips).
+  return _queue.pushPair(cmdOn, cmdOff);
 }
 
 

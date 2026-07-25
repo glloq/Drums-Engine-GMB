@@ -65,15 +65,40 @@
   `.bak` meme quand le fichier principal est present mais corrompu.
 - **play()/playChain()** renvoient un bool (routes 409 si echec).
 
+### Corrections post-revue (3e passe)
+- **Build ESP32 / LEDC** : cause reelle identifiee — le code cible le core 3.x
+  (RMT `driver/rmt_tx.h`, `ledcAttach`). La plateforme est donc passee a
+  `espressif32@6.9.0` (Arduino core 3.0.7) et les libs async au fork maintenu
+  `esp32async/ESPAsyncWebServer` + `AsyncTCP` (les libs me-no-dev ne compilent
+  pas sur core 3.x). `LedcDriver` est reecrit : base sur le GPIO, allocation
+  paresseuse de canal, API conditionnelle 2.x/3.x — corrige aussi l'absence
+  d'initialisation et la confusion GPIO/canal.
+- **Handles JSON** : `Storage::loadLoop`/`loadSystemConfig` remplissent le
+  document de l'appelant (plus de `JsonObject` vers un document detruit).
+- **NoteOff** : le compteur `_noteActive` n'est libere qu'apres confirmation de
+  la mise en file du OFF ; en cas d'echec il est restaure pour permettre un
+  nouvel essai (plus d'actionneur bloque avec compteur a zero).
+- **Bornes MIDI** : `ev.data1 >= 128` rejete dans EventProcessor et
+  InstrumentManager (protege `/api/test/note`).
+- **beatValue** : `_totalTicks`, la validation et beat/bar en tiennent compte
+  (6/8 correct ; x/4 inchange).
+- **IDs de boucle** : re-persistance des fichiers apres suppression + chargement
+  trie par id (ordre/ids stables au reboot).
+- **LED** : borne de note defensive, fade `>= 1 ms`, segment clampe a la longueur
+  du strip.
+- **Actionneurs** : `addConfig` refuse l'id 255 et les doublons.
+- **clearAll** : mutations + reset `_activeCount` sous spinlock.
+
 ### Reste a faire (non traite — voir §fin)
 - Concurrence : modele proprietaire-unique Core 1, double-buffer des lookups,
-  lookup canal MIDI.
-- Web : corps HTTP fragmentes, auth WebSocket.
+  lookup canal MIDI, reconfiguration a chaud sure.
+- Web : corps HTTP fragmentes, auth WebSocket, route de validation de session.
+- Securite reseau : PIN obligatoire + hache, mot de passe AP unique.
 - UI : decoupage SPA en modules, accessibilite.
-- Note CI : le build ESP32 n'a pas pu etre execute localement (egress bloque
-  vers le registre PlatformIO) ; la plateforme est epinglee a
-  `espressif32@6.5.0` (Arduino core 2.0.14) pour compatibilite avec les
-  bibliotheques me-no-dev.
+- **CI non verifiee localement** : l'egress vers le registre PlatformIO est
+  bloque par la politique reseau de la session ; les corrections build sont
+  raisonnees (headers/APIs verifies statiquement) mais le `pio run -e esp32`
+  doit etre confirme vert par la CI.
 
 ---
 
@@ -84,23 +109,23 @@
 | Architecture 6 couches | 100% | DONE |
 | HAL (GPIO, LEDC, MCP23017, PCA9685) | 100% | DONE — mutex I2C + recovery |
 | Actuators (Servo, Solenoid, Motor) | 100% | DONE — ISR multi-instance |
-| Scheduler temps reel | 100% | DONE — queue triee, spinlock, insertion ON/OFF transactionnelle |
-| Event Processor + Pipeline | 100% | DONE — spinlock dual-core |
+| Scheduler temps reel | 85% | Queue triee/spinlock/transactionnelle; insertion O(n) sous verrou a mesurer |
+| Event Processor + Pipeline | 70% | NoteOff fiabilise + bornes note; lookup canal MIDI et double-buffer manquants |
 | MIDI Engine (rtpMIDI WiFi) | 100% | DONE |
 | Instrument Manager + CRUD | 100% | DONE |
-| Loop Engine | 100% | DONE — tick fractionnaire + persistence |
-| Storage LittleFS | 100% | DONE — ecriture crash-safe .new/.bak + recovery |
-| Web Server REST API | 100% | DONE — auth + rate-limiting + modules |
-| UI Web embarquee | 95% | Pipeline editor manquant |
+| Loop Engine | 70% | beatValue corrige, IDs stabilises; handles JSON corriges |
+| Storage LittleFS | 70% | crash-safe .new/.bak + recovery; handles JsonObject corriges; transactions partielles restantes |
+| Web Server REST API | 80% | auth + rate-limiting; corps HTTP fragmentes non geres |
+| UI Web embarquee | 90% | Editeur de pipeline present; monolithe innerHTML/CSP a durcir |
 | Templates (8 presets) | 90% | Pas de calibration auto |
 | Routage CC compile | 100% | DONE |
 | Concurrence dual-core | 85% | Partiel — spinlocks + mutex + panic latch atomique; modele proprietaire-unique Core 1, double-buffer des lookups et lookup canal MIDI encore differes |
 | Documentation | 100% | DONE — mise a jour complete |
 | Tests automatises | 80% | Script curl + tests natifs Unity (queue, validation) |
 | CI/CD | 70% | GitHub Actions: tests natifs + build ESP32 + cppcheck |
-| Securite | 95% | Auth Bearer + rate-limit + WiFi auth + LittleFS non expose + panic + anti-XSS |
+| Securite | 60% | Auth Bearer/rate-limit/panic/anti-XSS OK; token ouvert sans PIN, PIN en clair, AP fixe, WS non authentifie |
 
-**Avancement global estime: ~90%** (P0 securite/temps-reel traites; restent lookup canal MIDI, double-buffer, corps HTTP fragmentes, modularisation SPA, accessibilite)
+**Avancement fonctionnel ~80-85% ; preparation production reelle ~60-65%** (build a confirmer vert, LEDC teste sur cible, concurrence Core 1, corps HTTP fragmentes, durcissement securite reseau).
 
 ---
 

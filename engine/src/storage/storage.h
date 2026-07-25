@@ -41,11 +41,11 @@ public:
 
   // System config
   bool saveSystemConfig(const JsonObject& cfg);
-  bool loadSystemConfig(JsonObject& cfg);
+  bool loadSystemConfig(JsonDocument& cfg);
 
   // Loops
   bool saveLoop(uint8_t id, const JsonObject& loop);
-  bool loadLoop(uint8_t id, JsonObject& loop);
+  bool loadLoop(uint8_t id, JsonDocument& out);
   bool deleteLoop(uint8_t id);
   bool listLoops(JsonArray& arr);
 

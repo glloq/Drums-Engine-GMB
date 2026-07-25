@@ -132,6 +132,19 @@ int ActuatorFactory::addConfig(const ActuatorConfig& config) {
     cfg.id = maxId + 1;
   }
 
+  // review #9: 0xFF is the reserved "invalid/none" sentinel, and duplicate ids
+  // would make the second config silently fail to register at rebuild time.
+  if (cfg.id == 0xFF) {
+    DBGLN("[Factory] Rejected actuator config: id 255 is reserved");
+    return -1;
+  }
+  for (uint8_t i = 0; i < _configCount; i++) {
+    if (_configPool[i].id == cfg.id) {
+      DBGF("[Factory] Rejected actuator config: duplicate id %d\n", cfg.id);
+      return -1;
+    }
+  }
+
   _configPool[_configCount] = cfg;
   _configCount++;
   return _configCount - 1;

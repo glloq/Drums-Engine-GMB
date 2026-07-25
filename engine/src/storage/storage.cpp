@@ -584,22 +584,10 @@ bool Storage::loadLedThemes(LedEngine& engine) {
   return true;
 }
 
-bool Storage::_readJson(const char* path, JsonDocument& doc) {
+// Open + parse a single file. Returns true only if it exists AND parses.
+static bool tryReadParse(const char* path, JsonDocument& doc) {
   File file = LittleFS.open(path, "r");
-  if (!file) {
-    // P1 #16: crash recovery — a write interrupted after moving the original to
-    // .bak but before promoting .new leaves the main file missing. Fall back to
-    // the backup so the last good config is not lost.
-    String bakPath = String(path) + ".bak";
-    if (LittleFS.exists(bakPath.c_str())) {
-      DBGF("[Storage] %s missing, recovering from %s\n", path, bakPath.c_str());
-      file = LittleFS.open(bakPath.c_str(), "r");
-    }
-    if (!file) {
-      DBGF("[Storage] File not found: %s\n", path);
-      return false;
-    }
-  }
+  if (!file) return false;
   DeserializationError err = deserializeJson(doc, file);
   file.close();
   if (err) {
@@ -607,4 +595,26 @@ bool Storage::_readJson(const char* path, JsonDocument& doc) {
     return false;
   }
   return true;
+}
+
+bool Storage::_readJson(const char* path, JsonDocument& doc) {
+  // Try the primary file first.
+  if (tryReadParse(path, doc)) return true;
+
+  // P1 #16 (review #9): recover from the backup when the primary is EITHER
+  // missing OR present-but-corrupt (a write interrupted mid-flash can leave a
+  // truncated primary). Physically restore the backup as the primary so the
+  // system heals itself.
+  String bakPath = String(path) + ".bak";
+  if (LittleFS.exists(bakPath.c_str())) {
+    DBGF("[Storage] %s missing/corrupt, recovering from %s\n", path, bakPath.c_str());
+    if (tryReadParse(bakPath.c_str(), doc)) {
+      LittleFS.remove(path);                       // drop the bad/absent primary
+      LittleFS.rename(bakPath.c_str(), path);      // promote the backup
+      return true;
+    }
+  }
+
+  DBGF("[Storage] File not found or unreadable: %s\n", path);
+  return false;
 }

@@ -1,5 +1,17 @@
 #include "web_server.h"
 #include "index_html_gz.h"
+#include "../core/panic_state.h"
+
+// P0 #3: reject actuator-driving requests with 409 while the panic latch is set
+// (the RT-side guards already refuse the actuation; this gives the client clear
+// feedback instead of a misleading 200).
+bool WebServerManager::_panicActiveReject(AsyncWebServerRequest* req) {
+  if (g_panicActive.load(std::memory_order_acquire)) {
+    _sendError(req, 409, "Panic active — POST /api/panic/reset to re-arm");
+    return true;
+  }
+  return false;
+}
 
 WebServerManager::WebServerManager(InstrumentManager* instrMgr, ActuatorManager* actMgr,
                                     ActuatorFactory* actFactory,
@@ -184,6 +196,7 @@ void WebServerManager::_setupRoutes() {
     [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
       if (index == 0) {
         if (!_auth.checkAuth(req)) return;
+        if (_panicActiveReject(req)) return;
         _handleTestInstrument(req, data, len);
       }
     });
@@ -194,6 +207,7 @@ void WebServerManager::_setupRoutes() {
     [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
       if (index == 0) {
         if (!_auth.checkAuth(req)) return;
+        if (_panicActiveReject(req)) return;
         _handleTestInstrumentAction(req, data, len);
       }
     });
@@ -204,6 +218,7 @@ void WebServerManager::_setupRoutes() {
     [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
       if (index == 0) {
         if (!_auth.checkAuth(req)) return;
+        if (_panicActiveReject(req)) return;
         _handleTestActuator(req, data, len);
       }
     });
@@ -214,6 +229,7 @@ void WebServerManager::_setupRoutes() {
     [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
       if (index == 0) {
         if (!_auth.checkAuth(req)) return;
+        if (_panicActiveReject(req)) return;
         _handleTestCC(req, data, len);
       }
     });
@@ -224,6 +240,7 @@ void WebServerManager::_setupRoutes() {
     [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
       if (index == 0) {
         if (!_auth.checkAuth(req)) return;
+        if (_panicActiveReject(req)) return;
         _handleTestNote(req, data, len);
       }
     });
@@ -408,6 +425,14 @@ void WebServerManager::_setupRoutes() {
       _handlePanic(req);
     });
 
+  // Re-arm after an emergency stop (clears the panic latch). Explicit only.
+  _server.on("/api/panic/reset", HTTP_POST,
+    [this](AsyncWebServerRequest* req) {
+      if (!_rateLimiter.checkRate(req)) return;
+      if (!_auth.checkAuth(req)) return;
+      _handlePanicReset(req);
+    });
+
   // --- MIDI Channel Config ---
   _server.on("/api/midi/channels", HTTP_GET,
     [this](AsyncWebServerRequest* req) { _handleGetMidiChannels(req); });
@@ -558,6 +583,7 @@ void WebServerManager::_setupRoutes() {
     [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
       if (index == 0) {
         if (!_auth.checkAuth(req)) return;
+        if (_panicActiveReject(req)) return;
         _handleTestPipeline(req, data, len);
       }
     });

@@ -1,6 +1,7 @@
 #include "actuator_manager.h"
 #include "servo_actuator.h"
 #include "../scheduler/scheduler.h"
+#include "../core/panic_state.h"
 
 // Spinlock for _activeCount shared between Core 0 (web/watchdog) and Core 1 (scheduler dispatch)
 static portMUX_TYPE _actMgrMux = portMUX_INITIALIZER_UNLOCKED;
@@ -47,6 +48,14 @@ bool ActuatorManager::unregisterActuator(uint8_t id) {
 }
 
 void ActuatorManager::dispatch(const ActuatorCommand& cmd) {
+  // P0 #3: while the emergency-stop latch is set, refuse every command except
+  // OFF — this is the last-line guard that catches an ON scheduled on Core 1
+  // during/after a panic triggered on Core 0.
+  if (g_panicActive.load(std::memory_order_acquire) &&
+      (CommandType)cmd.command_type != CommandType::OFF) {
+    return;
+  }
+
   int8_t idx = _findIndex(cmd.actuator_id);
   if (idx < 0) return;
 
@@ -110,6 +119,7 @@ const Actuator* ActuatorManager::getActuator(uint8_t id) const {
 }
 
 void ActuatorManager::testActuator(uint8_t id, uint8_t value) {
+  if (g_panicActive.load(std::memory_order_acquire)) return;  // P0 #3
   Actuator* act = getActuator(id);
   if (!act) return;
 
@@ -165,6 +175,7 @@ void ActuatorManager::testActuator(uint8_t id, uint8_t value) {
 }
 
 void ActuatorManager::testServoAngle(uint8_t id, uint8_t angle) {
+  if (g_panicActive.load(std::memory_order_acquire)) return;  // P0 #3
   Actuator* act = getActuator(id);
   if (!act) return;
   if (act->getConfig().type != ActuatorType::SERVO) return;
@@ -202,6 +213,36 @@ uint8_t ActuatorManager::checkWatchdog() {
 
   if (stopped > 0) {
     updateActiveCount();  // re-acquires the lock internally
+  }
+  return stopped;
+}
+
+uint8_t ActuatorManager::checkEndStops() {
+  uint32_t now = micros();
+
+  // Same snapshot-then-act pattern as checkWatchdog: never do GPIO I/O under the
+  // spinlock. checkEndStops() reads limit-switch pins (blocking debounce) and
+  // may stop/reverse a motor.
+  Actuator* activeList[MAX_ACTUATORS];
+  uint8_t n = 0;
+
+  portENTER_CRITICAL(&_actMgrMux);
+  for (uint8_t i = 0; i < _count; i++) {
+    if (_actuators[i] && _actuators[i]->isActive()) {
+      activeList[n++] = _actuators[i];
+    }
+  }
+  portEXIT_CRITICAL(&_actMgrMux);
+
+  uint8_t stopped = 0;
+  for (uint8_t i = 0; i < n; i++) {
+    if (activeList[i]->checkEndStops(now)) {
+      stopped++;
+    }
+  }
+
+  if (stopped > 0) {
+    updateActiveCount();
   }
   return stopped;
 }

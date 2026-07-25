@@ -1583,10 +1583,15 @@ async function api(path, method='GET', body=null, silent=false) {
     clearTimeout(timeout);
     const payload = await r.json();
     if (!r.ok) {
-      if (!silent) {
-        const msg = payload && (payload.message || payload.error) ? (payload.message || payload.error) : ('HTTP ' + r.status);
-        toast('Erreur API: ' + msg, 'error');
+      const msg = payload && (payload.message || payload.error) ? (payload.message || payload.error) : ('HTTP ' + r.status);
+      // P0 #3: a blocked action while the panic latch is set — offer to re-arm.
+      if (r.status === 409 && /panic/i.test(msg)) {
+        if (!silent && confirm('Arret d\'urgence actif. Rearmer le systeme ?')) {
+          await rearmSystem();
+        }
+        return null;
       }
+      if (!silent) toast('Erreur API: ' + msg, 'error');
       return null;
     }
     return payload;
@@ -2159,7 +2164,7 @@ function renderActuators() {
     if (a.type===1 && a.cooldownUs > 0 && a.behavior===0) details += ' · Cooldown: '+Math.round(a.cooldownUs*0.1)+'ms';
     if (a.type===1 && a.behavior===1) details += ' · Actif max: '+Math.round(a.cooldownUs*0.1)+'ms';
     const usedBy = actUsedBy[a.id];
-    const usedByHtml = usedBy ? ' · <span style="color:var(--accent);">\u266a ' + usedBy.join(', ') + '</span>' : ' · <span style="color:var(--fg2);opacity:0.6;">non assigne</span>';
+    const usedByHtml = usedBy ? ' · <span style="color:var(--accent);">\u266a ' + usedBy.map(escapeHtml).join(', ') + '</span>' : ' · <span style="color:var(--fg2);opacity:0.6;">non assigne</span>';
     const tIcon = typeIcons[a.type] || '?';
     const tColor = typeColors[a.type] || 'var(--fg2)';
     const disabledStyle = !a.enabled ? 'opacity:0.5;' : '';
@@ -3175,7 +3180,7 @@ function renderNoteMap() {
     const gm = GM_DRUMS[n] || '';
     if (inst) {
       html += `<div style="padding:4px 6px;border-radius:4px;font-size:0.72em;background:var(--accent);color:#fff;cursor:pointer;line-height:1.3;" onclick="editInstrument(${inst.id})" title="${gm}">
-        <strong>${n}</strong> ${inst.name.substring(0,10)}${!inst.enabled ? ' [OFF]' : ''}</div>`;
+        <strong>${n}</strong> ${escapeHtml(inst.name.substring(0,10))}${!inst.enabled ? ' [OFF]' : ''}</div>`;
     } else if (gm) {
       html += `<div style="padding:4px 6px;border-radius:4px;font-size:0.72em;background:var(--bg);color:var(--fg2);line-height:1.3;opacity:0.6;cursor:pointer;" title="${gm} - Cliquer pour creer" onclick="quickCreateInstrument(${n},'${gm.replace(/'/g, "\\'")}')">
         <strong>${n}</strong> ${gm.substring(0,10)} <span style="color:var(--accent);">+</span></div>`;
@@ -4113,7 +4118,7 @@ function renderPipelineCard(inst) {
   if (ccBinds.length > 0) {
     const lines = ccBinds.map(b => {
       const act = actInfo(b.actuatorId);
-      const name = act ? act.name : '#' + b.actuatorId;
+      const name = escapeHtml(act ? act.name : '#' + b.actuatorId);  // P0 #18
       const cmd = CMD_NAMES[b.commandType] || '?';
       const curve = CURVE_NAMES[b.curve || 0];
       return `<div class="pipe-row"><span class="pipe-desc trans">CC${b.ccNumber} &rarr; ${cmd} <b>${name}</b> <small>[${b.rangeMin}-${b.rangeMax}] ${curve}${b.inverted ? ' inv' : ''}</small></span></div>`;
@@ -5260,7 +5265,7 @@ function renderLedStrips() {
         const pct = (count / s.ledCount * 100).toFixed(1);
         if (seg) {
           const hc = seg.hitColor || {r:255,g:255,b:255};
-          layoutHtml += `<div style="width:${pct}%;background:rgb(${hc.r},${hc.g},${hc.b});opacity:0.7;" title="${seg.name||'Segment'} (${seg.pixelStart}-${seg.pixelStart+seg.pixelCount-1})"></div>`;
+          layoutHtml += `<div style="width:${pct}%;background:rgb(${hc.r},${hc.g},${hc.b});opacity:0.7;" title="${escapeHtml(seg.name||'Segment')} (${seg.pixelStart}-${seg.pixelStart+seg.pixelCount-1})"></div>`;
         } else {
           layoutHtml += `<div style="width:${pct}%;background:rgba(128,128,128,0.15);" title="Non assigne (${i}-${i+count-1})"></div>`;
         }
@@ -5291,7 +5296,7 @@ function renderLedSegments() {
     const hc = s.hitColor || {r:255,g:255,b:255};
     const ic = s.idleColor || {r:40,g:40,b:40};
     return `<div class="list-item" style="border-left-color:rgb(${hc.r},${hc.g},${hc.b});">
-      <div class="item-title"><strong>${s.name||'Segment'}</strong> <span class="badge">Strip #${s.stripId}</span> <span class="badge">${s.pixelStart}-${s.pixelStart+s.pixelCount-1}</span> <span class="badge">${s.pixelCount} LEDs</span></div>
+      <div class="item-title"><strong>${escapeHtml(s.name||'Segment')}</strong> <span class="badge">Strip #${s.stripId}</span> <span class="badge">${s.pixelStart}-${s.pixelStart+s.pixelCount-1}</span> <span class="badge">${s.pixelCount} LEDs</span></div>
       <div style="display:flex;gap:4px;align-items:center;margin:4px 0;">
         <span style="display:inline-block;width:18px;height:18px;border-radius:3px;background:rgb(${hc.r},${hc.g},${hc.b});border:1px solid rgba(255,255,255,0.2);" title="Hit: rgb(${hc.r},${hc.g},${hc.b})"></span>
         <span style="font-size:0.75em;color:var(--fg2);">Hit</span>
@@ -5320,7 +5325,7 @@ function renderLedThemes() {
     const isActive = t.id === (ledStatus.activeThemeId || 255);
     const paletteHtml = (t.palette||[]).map(c => `<span style="display:inline-block;width:16px;height:16px;border-radius:3px;background:rgb(${c.r},${c.g},${c.b});"></span>`).join('');
     return `<div class="list-item" ${isActive?'style="border-left-color:var(--success);"':''}>
-      <div class="item-title"><strong>${t.name||'Theme'}</strong> ${isActive?'<span class="badge badge-green">Actif</span>':''} <span class="badge">${idleAnimNames[t.idleMode]||'?'}</span></div>
+      <div class="item-title"><strong>${escapeHtml(t.name||'Theme')}</strong> ${isActive?'<span class="badge badge-green">Actif</span>':''} <span class="badge">${idleAnimNames[t.idleMode]||'?'}</span></div>
       <div class="item-detail" style="display:flex;gap:3px;align-items:center;margin-bottom:4px;">${paletteHtml}</div>
       <div class="item-actions">
         ${!isActive?`<button class="btn btn-sm btn-success" onclick="setActiveTheme(${t.id})">Activer</button>`:''}
@@ -5376,7 +5381,7 @@ function showAddSegment() {
   // Populate instrument select
   const instSel = document.getElementById('ledSegInstrument');
   instSel.innerHTML = '<option value="255">Aucun</option>';
-  instruments.forEach(i => { instSel.innerHTML += `<option value="${i.id}">${i.name} (note ${i.midiNote})</option>`; });
+  instruments.forEach(i => { instSel.innerHTML += `<option value="${i.id}">${escapeHtml(i.name)} (note ${i.midiNote})</option>`; });
   showModal('modalLedSegment');
   updateLedSegPreview();
 }
@@ -6273,20 +6278,34 @@ async function loadCalibrationData() {
   startMicLevelPolling();
 }
 
+// P0 #3: re-arm the system after an emergency stop (clears the panic latch).
+async function rearmSystem() {
+  const opts = { method: 'POST', headers: {} };
+  if (apiToken) opts.headers['Authorization'] = 'Bearer ' + apiToken;
+  try {
+    const r = await fetch('/api/panic/reset', opts);
+    if (r.ok) { toast('Systeme rearme', 'success'); return true; }
+    toast('Echec du rearmement', 'error');
+  } catch (e) {
+    toast('Erreur reseau (rearmement)', 'error');
+  }
+  return false;
+}
+
 async function emergencyStopAll() {
   // P0 #3: real emergency stop. A per-actuator value=0 test command is NOT a
   // reliable OFF (solenoid -> min pulse, servo -> min position, motor ->
   // remapped PWM). /api/panic drives every actuator OFF directly, clears the
   // scheduler queue and halts loops on the firmware side.
   const r = await api('panic', 'POST');
-  if (r) toast('STOP ALL - Tous les actionneurs arretes', 'warn');
+  if (r) toast('STOP ALL - Actionneurs arretes, systeme VERROUILLE (rearmement requis)', 'warn');
 }
 
 async function midiPanic() {
   // Same firmware panic path: it already resets NoteOn/retrigger state, clears
   // the queue and stops all actuators — no need to spray NoteOff/value=0.
   const r = await api('panic', 'POST');
-  if (r) toast('MIDI Panic - Notes et actionneurs arretes', 'warn');
+  if (r) toast('MIDI Panic - Arret, systeme VERROUILLE (rearmement requis)', 'warn');
 }
 
 // ============================================================================

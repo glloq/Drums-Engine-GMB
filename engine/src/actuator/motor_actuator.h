@@ -40,6 +40,7 @@ public:
   void execute(const ActuatorCommand& cmd) override;
   void stop() override;
   bool checkTimeout(uint32_t nowUs) override;
+  bool checkEndStops(uint32_t nowUs) override;   // review #5: 1 kHz polling
 
 private:
   HalDriver* _driver;

@@ -45,9 +45,15 @@ public:
   // Timestamp du debut d'activation
   uint32_t getActivationStart() const { return _activationStartUs; }
 
-  // Verifier le timeout watchdog. Retourne true si l'actionneur
-  // a depasse sa duree max et a ete force a s'arreter.
+  // Verifier le timeout watchdog (thermique / duree max). Appele a basse
+  // frequence (~10 Hz). Retourne true si l'actionneur a ete force a s'arreter.
   virtual bool checkTimeout(uint32_t nowUs) { return false; }
+
+  // Verifier les fins de course. Appele a HAUTE frequence (~1 kHz) — separe du
+  // watchdog thermique pour reagir vite a une butee (review #5). Par defaut
+  // sans effet (seuls les moteurs a fin de course l'implementent).
+  // Retourne true si l'actionneur a ete arrete suite a une butee.
+  virtual bool checkEndStops(uint32_t nowUs) { return false; }
 
 protected:
   ActuatorConfig _config;

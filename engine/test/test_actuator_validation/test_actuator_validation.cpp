@@ -75,6 +75,37 @@ void test_mismatched_behavior_rejected() {
   TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
 }
 
+// review #6: unknown type/bus must be rejected, not fall through to return true.
+void test_invalid_type_rejected() {
+  ActuatorConfig c = baseSolenoid();
+  c.type = (ActuatorType)200;
+  const char* err = nullptr;
+  TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
+}
+
+void test_invalid_bus_rejected() {
+  ActuatorConfig c = baseSolenoid();
+  c.bus = (HardwareBus)200;
+  const char* err = nullptr;
+  TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
+}
+
+void test_endstop_out_of_range_rejected() {
+  ActuatorConfig c = baseSolenoid();
+  c.endStopPin1 = 60;                 // not a GPIO, not 255
+  const char* err = nullptr;
+  TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
+  c.endStopPin1 = 0xFF;               // disabled -> OK again
+  TEST_ASSERT_TRUE(validateActuatorConfig(c, err));
+}
+
+void test_mcp_pin_out_of_range_rejected() {
+  ActuatorConfig c = baseSolenoid();  // MCP23017 bus
+  c.hwPin = 20;
+  const char* err = nullptr;
+  TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_valid_solenoid_passes);
@@ -84,5 +115,9 @@ int main(int, char**) {
   RUN_TEST(test_servo_channel_out_of_range_rejected);
   RUN_TEST(test_direct_gpio_pin_out_of_range_rejected);
   RUN_TEST(test_mismatched_behavior_rejected);
+  RUN_TEST(test_invalid_type_rejected);
+  RUN_TEST(test_invalid_bus_rejected);
+  RUN_TEST(test_endstop_out_of_range_rejected);
+  RUN_TEST(test_mcp_pin_out_of_range_rejected);
   return UNITY_END();
 }

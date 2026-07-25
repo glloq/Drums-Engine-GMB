@@ -48,11 +48,32 @@
   wraparound, insertion transactionnelle) et `test/test_actuator_validation`.
 - `.github/workflows/ci.yml` : tests natifs + build ESP32 + cppcheck.
 
-### Reste a faire (non traite sur cette branche — voir §fin)
-- Lot 2 : #8 modele proprietaire-unique Core 1, #9 double-buffer des lookups,
-  #11 fins de course haute frequence (ISR).
-- Lot 3 : #10 canal MIDI dans le lookup, #9 corps HTTP fragmentes.
-- Lot 4 : #18 decoupage SPA en modules, #19 accessibilite, #17 auth WebSocket.
+### Corrections post-revue (2e passe)
+- **Eviction OFF** : la file pleine n'evince plus jamais un OFF deja programme ;
+  elle retire la commande NON-OFF la moins urgente (ou rejette si tout est OFF).
+  Test de regression ajoute.
+- **Panic latch** : `g_panicActive` (atomic) verrouille toute reactivation sur
+  les deux coeurs (EventProcessor, ActuatorManager, LoopEngine, routes de test)
+  jusqu'a `POST /api/panic/reset` — ferme la fenetre de course post-panic.
+- **XSS** : 2 sinks restants corriges (noms d'instruments "utilise par", nom
+  d'actionneur dans les bindings CC) ; balayage des sinks HTML effectue.
+- **Fins de course** : polling reel a ~1 kHz (`checkEndStops`) separe du watchdog
+  thermique (~10 Hz) ; commentaire trompeur corrige.
+- **Validateur** : sentinelles type/bus, plages endStop et broches MCP/PCA.
+- **Evenements de boucle** : validation centralisee dans `LoopEngine::addEvent`.
+- **Persistance** : retours LittleFS verifies (500 + rollback) ; recuperation
+  `.bak` meme quand le fichier principal est present mais corrompu.
+- **play()/playChain()** renvoient un bool (routes 409 si echec).
+
+### Reste a faire (non traite — voir §fin)
+- Concurrence : modele proprietaire-unique Core 1, double-buffer des lookups,
+  lookup canal MIDI.
+- Web : corps HTTP fragmentes, auth WebSocket.
+- UI : decoupage SPA en modules, accessibilite.
+- Note CI : le build ESP32 n'a pas pu etre execute localement (egress bloque
+  vers le registre PlatformIO) ; la plateforme est epinglee a
+  `espressif32@6.5.0` (Arduino core 2.0.14) pour compatibilite avec les
+  bibliotheques me-no-dev.
 
 ---
 
@@ -68,25 +89,25 @@
 | MIDI Engine (rtpMIDI WiFi) | 100% | DONE |
 | Instrument Manager + CRUD | 100% | DONE |
 | Loop Engine | 100% | DONE — tick fractionnaire + persistence |
-| Storage LittleFS | 100% | DONE — ecriture atomique |
+| Storage LittleFS | 100% | DONE — ecriture crash-safe .new/.bak + recovery |
 | Web Server REST API | 100% | DONE — auth + rate-limiting + modules |
 | UI Web embarquee | 95% | Pipeline editor manquant |
 | Templates (8 presets) | 90% | Pas de calibration auto |
 | Routage CC compile | 100% | DONE |
-| Concurrence dual-core | 100% | DONE — spinlocks + mutex + atomic |
+| Concurrence dual-core | 85% | Partiel — spinlocks + mutex + panic latch atomique; modele proprietaire-unique Core 1, double-buffer des lookups et lookup canal MIDI encore differes |
 | Documentation | 100% | DONE — mise a jour complete |
 | Tests automatises | 80% | Script curl + tests natifs Unity (queue, validation) |
 | CI/CD | 70% | GitHub Actions: tests natifs + build ESP32 + cppcheck |
 | Securite | 95% | Auth Bearer + rate-limit + WiFi auth + LittleFS non expose + panic + anti-XSS |
 
-**Avancement global estime: ~95%**
+**Avancement global estime: ~90%** (P0 securite/temps-reel traites; restent lookup canal MIDI, double-buffer, corps HTTP fragmentes, modularisation SPA, accessibilite)
 
 ---
 
 ## 2. Ce qui fonctionne (acquis valides)
 
 ### 2.1 Coeur temps reel (SOLIDE)
-- Timer hardware 1 kHz avec queue statique lock-free (128 commandes)
+- Timer hardware 1 kHz avec queue statique triee par date, protegee par spinlock (128 commandes)
 - Precision microseconde, suivi du jitter
 - Watchdog periodique avec limites thermiques/duree par actuateur
 - Separation FreeRTOS: Core 1 (RT: MIDI + Scheduler) / Core 0 (Web + Loops)
@@ -107,7 +128,7 @@
 - Modes retrigger: IGNORE, RESET, STACK (compteur uint8_t)
 
 ### 2.4 Persistance (FIABILISEE)
-- Ecriture atomique `.tmp` + `rename` (anti-corruption crash)
+- Ecriture crash-safe `.new`/`.bak` avec verification de relecture, rollback et recuperation au boot
 - Loops persistees automatiquement sur create/update/delete
 - Format versionne v2 retrocompatible v1
 
@@ -134,7 +155,11 @@
 ## 3. Actions restantes
 
 ### PRIORITE HAUTE
-1. **Pipeline CI/CD** — GitHub Actions avec PlatformIO pour validation compilation a chaque commit.
+1. **CI/CD** — En place (`.github/workflows/ci.yml` : tests natifs + build ESP32 + cppcheck).
+   Reste a etendre : clang-format/clang-tidy, ESLint, validation HTML.
+2. **Concurrence Core 1** — modele proprietaire-unique + double-buffer des lookups
+   + lookup canal MIDI (voir §0 "Reste a faire").
+3. **Corps HTTP fragmentes** — accumuler les fragments avant parsing JSON.
 
 ### PRIORITE MOYENNE
 2. **Pipeline editor UI** — Editeur graphique drag & drop de blocs pipeline.
@@ -181,7 +206,7 @@
 - [DONE] Mutex I2C global + wrapping drivers
 - [DONE] I2C error recovery (MCP23017/PCA9685)
 - [DONE] Persistence loops LittleFS
-- [DONE] Ecriture atomique `.tmp` + rename
+- [DONE] Ecriture crash-safe `.new`/`.bak` (verification + rollback + recovery)
 - [DONE] Cache activeCount O(1)
 - [DONE] WiFi STA non-bloquant
 - [DONE] Tick fractionnaire loop engine
@@ -198,6 +223,6 @@
 
 Le projet **Drums-Engine-MIDI** dispose d'une architecture solide et d'un coeur temps reel fonctionnel avec protections concurrence completes. Les couches MIDI, Scheduler, Actuator et Event sont operationnelles et fiabilisees pour l'usage dual-core.
 
-**Toutes les actions critiques sont implementees.** La seule action restante significative est la **mise en place d'un pipeline CI/CD** pour validation de compilation automatique.
+**Les actions critiques P0 sont implementees** et une CI GitHub Actions (tests natifs + build ESP32 + cppcheck) est en place. Restent des items P1/P2 documentes ci-dessus (concurrence Core 1, lookup canal, corps HTTP fragmentes, SPA/accessibilite).
 
-Le projet est estime a **~95% d'avancement**.
+Le projet est estime a **~90% d'avancement** : le coeur temps reel et la securite sont fiabilises, mais plusieurs items P1/P2 (lookup canal MIDI, double-buffer, corps HTTP fragmentes, SPA/accessibilite) restent ouverts.

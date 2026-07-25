@@ -24,9 +24,10 @@ public:
   // Connecter l'EventProcessor pour mode pipeline
   void setEventProcessor(EventProcessor* eventProc) { _eventProc = eventProc; }
 
-  // Controle de lecture
-  void play(uint8_t loopIndex);
-  void playChain(const uint8_t* loopIds, uint8_t count, bool repeat = true);
+  // Controle de lecture. play()/playChain() renvoient false si la lecture n'a
+  // pas pu demarrer (index/ID invalide, boucle vide, ou panic actif) — P1 #10.
+  bool play(uint8_t loopIndex);
+  bool playChain(const uint8_t* loopIds, uint8_t count, bool repeat = true);
   void stop();
   void pause();
   void resume();

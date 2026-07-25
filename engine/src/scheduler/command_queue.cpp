@@ -21,11 +21,29 @@ bool CommandQueue::push(const ActuatorCommand& cmd) {
   portENTER_CRITICAL(&_mux);
 
   if (_count >= COMMAND_QUEUE_SIZE) {
-    // Full. OFF commands are safety-critical and must not be dropped:
-    // evict the least-urgent command (the tail, greatest execute_at) to
-    // make room. Non-OFF commands are rejected.
+    // Full. A safety-critical OFF must not be dropped, but neither may it evict
+    // an *existing* OFF (that would leave some other actuator energized until
+    // its watchdog trips). Evict the least-urgent NON-OFF command instead;
+    // if every queued command is already an OFF, reject rather than lose one.
     if ((CommandType)cmd.command_type == CommandType::OFF) {
-      _count--;  // drop tail (latest / least urgent)
+      int candidate = -1;
+      for (int i = (int)_count - 1; i >= 0; --i) {
+        if ((CommandType)_buffer[i].command_type != CommandType::OFF) {
+          candidate = i;
+          break;
+        }
+      }
+      if (candidate < 0) {
+        _overflowCount++;
+        portEXIT_CRITICAL(&_mux);
+        DBGF("[Queue] OVERFLOW: all OFF, cannot make room (count=%lu)\n", _overflowCount);
+        return false;
+      }
+      // Remove the chosen non-OFF command, then insert the new OFF in order.
+      for (uint16_t i = (uint16_t)candidate + 1; i < _count; i++) {
+        _buffer[i - 1] = _buffer[i];
+      }
+      _count--;
       _insertLocked(cmd);
       _overflowCount++;
       portEXIT_CRITICAL(&_mux);

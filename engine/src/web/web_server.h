@@ -119,6 +119,7 @@ private:
   void _handleSetMidiChannels(AsyncWebServerRequest* req, uint8_t* data, size_t len);
   void _handleFactoryReset(AsyncWebServerRequest* req);
   void _handlePanic(AsyncWebServerRequest* req);
+  void _handlePanicReset(AsyncWebServerRequest* req);
   void _handleValidateConfig(AsyncWebServerRequest* req);
 
   // LED Strips
@@ -158,6 +159,7 @@ private:
   // Helpers
   void _sendJson(AsyncWebServerRequest* req, int code, const JsonDocument& doc);
   void _sendError(AsyncWebServerRequest* req, int code, const char* msg);
+  bool _panicActiveReject(AsyncWebServerRequest* req);  // P0 #3
   uint8_t _extractId(AsyncWebServerRequest* req, const char* param);
   void _wsBroadcast(const char* type, const JsonObject& data);
 

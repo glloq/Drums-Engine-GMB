@@ -1550,6 +1550,22 @@ let ledThemes = [];
 let ledStatus = {};
 
 // ====================================================================
+// Security: HTML escaping for user-controlled strings (P0 #18 - stored XSS)
+// Actuator / instrument / loop names are user-controlled and were injected
+// directly into innerHTML. Always pass them through escapeHtml() before
+// building markup so a name like <img src=x onerror=...> cannot run JS.
+// ====================================================================
+function escapeHtml(s) {
+  if (s === null || s === undefined) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// ====================================================================
 // API helper
 // ====================================================================
 async function api(path, method='GET', body=null, silent=false) {
@@ -2117,9 +2133,9 @@ function renderActuators() {
 
   // Filter used actuators if toggle is active
   const usedIds = new Set(Object.keys(actUsedBy).map(Number));
-  const displayList = _hideUsedActuators ? actuators.filter(a => !usedIds.has(a.id)) : actuators;
+  const displayList = hideUsedActuators ? actuators.filter(a => !usedIds.has(a.id)) : actuators;
 
-  if (_hideUsedActuators && displayList.length === 0) {
+  if (hideUsedActuators && displayList.length === 0) {
     el.innerHTML = '<div class="empty-state"><p>Tous les actionneurs sont assignes a un instrument.</p></div>';
     return;
   }
@@ -2152,7 +2168,7 @@ function renderActuators() {
     <div class="list-item" style="border-left-color:${borderColor};${disabledStyle}" ondblclick="editActuator(${a.id})" title="Double-clic pour modifier">
       <div class="item-title">
         <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:${tColor};color:#000;font-weight:700;font-size:0.65em;margin-right:4px;">${tIcon}</span>
-        <strong>${a.name}</strong>
+        <strong>${escapeHtml(a.name)}</strong>
         <span class="badge">${a.typeName}</span>
         <span class="badge">${a.behaviorName}</span>
         ${a.active ? '<span class="badge badge-green">ACTIF</span>' : ''}
@@ -2404,9 +2420,35 @@ async function saveActuator() {
   }
 }
 
-async function deleteActuator(id) {
-  await api('actuator?id=' + id, 'DELETE');
+async function deleteActuator(id, force) {
+  // Raw fetch so we can inspect a 409 (actuator still referenced) and offer a
+  // forced delete that cleans up the references (P1 #14).
+  const url = '/api/actuator?id=' + id + (force ? '&force=true' : '');
+  const opts = { method: 'DELETE', headers: {} };
+  if (apiToken) opts.headers['Authorization'] = 'Bearer ' + apiToken;
+  let r;
+  try {
+    r = await fetch(url, opts);
+  } catch (e) {
+    toast('Erreur reseau', 'error');
+    return;
+  }
+  if (r.status === 409) {
+    const body = await r.json().catch(() => ({}));
+    const deps = (body.dependencies || []).map(d => d.name || ('#' + d.id)).join(', ');
+    if (confirm('Cet actionneur est utilise par: ' + (deps || '?') +
+                '.\nSupprimer quand meme et retirer ces references ?')) {
+      return deleteActuator(id, true);
+    }
+    return;
+  }
+  if (!r.ok) {
+    const b = await r.json().catch(() => ({}));
+    toast('Erreur API: ' + (b.message || b.error || ('HTTP ' + r.status)), 'error');
+    return;
+  }
   await loadActuators();
+  if (force) await loadInstruments();  // references were cleaned server-side
   markConfigDirty();
   toast('Actionneur supprime', 'success');
 }
@@ -2749,7 +2791,6 @@ function sortActuators(key) {
   if (cmp[key]) { actuators.sort(cmp[key]); renderActuators(); }
 }
 
-let _hideUsedActuators = false;
 // ====================================================================
 // PIN / Security management
 // ====================================================================
@@ -2831,9 +2872,14 @@ function toggleLedsTab(show) {
 }
 
 function toggleHideUsedActuators() {
-  _hideUsedActuators = !_hideUsedActuators;
+  // Single source of truth: hideUsedActuators (persisted in localStorage).
+  // Previously a second, unsynced variable _hideUsedActuators was toggled here
+  // while the settings checkbox drove hideUsedActuators, leaving the two out of
+  // sync (P0 #20).
+  hideUsedActuators = !hideUsedActuators;
+  localStorage.setItem('hideUsedAct', hideUsedActuators ? '1' : '0');
   const btn = document.getElementById('btnHideUsed');
-  if (_hideUsedActuators) {
+  if (hideUsedActuators) {
     btn.classList.remove('btn-secondary');
     btn.classList.add('btn-primary');
     btn.textContent = 'Voir tous';
@@ -2842,6 +2888,9 @@ function toggleHideUsedActuators() {
     btn.classList.add('btn-secondary');
     btn.textContent = 'Cacher utilises';
   }
+  // Keep the settings-modal checkbox in sync if present
+  const chk = document.getElementById('settHideUsedActuators');
+  if (chk) chk.checked = hideUsedActuators;
   renderActuators();
 }
 
@@ -2970,8 +3019,8 @@ function populateActuatorSelects() {
   const motorActs = actuators.filter(a => a.type === 2);
   const allActs = actuators;
 
-  const makeOpts = (list, sel) => avail(list).map(a => `<option value="${a.id}" ${a.id===sel?'selected':''}>${a.name}</option>`).join('') || '<option value="255">-- aucun --</option>';
-  const makeOptsOptional = (list, sel) => '<option value="255">-- aucun --</option>' + avail(list).map(a => `<option value="${a.id}" ${a.id===sel?'selected':''}>${a.name}</option>`).join('');
+  const makeOpts = (list, sel) => avail(list).map(a => `<option value="${a.id}" ${a.id===sel?'selected':''}>${escapeHtml(a.name)}</option>`).join('') || '<option value="255">-- aucun --</option>';
+  const makeOptsOptional = (list, sel) => '<option value="255">-- aucun --</option>' + avail(list).map(a => `<option value="${a.id}" ${a.id===sel?'selected':''}>${escapeHtml(a.name)}</option>`).join('');
 
   // Simple
   document.getElementById('instrStrikeAct').innerHTML = makeOpts(strikeActs.length ? strikeActs : allActs, -1);
@@ -3244,7 +3293,7 @@ function renderInstruments() {
     <div class="list-item" data-midinote="${mNote}" data-complete="${isComplete?1:0}" style="border-left-color:${catColor};transition:box-shadow 0.15s;" ondblclick="editInstrument(${inst.id})" title="Double-clic pour modifier">
       <div class="item-title">
         <span style="color:${statusColor};font-size:0.9em;" title="${isComplete ? 'Complet' : !inst.enabled ? 'Desactive' : !hasActuator ? 'Sans actionneur' : 'Sans actions NoteOn'}">${statusIcon}</span>
-        <strong>${inst.name}</strong>
+        <strong>${escapeHtml(inst.name)}</strong>
         <span class="badge" style="background:${catColor};color:#000;">${inst.category}</span>
         <span class="badge">${mNote}${noteName ? ' · ' + noteName : ''}</span>
         ${(inst.midiChannel && inst.midiChannel !== 10) ? '<span class="badge" style="background:#607d8b;color:#fff;">Ch.' + inst.midiChannel + '</span>' : ''}
@@ -3524,13 +3573,13 @@ function buildActuatorChecklist(selectedIds) {
   el.innerHTML = actuators.map(a => `
     <label>
       <input type="checkbox" value="${a.id}" ${selectedIds.includes(a.id) ? 'checked' : ''}>
-      <span>${a.name} <span style="color:var(--fg2);">(${a.typeName} - ${a.busName})</span></span>
+      <span>${escapeHtml(a.name)} <span style="color:var(--fg2);">(${escapeHtml(a.typeName)} - ${escapeHtml(a.busName)})</span></span>
     </label>
   `).join('');
 }
 
 function actuatorOptions(selected) {
-  return actuators.map(a => `<option value="${a.id}" ${a.id===selected?'selected':''}>${a.name} (#${a.id})</option>`).join('');
+  return actuators.map(a => `<option value="${a.id}" ${a.id===selected?'selected':''}>${escapeHtml(a.name)} (#${a.id})</option>`).join('');
 }
 
 function actionEditorRow(step, idx, type) {
@@ -3942,7 +3991,7 @@ function actInfo(id) {
 
 function describeStep(step) {
   const act = actInfo(step.actuatorId);
-  const name = act ? act.name : '#' + step.actuatorId;
+  const name = escapeHtml(act ? act.name : '#' + step.actuatorId);  // P0 #18
   const beh = act ? (act.behavior ?? -1) : -1;
   const verbs = BEHAVIOR_VERBS[beh] || ['Actionner','Action'];
   const delay = step.delayMs || 0;
@@ -4075,7 +4124,7 @@ function renderPipelineCard(inst) {
   if (!rows) rows = '<div class="hint">Aucune action configuree</div>';
 
   const pasteBtn = pipelineClipboard ? `<button class="btn btn-sm" style="background:var(--warn);color:#000;" onclick="pasteActions(${inst.id})" title="Coller les actions copiees">Coller</button>` : '';
-  return `<div class="card pipe-card"><h3><span>${inst.name} ${badges}</span><div style="display:flex;gap:4px;">${pasteBtn}<button class="btn btn-sm btn-secondary" onclick="copyActions(${inst.id})" title="Copier les actions">Copier</button><button class="btn btn-sm btn-secondary" onclick="peOpenEditor(${inst.id})">Edit Pipeline</button></div></h3>${rows}</div>`;
+  return `<div class="card pipe-card"><h3><span>${escapeHtml(inst.name)} ${badges}</span><div style="display:flex;gap:4px;">${pasteBtn}<button class="btn btn-sm btn-secondary" onclick="copyActions(${inst.id})" title="Copier les actions">Copier</button><button class="btn btn-sm btn-secondary" onclick="peOpenEditor(${inst.id})">Edit Pipeline</button></div></h3>${rows}</div>`;
 }
 
 let pipelineClipboard = null;
@@ -4136,7 +4185,7 @@ async function renderMappings() {
     const routeCards = ccRouteData.routes.map(r => {
       const entries = (r.entries || []).map(e => {
         const act = actInfo(e.actuatorId);
-        const name = act ? act.name : '#' + e.actuatorId;
+        const name = escapeHtml(act ? act.name : '#' + e.actuatorId);  // P0 #18
         const cmd = CMD_NAMES[e.commandType] || '?';
         return `${cmd} <b>${name}</b> [${e.rangeMin}-${e.rangeMax}]`;
       }).join(' | ');
@@ -4168,7 +4217,7 @@ function renderLoops() {
   el.innerHTML = loops.map((loop, i) => `
     <div class="list-item" style="border-left-color:var(--accent);">
       <div class="item-title">
-        <strong>${loop.name}</strong>
+        <strong>${escapeHtml(loop.name)}</strong>
         <span class="badge">${loop.bpm} BPM</span>
         <span class="badge">${loop.beatsPerBar||4}/${loop.beatValue||4}</span>
         <span class="badge">${loop.bars||1} mes.</span>
@@ -4318,8 +4367,8 @@ function renderCurrentLoopGrid() {
     const countBadge = instEvtCount > 0 ? `<span style="font-size:0.7em;color:var(--accent);margin-left:2px;">${instEvtCount}</span>` : '';
     const gmName = GM_DRUMS[inst.midiNote] || '';
     const labelNote = `(${inst.midiNote})`;
-    const fullTitle = inst.name + (gmName ? ' - ' + gmName : '') + ' ' + labelNote;
-    html += `<div class="loop-label" title="${fullTitle}">${inst.name.substring(0, 7)}${countBadge}</div>`;
+    const fullTitle = escapeHtml(inst.name + (gmName ? ' - ' + gmName : '') + ' ' + labelNote);  // P0 #18
+    html += `<div class="loop-label" title="${fullTitle}">${escapeHtml(inst.name.substring(0, 7))}${countBadge}</div>`;
     for (let s = 0; s < totalSteps; s++) {
       const tick = Math.round(s * ticksPerStep);
       const barIdx = Math.floor(s / stepsPerBar);
@@ -5650,7 +5699,7 @@ function peEditBlock(idx) {
       } else if (p.type === 'actuator_id') {
         html += `<select id="eb_${p.name}">`;
         actuators.forEach(a => {
-          html += `<option value="${a.id}" ${val===a.id?'selected':''}>${a.name} (${a.id})</option>`;
+          html += `<option value="${a.id}" ${val===a.id?'selected':''}>${escapeHtml(a.name)} (${a.id})</option>`;
         });
         html += '</select>';
       } else {
@@ -5685,7 +5734,7 @@ function peApplyBlockEdit() {
 // --- PE Action/CC rendering ---
 function peActSelect(id, selId) {
   return `<select id="${id}" class="small-select">${actuators.map(a=>
-    `<option value="${a.id}" ${a.id===selId?'selected':''}>${a.name}</option>`).join('')}
+    `<option value="${a.id}" ${a.id===selId?'selected':''}>${escapeHtml(a.name)}</option>`).join('')}
     <option value="255" ${selId===255?'selected':''}>---</option></select>`;
 }
 
@@ -5832,7 +5881,7 @@ async function peOpenEditor(instrId) {
   // Output actuator select
   const outSel = document.getElementById('peOutputActuator');
   outSel.innerHTML = '<option value="255">Aucun (auto)</option>' +
-    actuators.map(a => `<option value="${a.id}">${a.name} (${a.id})</option>`).join('');
+    actuators.map(a => `<option value="${a.id}">${escapeHtml(a.name)} (${a.id})</option>`).join('');
   outSel.value = (data && data.outputActuatorId !== undefined) ? data.outputActuatorId :
     (inst.actuatorIds && inst.actuatorIds[0] !== 255 ? inst.actuatorIds[0] : 255);
 
@@ -5933,7 +5982,7 @@ function renderPianoPads() {
       const inst = instruments.find(i => i.midiNote === n && i.enabled !== false);
       if (inst) name = inst.name;
     }
-    pad.innerHTML = '<div class="pad-note">' + n + '</div><div class="pad-name">' + name + '</div>';
+    pad.innerHTML = '<div class="pad-note">' + n + '</div><div class="pad-name">' + escapeHtml(name) + '</div>';  // P0 #18
 
     pad.addEventListener('mousedown', (e) => { e.preventDefault(); pianoNoteOn(n, pad); });
     pad.addEventListener('mouseup', () => pianoNoteOff(n, pad));
@@ -6219,35 +6268,25 @@ async function loadCalibrationData() {
   const sel = document.getElementById('micLatencyActuator');
   sel.innerHTML = acts.filter(a => a.enabled).map(a => {
     const tNames = ['Servo','Sol.','Motor','Motor'];
-    return '<option value="' + a.id + '">#' + a.id + ' ' + (a.name||'Sans nom') + ' (' + (tNames[a.type]||'?') + ')</option>';
+    return '<option value="' + a.id + '">#' + a.id + ' ' + escapeHtml(a.name||'Sans nom') + ' (' + (tNames[a.type]||'?') + ')</option>';
   }).join('');
   startMicLevelPolling();
 }
 
 async function emergencyStopAll() {
-  // Send OFF command to all actuators
-  for (const a of actuators) {
-    api('test/actuator', 'POST', {id: a.id, value: 0});
-  }
-  toast('STOP ALL - Tous les actionneurs arretes', 'warn');
+  // P0 #3: real emergency stop. A per-actuator value=0 test command is NOT a
+  // reliable OFF (solenoid -> min pulse, servo -> min position, motor ->
+  // remapped PWM). /api/panic drives every actuator OFF directly, clears the
+  // scheduler queue and halts loops on the firmware side.
+  const r = await api('panic', 'POST');
+  if (r) toast('STOP ALL - Tous les actionneurs arretes', 'warn');
 }
 
 async function midiPanic() {
-  // Send NoteOff for all configured instrument notes
-  const notes = new Set();
-  instruments.forEach(inst => { if (inst.midiNote !== undefined) notes.add(inst.midiNote); });
-  // Also include common GM percussion range
-  for (let n = 27; n <= 81; n++) notes.add(n);
-  const arr = [...notes];
-  for (let i = 0; i < arr.length; i += 8) {
-    const batch = arr.slice(i, i + 8);
-    await Promise.all(batch.map(n => api('test/note', 'POST', {note: n, velocity: 0, channel: 10, noteOff: true})));
-  }
-  // Also stop all actuators
-  for (const a of actuators) {
-    api('test/actuator', 'POST', {id: a.id, value: 0});
-  }
-  toast('MIDI Panic - Notes et actionneurs arretes', 'warn');
+  // Same firmware panic path: it already resets NoteOn/retrigger state, clears
+  // the queue and stops all actuators — no need to spray NoteOff/value=0.
+  const r = await api('panic', 'POST');
+  if (r) toast('MIDI Panic - Notes et actionneurs arretes', 'warn');
 }
 
 // ============================================================================

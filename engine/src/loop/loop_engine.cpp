@@ -23,6 +23,10 @@ void LoopEngine::play(uint8_t loopIndex) {
   _lastTickTime = micros();
   _calcTickInterval(loop.bpm, loop.ppq);
 
+  // P1 #11: fire events at tick 0 now — update() increments _currentTick before
+  // its dispatch check, so without this the first tick's events are skipped.
+  _fireEventsAtCurrentTick(loop);
+
   DBGF("[Loop] Playing '%s' at %d BPM (%d events)\n",
        loop.name, loop.bpm, loop.eventCount);
 }
@@ -85,11 +89,15 @@ void LoopEngine::update() {
       _nextEventIndex = 0;
     }
 
-    while (_nextEventIndex < loop.eventCount &&
-           loop.events[_nextEventIndex].tickPosition == _currentTick) {
-      _dispatchEvent(loop.events[_nextEventIndex]);
-      _nextEventIndex++;
-    }
+    _fireEventsAtCurrentTick(loop);
+  }
+}
+
+void LoopEngine::_fireEventsAtCurrentTick(Loop& loop) {
+  while (_nextEventIndex < loop.eventCount &&
+         loop.events[_nextEventIndex].tickPosition == _currentTick) {
+    _dispatchEvent(loop.events[_nextEventIndex]);
+    _nextEventIndex++;
   }
 }
 
@@ -121,9 +129,32 @@ void LoopEngine::_dispatchEvent(const LoopEvent& evt) {
 
 // --- Gestion ---
 
+bool LoopEngine::validateLoopParams(uint16_t bpm, uint8_t bars, uint8_t beatsPerBar,
+                                    uint8_t beatValue, uint16_t ppq, const char*& errMsg) {
+  if (bpm < 20 || bpm > 400)          { errMsg = "BPM out of range (20-400)"; return false; }
+  if (bars < 1 || bars > 64)          { errMsg = "bars out of range (1-64)"; return false; }
+  if (beatsPerBar < 1 || beatsPerBar > 16) { errMsg = "beatsPerBar out of range (1-16)"; return false; }
+  if (!(beatValue == 1 || beatValue == 2 || beatValue == 4 ||
+        beatValue == 8 || beatValue == 16)) { errMsg = "beatValue must be 1,2,4,8 or 16"; return false; }
+  if (ppq < 24 || ppq > 960)          { errMsg = "PPQ out of range (24-960)"; return false; }
+  // Guard against uint16_t overflow of the total tick count and div-by-zero.
+  uint32_t total = (uint32_t)ppq * beatsPerBar * bars;
+  if (total == 0 || total > 65535)    { errMsg = "loop too long (ppq*beatsPerBar*bars must be <= 65535)"; return false; }
+  errMsg = nullptr;
+  return true;
+}
+
 int LoopEngine::createLoop(const char* name, uint16_t bpm, uint8_t bars,
                             uint8_t beatsPerBar, uint8_t beatValue) {
   if (_loopCount >= MAX_LOOPS) return -1;
+
+  // P1 #12: reject out-of-range time signatures (also guards _calcTickInterval
+  // against division by zero and _totalTicks against uint16_t overflow).
+  const char* err = nullptr;
+  if (!validateLoopParams(bpm, bars, beatsPerBar, beatValue, 96, err)) {
+    DBGF("[Loop] Rejected invalid params: %s\n", err ? err : "?");
+    return -1;
+  }
 
   Loop& loop = _loops[_loopCount];
   loop.id = _loopCount;
@@ -272,17 +303,38 @@ bool LoopEngine::loopFromJson(const JsonObject& obj, Loop& loop) {
   loop.ppq = obj["ppq"] | 96;
   loop.active = true;
 
+  // P1 #12 / #14: a hand-edited or corrupted file must not be able to inject
+  // out-of-range time signatures (div-by-zero, tick overflow). Fall back to
+  // safe defaults if the stored parameters don't validate.
+  const char* err = nullptr;
+  if (!validateLoopParams(loop.bpm, loop.bars, loop.beatsPerBar,
+                          loop.beatValue, loop.ppq, err)) {
+    DBGF("[Loop] Loaded loop had invalid params (%s), using defaults\n",
+         err ? err : "?");
+    loop.bpm = MIDI_BPM_DEFAULT;
+    loop.bars = 1;
+    loop.beatsPerBar = 4;
+    loop.beatValue = 4;
+    loop.ppq = 96;
+  }
+
+  uint16_t total = _totalTicks(loop);
   loop.eventCount = 0;
   JsonArray events = obj["events"].as<JsonArray>();
   if (!events.isNull()) {
     for (JsonArray evt : events) {
       if (loop.eventCount >= MAX_LOOP_EVENTS) break;
-      loop.events[loop.eventCount] = {
-        (uint16_t)(evt[0] | 0),
-        (uint8_t)(evt[1] | 36),
-        (uint8_t)(evt[2] | 80),
-        (uint8_t)(evt[3] | 10)
-      };
+      uint16_t tick = (uint16_t)(evt[0] | 0);
+      uint8_t note = (uint8_t)(evt[1] | 36);
+      uint8_t vel  = (uint8_t)(evt[2] | 80);
+      uint8_t chan = (uint8_t)(evt[3] | 10);
+      // Clamp event fields into valid ranges (P1 #12).
+      if (tick >= total) continue;      // drop events past the loop end
+      if (note > 127) note = 127;
+      if (vel > 127) vel = 127;
+      if (chan < 1) chan = 1;
+      if (chan > 16) chan = 16;
+      loop.events[loop.eventCount] = { tick, note, vel, chan };
       loop.eventCount++;
     }
   }
@@ -331,11 +383,20 @@ void LoopEngine::_advanceChain() {
   _nextEventIndex = 0;
   _lastTickTime = micros();
   _calcTickInterval(loop.bpm, loop.ppq);
+  _fireEventsAtCurrentTick(loop);  // P1 #11: tick-0 events on chain advance
   DBGF("[Loop] Chain advancing to loop %d ('%s')\n", nextLoop, loop.name);
 }
 
 void LoopEngine::_calcTickInterval(uint16_t bpm, uint16_t ppq) {
   unsigned long divisor = (unsigned long)bpm * ppq;
+  // P1 #12: defensive guard — never divide by zero even if a bad value slipped
+  // through (e.g. a corrupted file loaded before validation).
+  if (divisor == 0) {
+    _tickIntervalUs = 60000000UL / ((unsigned long)MIDI_BPM_DEFAULT * 96);
+    _tickRemainderPerTick = 0;
+    _tickRemainderAccum = 0;
+    return;
+  }
   _tickIntervalUs = 60000000UL / divisor;
   // Fix #15: Store fractional remainder (x1000) to compensate drift
   unsigned long remainderUs = 60000000UL % divisor;

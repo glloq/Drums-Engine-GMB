@@ -85,7 +85,15 @@ void WebServerManager::_broadcastNoteChanges() {
 void WebServerManager::_setupRoutes() {
   // UI web: serve from LittleFS if available, otherwise from embedded PROGMEM gzip
   // Cache-Control: no-cache forces revalidation on every load (fixes phone browser caching)
-  _server.on("/", HTTP_GET, [](AsyncWebServerRequest* req) {
+  // SECURITY (P0 #1): Serve ONLY the single-page UI. Do NOT expose the whole
+  // LittleFS root — that would allow fetching sensitive files directly
+  // (/auth.json with the API token + PIN, /wifi.json with the plaintext WiFi
+  // password, /actuators.json, /instruments.json, /error.log, /loops/*, ...).
+  // The UI is a self-contained index.html (inline CSS/JS), so a single
+  // whitelisted route is all that is required. Any other path falls through
+  // to the onNotFound handler (404). serveStatic("/", LittleFS, "/") is
+  // deliberately NOT registered.
+  auto serveIndex = [](AsyncWebServerRequest* req) {
     if (LittleFS.exists("/index.html")) {
       AsyncWebServerResponse* response = req->beginResponse(LittleFS, "/index.html", "text/html");
       response->addHeader("Cache-Control", "no-cache, must-revalidate");
@@ -97,8 +105,9 @@ void WebServerManager::_setupRoutes() {
       response->addHeader("Cache-Control", "no-cache, must-revalidate");
       req->send(response);
     }
-  });
-  _server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
+  };
+  _server.on("/", HTTP_GET, serveIndex);
+  _server.on("/index.html", HTTP_GET, serveIndex);
 
   // --- Instruments API ---
   _server.on("/api/instruments", HTTP_GET,
@@ -386,6 +395,19 @@ void WebServerManager::_setupRoutes() {
       _handleFactoryReset(req);
     });
 
+  // --- Emergency Stop / Panic (P0 #3) ---
+  // Real "STOP ALL": bypasses the normal command queue and drives every
+  // actuator OFF directly via ActuatorManager::stopAll(). value=0 test
+  // commands are NOT a reliable OFF (a solenoid maps 0 to a min-duration
+  // pulse, a servo to its min position, a motor to remapped PWM), so the UI
+  // must call this endpoint instead.
+  _server.on("/api/panic", HTTP_POST,
+    [this](AsyncWebServerRequest* req) {
+      if (!_rateLimiter.checkRate(req)) return;
+      if (!_auth.checkAuth(req)) return;
+      _handlePanic(req);
+    });
+
   // --- MIDI Channel Config ---
   _server.on("/api/midi/channels", HTTP_GET,
     [this](AsyncWebServerRequest* req) { _handleGetMidiChannels(req); });
@@ -588,9 +610,11 @@ void WebServerManager::_onWsEvent(AsyncWebSocket* server, AsyncWebSocketClient* 
     case WS_EVT_DATA: {
       AwsFrameInfo* info = (AwsFrameInfo*)arg;
       if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
-        data[len] = 0;
+        // SECURITY (P0 #17): do NOT write data[len]=0 — the ESPAsyncWebServer
+        // frame buffer is not guaranteed to have a spare byte past `len`, so
+        // that is an out-of-bounds write. Parse with the explicit length.
         JsonDocument doc;
-        if (!deserializeJson(doc, (char*)data)) {
+        if (!deserializeJson(doc, data, len)) {
           const char* action = doc["action"];
           if (action && strcmp(action, "ping") == 0) {
             client->text("{\"action\":\"pong\"}");

@@ -1,4 +1,5 @@
 #include "web_server.h"
+#include "../actuator/actuator_validation.h"
 
 // --- Actuators ---
 
@@ -96,26 +97,32 @@ void WebServerManager::_handleUpdateActuator(AsyncWebServerRequest* req, uint8_t
   ActuatorConfig* cfg = _actFactory->findConfig(id);
   if (!cfg) { _sendError(req, 404, "Actuator config not found"); return; }
 
-  if (doc.containsKey("name"))        strlcpy(cfg->name, doc["name"] | "Actuator", sizeof(cfg->name));
-  if (doc.containsKey("type"))        cfg->type = (ActuatorType)(doc["type"] | 0);
-  if (doc.containsKey("behavior"))    cfg->behavior = (ActuatorBehavior)(doc["behavior"] | 0);
-  if (doc.containsKey("bus"))         cfg->bus = (HardwareBus)(doc["bus"] | 0);
-  if (doc.containsKey("hwAddress"))   cfg->hwAddress = doc["hwAddress"] | 0x20;
-  if (doc.containsKey("hwPin"))       cfg->hwPin = doc["hwPin"] | 0;
-  if (doc.containsKey("paramMin"))    cfg->paramMin = doc["paramMin"] | 8;
-  if (doc.containsKey("paramMax"))    cfg->paramMax = doc["paramMax"] | 30;
-  if (doc.containsKey("paramDefault")) cfg->paramDefault = doc["paramDefault"] | 15;
-  if (doc.containsKey("cooldownUs"))  cfg->cooldownUs = doc["cooldownUs"] | 200;
-  if (doc.containsKey("enabled"))     cfg->enabled = doc["enabled"] | true;
-  if (doc.containsKey("inverted"))    cfg->inverted = doc["inverted"] | false;
-  if (doc.containsKey("endStopPin1")) cfg->endStopPin1 = doc["endStopPin1"] | 0xFF;
-  if (doc.containsKey("endStopPin2")) cfg->endStopPin2 = doc["endStopPin2"] | 0xFF;
+  // P1 #13: apply the patch to a CANDIDATE copy and validate it before
+  // committing. Previously the live config in RAM was mutated field-by-field
+  // and, on validation failure, left partially modified.
+  ActuatorConfig candidate = *cfg;
+  if (doc.containsKey("name"))        strlcpy(candidate.name, doc["name"] | "Actuator", sizeof(candidate.name));
+  if (doc.containsKey("type"))        candidate.type = (ActuatorType)(doc["type"] | 0);
+  if (doc.containsKey("behavior"))    candidate.behavior = (ActuatorBehavior)(doc["behavior"] | 0);
+  if (doc.containsKey("bus"))         candidate.bus = (HardwareBus)(doc["bus"] | 0);
+  if (doc.containsKey("hwAddress"))   candidate.hwAddress = doc["hwAddress"] | 0x20;
+  if (doc.containsKey("hwPin"))       candidate.hwPin = doc["hwPin"] | 0;
+  if (doc.containsKey("paramMin"))    candidate.paramMin = doc["paramMin"] | 8;
+  if (doc.containsKey("paramMax"))    candidate.paramMax = doc["paramMax"] | 30;
+  if (doc.containsKey("paramDefault")) candidate.paramDefault = doc["paramDefault"] | 15;
+  if (doc.containsKey("cooldownUs"))  candidate.cooldownUs = doc["cooldownUs"] | 200;
+  if (doc.containsKey("enabled"))     candidate.enabled = doc["enabled"] | true;
+  if (doc.containsKey("inverted"))    candidate.inverted = doc["inverted"] | false;
+  if (doc.containsKey("endStopPin1")) candidate.endStopPin1 = doc["endStopPin1"] | 0xFF;
+  if (doc.containsKey("endStopPin2")) candidate.endStopPin2 = doc["endStopPin2"] | 0xFF;
 
   const char* errMsg = nullptr;
-  if (!_validateActuatorConfig(*cfg, errMsg)) {
+  if (!_validateActuatorConfig(candidate, errMsg)) {
     _sendError(req, 400, errMsg);
-    return;
+    return;  // live config untouched
   }
+
+  *cfg = candidate;  // commit only after validation passes
 
   // Reconstruire les actionneurs physiques
   _actFactory->rebuildAll();
@@ -124,14 +131,97 @@ void WebServerManager::_handleUpdateActuator(AsyncWebServerRequest* req, uint8_t
   _sendError(req, 200, "Updated");
 }
 
+// Does instrument `inst` reference actuator `actId` (in its actuator list, its
+// note actions or its CC bindings)?
+static bool instrumentReferencesActuator(const InstrumentConfig& inst, uint8_t actId) {
+  for (uint8_t i = 0; i < inst.actuatorCount; i++)
+    if (inst.actuatorIds[i] == actId) return true;
+  for (uint8_t i = 0; i < inst.noteOnCount; i++)
+    if (inst.noteOnActions[i].actuator_id == actId) return true;
+  for (uint8_t i = 0; i < inst.noteOffCount; i++)
+    if (inst.noteOffActions[i].actuator_id == actId) return true;
+  for (uint8_t i = 0; i < inst.ccBindingCount; i++)
+    if (inst.ccBindings[i].actuator_id == actId) return true;
+  return false;
+}
+
+// Strip every reference to actuator `actId` out of `inst` (force delete).
+static void stripActuatorReferences(InstrumentConfig& inst, uint8_t actId) {
+  uint8_t w = 0;
+  for (uint8_t r = 0; r < inst.actuatorCount; r++)
+    if (inst.actuatorIds[r] != actId) inst.actuatorIds[w++] = inst.actuatorIds[r];
+  for (uint8_t i = w; i < inst.actuatorCount; i++) inst.actuatorIds[i] = 0xFF;
+  inst.actuatorCount = w;
+
+  w = 0;
+  for (uint8_t r = 0; r < inst.noteOnCount; r++)
+    if (inst.noteOnActions[r].actuator_id != actId) inst.noteOnActions[w++] = inst.noteOnActions[r];
+  inst.noteOnCount = w;
+
+  w = 0;
+  for (uint8_t r = 0; r < inst.noteOffCount; r++)
+    if (inst.noteOffActions[r].actuator_id != actId) inst.noteOffActions[w++] = inst.noteOffActions[r];
+  inst.noteOffCount = w;
+
+  w = 0;
+  for (uint8_t r = 0; r < inst.ccBindingCount; r++)
+    if (inst.ccBindings[r].actuator_id != actId) inst.ccBindings[w++] = inst.ccBindings[r];
+  inst.ccBindingCount = w;
+}
+
 void WebServerManager::_handleDeleteActuator(AsyncWebServerRequest* req) {
   uint8_t id = _extractId(req, "id");
-  if (!_actFactory->removeConfig(id)) {
+  if (!_actFactory->findConfig(id)) {
     _sendError(req, 404, "Actuator config not found"); return;
   }
 
+  bool force = false;
+  if (req->hasParam("force")) {
+    String f = req->getParam("force")->value();
+    force = (f == "true" || f == "1");
+  }
+
+  // P1 #14: refuse to orphan references unless the caller explicitly forces it.
+  uint8_t depCount = 0;
+  for (uint8_t i = 0; i < _instrMgr->getInstrumentCount(); i++) {
+    InstrumentConfig* inst = _instrMgr->getInstrumentByIndex(i);
+    if (inst && instrumentReferencesActuator(*inst, id)) depCount++;
+  }
+
+  if (depCount > 0 && !force) {
+    JsonDocument doc;
+    doc["message"] = "Actuator is still referenced by instruments; delete them "
+                     "first or retry with ?force=true";
+    JsonArray deps = doc["dependencies"].to<JsonArray>();
+    for (uint8_t i = 0; i < _instrMgr->getInstrumentCount(); i++) {
+      InstrumentConfig* inst = _instrMgr->getInstrumentByIndex(i);
+      if (inst && instrumentReferencesActuator(*inst, id)) {
+        JsonObject d = deps.add<JsonObject>();
+        d["id"] = inst->id;
+        d["name"] = inst->name;
+      }
+    }
+    _sendJson(req, 409, doc);
+    return;
+  }
+
+  // Forced delete: clean out every reference so nothing points at a dead ID.
+  if (depCount > 0 && force) {
+    for (uint8_t i = 0; i < _instrMgr->getInstrumentCount(); i++) {
+      InstrumentConfig* inst = _instrMgr->getInstrumentByIndex(i);
+      if (inst) stripActuatorReferences(*inst, id);
+    }
+  }
+
+  _actFactory->removeConfig(id);
   _actFactory->rebuildAll();
   _storage->saveActuators(*_actFactory);
+
+  if (depCount > 0 && force) {
+    _storage->saveInstruments(*_instrMgr);
+    _recompileLookupFromInstruments();  // rebuild pipelines without the dead ID
+  }
+
   _sendError(req, 200, "Deleted");
 }
 
@@ -154,121 +244,8 @@ void WebServerManager::_handleTestActuator(AsyncWebServerRequest* req, uint8_t* 
 }
 
 bool WebServerManager::_validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg) {
-  // SOLENOID_HOLD: paramMin=pwmActivation, paramMax=pwmHold (paramMin CAN be > paramMax)
-  // Other behaviors: paramMin must be <= paramMax
-  if (cfg.behavior != ActuatorBehavior::SOLENOID_HOLD) {
-    if (cfg.paramMin > cfg.paramMax) {
-      errMsg = "paramMin must be <= paramMax";
-      return false;
-    }
-    if (cfg.paramDefault < cfg.paramMin || cfg.paramDefault > cfg.paramMax) {
-      errMsg = "paramDefault must be inside [paramMin, paramMax]";
-      return false;
-    }
-  }
-
-  if (cfg.type == ActuatorType::SERVO) {
-    if (cfg.bus != HardwareBus::PCA9685) {
-      errMsg = "Servo currently requires PCA9685 bus";
-      return false;
-    }
-    if (cfg.hwPin > 15) {
-      errMsg = "Servo channel must be in [0..15]";
-      return false;
-    }
-    // M7 fix: Validate behavior matches servo type
-    if (cfg.behavior != ActuatorBehavior::SERVO_POSITION &&
-        cfg.behavior != ActuatorBehavior::SERVO_STRIKE &&
-        cfg.behavior != ActuatorBehavior::COMB_BRUSH &&
-        cfg.behavior != ActuatorBehavior::PITCH_BEND &&
-        cfg.behavior != ActuatorBehavior::HIHAT_CONTROLLER &&
-        cfg.behavior != ActuatorBehavior::SERVO_MUTE) {
-      errMsg = "Servo behavior must be SERVO_POSITION, SERVO_STRIKE, COMB_BRUSH, PITCH_BEND, HIHAT_CONTROLLER or SERVO_MUTE";
-      return false;
-    }
-  }
-
-  if (cfg.type == ActuatorType::SOLENOID) {
-    if (cfg.bus != HardwareBus::MCP23017 && cfg.bus != HardwareBus::GPIO_DIRECT) {
-      errMsg = "Solenoid supports MCP23017 or GPIO_DIRECT";
-      return false;
-    }
-    // M7 fix: Validate behavior matches solenoid type
-    if (cfg.behavior != ActuatorBehavior::SOLENOID_STRIKE &&
-        cfg.behavior != ActuatorBehavior::SOLENOID_HOLD &&
-        cfg.behavior != ActuatorBehavior::SOLENOID_MUTE) {
-      errMsg = "Solenoid behavior must be SOLENOID_STRIKE, SOLENOID_HOLD or SOLENOID_MUTE";
-      return false;
-    }
-  }
-
-  if (cfg.type == ActuatorType::PWM_MOTOR) {
-    if (cfg.bus != HardwareBus::LEDC_PWM && cfg.bus != HardwareBus::PCA9685) {
-      errMsg = "PWM motor supports LEDC_PWM or PCA9685";
-      return false;
-    }
-    // Valider le behavior pour PWM_MOTOR
-    if (cfg.behavior != ActuatorBehavior::MOTOR_TIMED &&
-        cfg.behavior != ActuatorBehavior::MOTOR_SPEED &&
-        cfg.behavior != ActuatorBehavior::MOTOR_SWEEP &&
-        cfg.behavior != ActuatorBehavior::MOTOR_ALTERNATE) {
-      errMsg = "PWM motor behavior must be MOTOR_TIMED, MOTOR_SPEED, MOTOR_SWEEP or MOTOR_ALTERNATE";
-      return false;
-    }
-    // MOTOR_SWEEP requiert au moins un end stop
-    // 2 end stops + hwAddress → aller-retour complet (direction pin requis)
-    if (cfg.behavior == ActuatorBehavior::MOTOR_SWEEP) {
-      if (cfg.endStopPin1 == 0xFF && cfg.endStopPin2 == 0xFF) {
-        errMsg = "MOTOR_SWEEP requires at least one endStopPin";
-        return false;
-      }
-      bool hasTwoEndStops = (cfg.endStopPin1 != 0xFF && cfg.endStopPin2 != 0xFF);
-      bool hasDirPin = (cfg.hwAddress > 0 && cfg.hwAddress < 40);
-      if (hasTwoEndStops && !hasDirPin) {
-        errMsg = "MOTOR_SWEEP with 2 end stops requires hwAddress as direction GPIO pin (1-39)";
-        return false;
-      }
-    }
-    // MOTOR_ALTERNATE requiert end stop + direction pin (hwAddress)
-    if (cfg.behavior == ActuatorBehavior::MOTOR_ALTERNATE) {
-      if (cfg.endStopPin1 == 0xFF && cfg.endStopPin2 == 0xFF) {
-        errMsg = "MOTOR_ALTERNATE requires at least one endStopPin";
-        return false;
-      }
-      if (cfg.bus != HardwareBus::LEDC_PWM) {
-        errMsg = "MOTOR_ALTERNATE requires LEDC_PWM bus (direction pin via hwAddress)";
-        return false;
-      }
-      if (cfg.hwAddress == 0 || cfg.hwAddress >= 40) {
-        errMsg = "MOTOR_ALTERNATE requires hwAddress as direction GPIO pin (1-39)";
-        return false;
-      }
-    }
-  }
-
-  if (cfg.type == ActuatorType::MOTOR_OPTICAL) {
-    if (cfg.bus != HardwareBus::GPIO_DIRECT) {
-      errMsg = "Motor optical currently requires GPIO_DIRECT (sensor read not available on PWM-only drivers)";
-      return false;
-    }
-    if (cfg.behavior != ActuatorBehavior::MOTOR_OPTICAL_TRACK) {
-      errMsg = "Motor optical requires behavior MOTOR_OPTICAL_TRACK";
-      return false;
-    }
-    if (cfg.hwAddress > 39) {
-      errMsg = "Motor optical sensor pin (hwAddress) must be in [0..39]";
-      return false;
-    }
-    if (cfg.hwPin > 39) {
-      errMsg = "Motor optical drive pin (hwPin) must be in [0..39]";
-      return false;
-    }
-    if (cfg.hwPin == cfg.hwAddress) {
-      errMsg = "Motor optical drive pin and sensor pin must be different";
-      return false;
-    }
-  }
-
-  errMsg = nullptr;
-  return true;
+  // P1 #15: delegate to the shared validator (also enforced in
+  // ActuatorFactory::addConfig, so LittleFS load / migration / templates are
+  // covered by the same rules).
+  return validateActuatorConfig(cfg, errMsg);
 }

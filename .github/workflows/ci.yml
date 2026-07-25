@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  native-tests:
+    name: Native unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-native-${{ hashFiles('engine/platformio.ini') }}
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+      - name: Run native unit tests
+        working-directory: engine
+        run: pio test -e native
+
+  firmware-build:
+    name: Build ESP32 firmware
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-esp32-${{ hashFiles('engine/platformio.ini') }}
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+      - name: Build firmware
+        working-directory: engine
+        run: pio run -e esp32
+
+  static-analysis:
+    name: cppcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cppcheck
+        run: sudo apt-get update && sudo apt-get install -y cppcheck
+      - name: cppcheck (warnings, informational)
+        working-directory: engine
+        run: |
+          cppcheck --std=c++17 --language=c++ \
+            --enable=warning,performance,portability \
+            --inline-suppr --suppress=missingInclude \
+            -I src src 2>&1 | tee cppcheck.log || true
+      - name: cppcheck (errors, gating)
+        working-directory: engine
+        # Fail the job only on genuine errors (null derefs, OOB, leaks, ...),
+        # not on style/warning noise.
+        run: |
+          cppcheck --std=c++17 --language=c++ \
+            --inline-suppr --suppress=missingInclude \
+            --error-exitcode=1 \
+            -I src src

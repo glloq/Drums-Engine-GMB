@@ -17,6 +17,15 @@ void EventProcessor::getNoteActive(uint8_t* out) const {
   portEXIT_CRITICAL(&_noteActiveMux);
 }
 
+void EventProcessor::panicReset() {
+  // P0 #3: clear NoteOn / retrigger counters so a subsequent NoteOn
+  // re-triggers cleanly after an emergency stop. Held under the same
+  // spinlock as every other _noteActive mutation.
+  portENTER_CRITICAL(&_noteActiveMux);
+  memset(_noteActive, 0, sizeof(_noteActive));
+  portEXIT_CRITICAL(&_noteActiveMux);
+}
+
 void EventProcessor::processMidiEvent(const MidiEvent& ev) {
   if (ev.type == MIDI_EVT_NOTE_ON && ev.data2 > 0) {
     uint8_t pipelineIdx = _lookup.note_to_pipeline[ev.data1];

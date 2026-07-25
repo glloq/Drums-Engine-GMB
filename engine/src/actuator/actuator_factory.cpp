@@ -1,4 +1,5 @@
 #include "actuator_factory.h"
+#include "actuator_validation.h"
 
 ActuatorFactory::ActuatorFactory(ActuatorManager* manager,
                                   MCP23017Driver* mcpDrivers, uint8_t mcpCount,
@@ -110,6 +111,16 @@ uint8_t ActuatorFactory::createAll(const ActuatorConfig* configs, uint8_t count)
 
 int ActuatorFactory::addConfig(const ActuatorConfig& config) {
   if (_configCount >= MAX_ACTUATORS) return -1;
+
+  // P1 #15: reject invalid configs at the common funnel (LittleFS load, V4
+  // migration, templates and the API all pass through here) so a corrupted or
+  // hand-edited file cannot inject an out-of-range GPIO or a bad type/bus pair.
+  const char* err = nullptr;
+  if (!validateActuatorConfig(config, err)) {
+    DBGF("[Factory] Rejected invalid actuator config '%s': %s\n",
+         config.name, err ? err : "?");
+    return -1;
+  }
 
   // Assigner un ID unique si pas deja defini
   ActuatorConfig cfg = config;

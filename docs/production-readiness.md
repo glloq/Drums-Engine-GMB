@@ -2,6 +2,57 @@
 
 **Date initiale**: 2026-02-15 (commit 828615c)
 **Mise a jour**: 2026-02-18 (sprint fiabilite — 18 fixes concurrence/persistance/UI)
+**Mise a jour**: 2026-07-25 (branche security-p0 — durcissement securite + temps reel, Lots 1-3)
+
+---
+
+## 0. Durcissement securite & temps reel (branche `security-p0-littlefs-wifi`)
+
+### Lot 1 — Securite immediate (P0)
+- **#1 Exposition LittleFS** : `serveStatic("/", LittleFS, "/")` supprime. Seule
+  l'UI (`index.html`) est servie ; `/auth.json`, `/wifi.json`, etc. renvoient 404.
+- **#2 `POST /api/wifi`** : desormais protege par auth Bearer + rate-limiter.
+- **#3 `POST /api/panic`** : vrai arret d'urgence (stopAll direct hors queue,
+  purge scheduler, stop boucles, reset NoteOn). L'UI l'appelle au lieu d'envoyer
+  des `test/actuator value=0` (qui ne sont pas un OFF fiable).
+- **#17 WebSocket** : plus d'ecriture hors buffer (`data[len]=0` supprime).
+- **#18 XSS stockee** : `escapeHtml()` applique aux noms utilisateur (actionneurs,
+  instruments, boucles, pads piano, sequenceur).
+
+### Lot 2 — Temps reel & concurrence
+- **#4/#6 Ordonnancement** : la `CommandQueue` est triee par `execute_at`
+  (compare wraparound-safe) ; une commande immediate n'est plus bloquee derriere
+  une commande lointaine.
+- **#5 Verrouillage** : toutes les operations de la queue sont sous spinlock.
+  La queue n'est plus "lock-free".
+- **#7 Transactionnel** : `pushPair()` insere ON+OFF tout-ou-rien (jamais de ON
+  sans OFF).
+- **#8/#10 Watchdog** : plus d'I/O (GPIO/I2C/PWM) sous `portENTER_CRITICAL` ;
+  snapshot sous verrou puis `checkTimeout()` hors section critique.
+
+### Lot 3 — Coherence fonctionnelle
+- **#11 Boucles** : les evenements au tick 0 sont joues (start / restart / chaine).
+- **#12 Validation boucles** : BPM/bars/beatsPerBar/beatValue/PPQ bornes ;
+  garde contre division par zero et debordement du compteur de ticks.
+- **#13 Mutation partielle** : `PUT /api/actuator` valide une copie candidate
+  avant de committer.
+- **#14 References orphelines** : `DELETE /api/actuator` renvoie 409 (liste des
+  dependances) sauf `?force=true` (qui nettoie les references).
+- **#15 Validation au chargement** : validateur partage applique dans
+  `ActuatorFactory::addConfig` (API + load + migration + templates).
+- **#16 Ecriture crash-safe** : schema `.new`/`.bak` avec verification de
+  relecture, rollback et recuperation au boot.
+
+### Tests & CI (Lot 4 #20)
+- Env PlatformIO `native` + tests Unity : `test/test_command_queue` (ordre,
+  wraparound, insertion transactionnelle) et `test/test_actuator_validation`.
+- `.github/workflows/ci.yml` : tests natifs + build ESP32 + cppcheck.
+
+### Reste a faire (non traite sur cette branche — voir §fin)
+- Lot 2 : #8 modele proprietaire-unique Core 1, #9 double-buffer des lookups,
+  #11 fins de course haute frequence (ISR).
+- Lot 3 : #10 canal MIDI dans le lookup, #9 corps HTTP fragmentes.
+- Lot 4 : #18 decoupage SPA en modules, #19 accessibilite, #17 auth WebSocket.
 
 ---
 
@@ -12,7 +63,7 @@
 | Architecture 6 couches | 100% | DONE |
 | HAL (GPIO, LEDC, MCP23017, PCA9685) | 100% | DONE — mutex I2C + recovery |
 | Actuators (Servo, Solenoid, Motor) | 100% | DONE — ISR multi-instance |
-| Scheduler temps reel | 100% | DONE — ISR atomique |
+| Scheduler temps reel | 100% | DONE — queue triee, spinlock, insertion ON/OFF transactionnelle |
 | Event Processor + Pipeline | 100% | DONE — spinlock dual-core |
 | MIDI Engine (rtpMIDI WiFi) | 100% | DONE |
 | Instrument Manager + CRUD | 100% | DONE |
@@ -24,9 +75,9 @@
 | Routage CC compile | 100% | DONE |
 | Concurrence dual-core | 100% | DONE — spinlocks + mutex + atomic |
 | Documentation | 100% | DONE — mise a jour complete |
-| Tests automatises | 70% | Script curl 31 tests, CI manquant |
-| CI/CD | 0% | Pipeline CI a configurer |
-| Securite | 90% | Auth Bearer + rate-limit + WiFi externalise |
+| Tests automatises | 80% | Script curl + tests natifs Unity (queue, validation) |
+| CI/CD | 70% | GitHub Actions: tests natifs + build ESP32 + cppcheck |
+| Securite | 95% | Auth Bearer + rate-limit + WiFi auth + LittleFS non expose + panic + anti-XSS |
 
 **Avancement global estime: ~95%**
 

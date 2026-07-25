@@ -144,9 +144,10 @@ bool LoopEngine::validateLoopParams(uint16_t bpm, uint8_t bars, uint8_t beatsPer
   if (!(beatValue == 1 || beatValue == 2 || beatValue == 4 ||
         beatValue == 8 || beatValue == 16)) { errMsg = "beatValue must be 1,2,4,8 or 16"; return false; }
   if (ppq < 24 || ppq > 960)          { errMsg = "PPQ out of range (24-960)"; return false; }
-  // Guard against uint16_t overflow of the total tick count and div-by-zero.
-  uint32_t total = (uint32_t)ppq * beatsPerBar * bars;
-  if (total == 0 || total > 65535)    { errMsg = "loop too long (ppq*beatsPerBar*bars must be <= 65535)"; return false; }
+  // Guard against uint16_t overflow of the total tick count (same beatValue-aware
+  // formula as _totalTicks). beatValue is already validated non-zero above.
+  uint32_t total = (uint32_t)ppq * 4 * beatsPerBar * bars / beatValue;
+  if (total == 0 || total > 65535)    { errMsg = "loop too long (total ticks must be <= 65535)"; return false; }
   errMsg = nullptr;
   return true;
 }
@@ -364,13 +365,19 @@ bool LoopEngine::loopFromJson(const JsonObject& obj, Loop& loop) {
 uint16_t LoopEngine::getCurrentBeat() const {
   if (!_playing || _currentLoop >= _loopCount) return 0;
   const Loop& loop = _loops[_currentLoop];
-  return (_currentTick / loop.ppq) % loop.beatsPerBar;
+  uint8_t bv = loop.beatValue ? loop.beatValue : 4;
+  uint32_t ticksPerBeat = (uint32_t)loop.ppq * 4 / bv;   // review #16
+  if (ticksPerBeat == 0) return 0;
+  return (uint16_t)((_currentTick / ticksPerBeat) % loop.beatsPerBar);
 }
 
 uint16_t LoopEngine::getCurrentBar() const {
   if (!_playing || _currentLoop >= _loopCount) return 0;
   const Loop& loop = _loops[_currentLoop];
-  return _currentTick / (loop.ppq * loop.beatsPerBar);
+  uint8_t bv = loop.beatValue ? loop.beatValue : 4;
+  uint32_t ticksPerBar = (uint32_t)loop.ppq * 4 * loop.beatsPerBar / bv;  // review #16
+  if (ticksPerBar == 0) return 0;
+  return (uint16_t)(_currentTick / ticksPerBar);
 }
 
 uint16_t LoopEngine::getBpm() const {
@@ -422,7 +429,13 @@ void LoopEngine::_calcTickInterval(uint16_t bpm, uint16_t ppq) {
 }
 
 uint16_t LoopEngine::_totalTicks(const Loop& loop) const {
-  return loop.ppq * loop.beatsPerBar * loop.bars;
+  // review #16: honor beatValue. ppq is ticks per QUARTER note, so ticks per
+  // whole note = ppq*4, and each beat lasts (whole / beatValue). Total ticks =
+  // ppq*4 * beatsPerBar * bars / beatValue. For x/4 signatures this equals the
+  // previous ppq*beatsPerBar*bars (backward compatible).
+  uint8_t bv = loop.beatValue ? loop.beatValue : 4;   // defensive
+  uint32_t total = (uint32_t)loop.ppq * 4 * loop.beatsPerBar * loop.bars / bv;
+  return (total > 65535) ? 65535 : (uint16_t)total;
 }
 
 void LoopEngine::_sortEvents(Loop& loop) {

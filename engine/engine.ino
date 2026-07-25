@@ -10,7 +10,7 @@
 //
 // === CONFIGURATION ARDUINO IDE ===
 //
-// 1. Board Manager: installer "esp32 by Espressif Systems" (>= 2.0.0)
+// 1. Board Manager: installer "esp32 by Espressif Systems" (>= 3.0.0)
 //    URL: https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
 //
 // 2. Board: "ESP32 Dev Module"
@@ -20,8 +20,8 @@
 //
 // 3. Bibliotheques requises (installer via Library Manager):
 //    - ArduinoJson            >= 7.0.0   (bblanchon)
-//    - ESPAsyncWebServer      >= 1.2.3   (me-no-dev)
-//    - AsyncTCP               >= 1.1.1   (me-no-dev)
+//    - ESPAsyncWebServer      >= 3.6.0   (esp32async fork, core 3.x)
+//    - AsyncTCP               >= 3.3.2   (esp32async fork, core 3.x)
 //    - AppleMIDI              >= 3.2.0   (lathoub)
 //    - MIDI Library            >= 5.0.2   (lathoub/FortySevenEffects)
 //    - Adafruit MCP23017      >= 2.3.0   (Adafruit)

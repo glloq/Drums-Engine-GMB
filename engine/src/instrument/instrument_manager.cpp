@@ -70,6 +70,7 @@ void InstrumentManager::onNoteOn(uint8_t channel, uint8_t note, uint8_t velocity
     return;
   }
 
+  if (note >= 128) return;   // review #11: _noteMap has 128 entries
   int8_t idx = _noteMap[note];
   if (idx < 0) return;
 
@@ -97,6 +98,7 @@ void InstrumentManager::onNoteOn(uint8_t channel, uint8_t note, uint8_t velocity
 }
 
 void InstrumentManager::onNoteOff(uint8_t channel, uint8_t note) {
+  if (note >= 128) return;   // review #11: _noteMap has 128 entries
   int8_t idx = _noteMap[note];
   if (idx < 0) return;
 

@@ -247,6 +247,7 @@ void LedEngine::_processEvents() {
   LedEvent event;
   while (_eventQueue.pop(event)) {
     if (event.noteOn) {
+      if (event.midiNote >= 128) continue;   // review #23: defensive bounds
       // Trouver les segments associes a cette note
       NoteLookup& nl = _noteLookup[event.midiNote];
       for (uint8_t i = 0; i < nl.count; i++) {

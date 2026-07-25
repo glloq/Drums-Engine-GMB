@@ -91,10 +91,16 @@ void ActuatorManager::stopAll() {
 }
 
 void ActuatorManager::clearAll() {
-  stopAll();
+  stopAll();  // hardware I/O — keep OUTSIDE the spinlock
+  // review #11: mutate the registry AND reset _activeCount under the same
+  // spinlock the scheduler/watchdog use. A stale _activeCount after a rebuild
+  // could otherwise falsely trip the concurrent-activation overload guard.
+  portENTER_CRITICAL(&_actMgrMux);
   memset(_actuators, 0, sizeof(_actuators));
   memset(_idMap, 0xFF, sizeof(_idMap));
   _count = 0;
+  _activeCount = 0;
+  portEXIT_CRITICAL(&_actMgrMux);
 }
 
 void ActuatorManager::initAll() {

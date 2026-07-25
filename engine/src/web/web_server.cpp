@@ -111,7 +111,9 @@ void WebServerManager::_setupRoutes() {
       response->addHeader("Cache-Control", "no-cache, must-revalidate");
       req->send(response);
     } else {
-      AsyncWebServerResponse* response = req->beginResponse_P(
+      // Modern overload (works on esp32async 3.x; beginResponse_P is deprecated).
+      // PROGMEM on ESP32 is memory-mapped, so the plain buffer overload is fine.
+      AsyncWebServerResponse* response = req->beginResponse(
         200, "text/html", INDEX_HTML_GZ, INDEX_HTML_GZ_LEN);
       response->addHeader("Content-Encoding", "gzip");
       response->addHeader("Cache-Control", "no-cache, must-revalidate");

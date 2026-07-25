@@ -248,11 +248,10 @@ bool Storage::saveSystemConfig(const JsonObject& cfg) {
   return _writeJson(CONFIG_FILE, doc);
 }
 
-bool Storage::loadSystemConfig(JsonObject& cfg) {
-  JsonDocument doc;
-  if (!_readJson(CONFIG_FILE, doc)) return false;
-  cfg = doc.as<JsonObject>();
-  return true;
+bool Storage::loadSystemConfig(JsonDocument& out) {
+  // P0 (review): same dangling-view fix as loadLoop — parse into the caller's
+  // document instead of returning a view into a destroyed local one.
+  return _readJson(CONFIG_FILE, out);
 }
 
 // ============================================================================
@@ -267,13 +266,13 @@ bool Storage::saveLoop(uint8_t id, const JsonObject& loop) {
   return _writeJson(path, doc);
 }
 
-bool Storage::loadLoop(uint8_t id, JsonObject& loop) {
+bool Storage::loadLoop(uint8_t id, JsonDocument& out) {
+  // P0 (review): fill the CALLER's document. Previously this parsed into a
+  // local JsonDocument and returned a JsonObject view into it — that view
+  // dangled the moment the function returned (use-after-free).
   char path[32];
   snprintf(path, sizeof(path), "%s/loop_%d.json", LOOPS_DIR, id);
-  JsonDocument doc;
-  if (!_readJson(path, doc)) return false;
-  loop = doc.as<JsonObject>();
-  return true;
+  return _readJson(path, out);
 }
 
 bool Storage::deleteLoop(uint8_t id) {
@@ -495,6 +494,20 @@ bool Storage::loadLedConfig(LedEngine& engine) {
       }
       seg.hitBrightness = obj["hitBrightness"] | 255;
       seg.hitFadeDurationMs = obj["hitFadeDurationMs"] | 300;
+      // review #23: enforce a sane fade window (avoids divide-by-zero in the
+      // fade renderer from a hand-edited config).
+      if (seg.hitFadeDurationMs < 1) seg.hitFadeDurationMs = 1;
+      if (seg.hitFadeDurationMs > 60000) seg.hitFadeDurationMs = 60000;
+      if (seg.pixelCount < 1) seg.pixelCount = 1;
+      // Clamp the segment to the physical strip length if known.
+      if (seg.stripId < LED_MAX_STRIPS) {
+        const LedStripConfig& sc = engine.getStripConfig(seg.stripId);
+        if (sc.ledCount > 0 && (uint32_t)seg.pixelStart + seg.pixelCount > sc.ledCount) {
+          if (seg.pixelStart >= sc.ledCount) seg.pixelStart = 0;
+          seg.pixelCount = sc.ledCount - seg.pixelStart;
+          if (seg.pixelCount < 1) seg.pixelCount = 1;
+        }
+      }
       seg.hitAnimation = obj["hitAnimation"] | 0;
 
       if (obj["idleColor"].is<JsonObject>()) {

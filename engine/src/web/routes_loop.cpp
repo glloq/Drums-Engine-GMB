@@ -109,10 +109,27 @@ void WebServerManager::_handleUpdateLoop(AsyncWebServerRequest* req, uint8_t* da
 
 void WebServerManager::_handleDeleteLoop(AsyncWebServerRequest* req) {
   uint8_t id = _extractId(req, "id");
+  uint8_t oldCount = _loopEngine->getLoopCount();
   if (!_loopEngine->deleteLoop(id)) { _sendError(req, 404, "Loop not found"); return; }
-  if (!_storage->deleteLoop(id)) {
-    // review #8: RAM state changed; report that the file lingers.
-    _sendError(req, 500, "Loop removed in RAM but its file could not be deleted");
+
+  // review (loop-ID stability): LoopEngine compacts the array and renumbers the
+  // remaining loops' ids to their new indices. The on-disk files must follow,
+  // otherwise reboot reloads stale/misaligned ids. Rewrite every remaining loop
+  // to its (new) index-named file, then drop the now-orphan highest file.
+  uint8_t newCount = _loopEngine->getLoopCount();
+  bool ok = true;
+  for (uint8_t i = 0; i < newCount; i++) {
+    Loop* lp = _loopEngine->getLoop(i);
+    if (!lp) continue;
+    JsonDocument d;
+    JsonObject o = d.to<JsonObject>();
+    _loopEngine->loopToJson(*lp, o);
+    ok = _storage->saveLoop(i, o) && ok;
+  }
+  if (oldCount > 0) _storage->deleteLoop(oldCount - 1);  // remove the trailing orphan
+
+  if (!ok) {
+    _sendError(req, 500, "Loop removed but re-persisting the remaining loops failed");
     return;
   }
   _sendError(req, 200, "Deleted");

@@ -37,6 +37,12 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
     if (!isRelease) return;
   }
 
+  // review #11: note-indexed lookups (note_to_pipeline / _noteActive) must be
+  // bounds-checked — /api/test/note can inject a raw uint8_t (0..255).
+  if ((ev.type == MIDI_EVT_NOTE_ON || ev.type == MIDI_EVT_NOTE_OFF) && ev.data1 >= 128) {
+    return;
+  }
+
   if (ev.type == MIDI_EVT_NOTE_ON && ev.data2 > 0) {
     uint8_t pipelineIdx = _lookup.note_to_pipeline[ev.data1];
     if (pipelineIdx == 0xFF || pipelineIdx >= _lookup.pipeline_count) return;
@@ -126,9 +132,16 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
     portEXIT_CRITICAL(&_noteActiveMux);
 
     if (fireNoteOff) {
+      // review #5: the OFF must not be silently lost. Schedule it and check the
+      // result; if the queue refuses it (only possible when the queue is
+      // saturated with OFFs), restore the active counter so a subsequent
+      // NoteOff retries instead of being treated as spurious — otherwise the
+      // actuator would stay energized with _noteActive already at 0.
+      bool scheduled = true;
       if (pipeline.note_off_count > 0) {
-        _scheduler->scheduleActionSteps(pipeline.note_off_actions, pipeline.note_off_count,
-                                        ev.data2, ev.timestamp, _state->raw().variables);
+        scheduled = _scheduler->scheduleActionSteps(
+            pipeline.note_off_actions, pipeline.note_off_count,
+            ev.data2, ev.timestamp, _state->raw().variables);
       } else if (pipeline.output_actuator_id != 0xFF) {
         ActuatorCommand cmd;
         cmd.actuator_id = pipeline.output_actuator_id;
@@ -136,11 +149,15 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
         cmd.value = 0;
         cmd.duration = 0;
         cmd.execute_at = ev.timestamp;
-        _scheduler->scheduleCommand(cmd);
+        scheduled = _scheduler->scheduleCommand(cmd);
       }
 
-      // Push LED NoteOff event (fade out animation)
-      if (_ledQueue) {
+      if (!scheduled) {
+        portENTER_CRITICAL(&_noteActiveMux);
+        if (_noteActive[ev.data1] == 0) _noteActive[ev.data1] = 1;  // allow retry
+        portEXIT_CRITICAL(&_noteActiveMux);
+      } else if (_ledQueue) {
+        // Push LED NoteOff event (fade out animation) only once truly released.
         LedEvent ledEv;
         ledEv.midiNote = ev.data1;
         ledEv.velocity = ev.data2;

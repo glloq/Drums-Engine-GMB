@@ -497,11 +497,26 @@ void loadLoops() {
   JsonDocument doc;
   JsonArray arr = doc.to<JsonArray>();
   if (storage.listLoops(arr)) {
+    // Collect loop ids and load them in ascending order so array indices (and
+    // thus assigned ids) are deterministic across reboots regardless of the
+    // filesystem's directory-enumeration order (review: loop-ID stability).
+    uint8_t ids[MAX_LOOPS];
+    uint8_t n = 0;
     for (JsonObject loopInfo : arr) {
-      uint8_t id = loopInfo["id"] | 0;
+      if (n >= MAX_LOOPS) break;
+      ids[n++] = loopInfo["id"] | 0;
+    }
+    for (uint8_t i = 1; i < n; i++) {          // insertion sort (n <= 8)
+      uint8_t key = ids[i];
+      int j = (int)i - 1;
+      while (j >= 0 && ids[j] > key) { ids[j + 1] = ids[j]; j--; }
+      ids[j + 1] = key;
+    }
+
+    for (uint8_t k = 0; k < n; k++) {
       JsonDocument loopDoc;
-      JsonObject loopObj = loopDoc.to<JsonObject>();
-      if (storage.loadLoop(id, loopObj)) {
+      if (storage.loadLoop(ids[k], loopDoc)) {
+        JsonObject loopObj = loopDoc.as<JsonObject>();
         const char* name = loopObj["name"] | "Loop";
         uint16_t bpm = loopObj["bpm"] | MIDI_BPM_DEFAULT;
         uint8_t bars = loopObj["bars"] | 1;

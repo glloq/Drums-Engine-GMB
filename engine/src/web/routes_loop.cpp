@@ -36,6 +36,14 @@ void WebServerManager::_handleCreateLoop(AsyncWebServerRequest* req, uint8_t* da
   uint8_t beatsPerBar = doc["beatsPerBar"] | 4;
   uint8_t beatValue = doc["beatValue"] | 4;
 
+  // P1 #12: validate up-front so the client gets a precise 400 reason
+  // (createLoop also validates, but only returns a generic failure).
+  const char* verr = nullptr;
+  if (!LoopEngine::validateLoopParams(bpm, bars, beatsPerBar, beatValue, 96, verr)) {
+    _sendError(req, 400, verr);
+    return;
+  }
+
   int idx = _loopEngine->createLoop(name, bpm, bars, beatsPerBar, beatValue);
   if (idx < 0) { _sendError(req, 507, "Max loops reached"); return; }
 
@@ -68,6 +76,18 @@ void WebServerManager::_handleUpdateLoop(AsyncWebServerRequest* req, uint8_t* da
 
   Loop* loop = _loopEngine->getLoop(id);
   if (!loop) { _sendError(req, 404, "Loop not found"); return; }
+
+  // P1 #12: validate the incoming time signature before applying it.
+  uint16_t bpm = doc["bpm"] | MIDI_BPM_DEFAULT;
+  uint8_t bars = doc["bars"] | 1;
+  uint8_t beatsPerBar = doc["beatsPerBar"] | 4;
+  uint8_t beatValue = doc["beatValue"] | 4;
+  uint16_t ppq = doc["ppq"] | 96;
+  const char* verr = nullptr;
+  if (!LoopEngine::validateLoopParams(bpm, bars, beatsPerBar, beatValue, ppq, verr)) {
+    _sendError(req, 400, verr);
+    return;
+  }
 
   _loopEngine->loopFromJson(doc.as<JsonObject>(), *loop);
 

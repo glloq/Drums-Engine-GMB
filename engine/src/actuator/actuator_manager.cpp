@@ -176,18 +176,33 @@ void ActuatorManager::testServoAngle(uint8_t id, uint8_t angle) {
 
 uint8_t ActuatorManager::checkWatchdog() {
   uint32_t now = micros();
-  uint8_t stopped = 0;
+
+  // P0 #8/#10: NEVER perform slow I/O (GPIO / I2C / PWM / motor stop) while
+  // holding the spinlock — it blocks interrupts and the scheduler on the other
+  // core. Snapshot the currently-active actuators under the lock (cheap pointer
+  // copies), release it, then run checkTimeout() (which does the actual I/O)
+  // outside the critical section.
+  Actuator* activeList[MAX_ACTUATORS];
+  uint8_t n = 0;
 
   portENTER_CRITICAL(&_actMgrMux);
   for (uint8_t i = 0; i < _count; i++) {
     if (_actuators[i] && _actuators[i]->isActive()) {
-      if (_actuators[i]->checkTimeout(now)) {
-        stopped++;
-      }
+      activeList[n++] = _actuators[i];
     }
   }
-  if (stopped > 0) _updateActiveCountLocked();
   portEXIT_CRITICAL(&_actMgrMux);
+
+  uint8_t stopped = 0;
+  for (uint8_t i = 0; i < n; i++) {
+    if (activeList[i]->checkTimeout(now)) {  // slow I/O, outside the lock
+      stopped++;
+    }
+  }
+
+  if (stopped > 0) {
+    updateActiveCount();  // re-acquires the lock internally
+  }
   return stopped;
 }
 

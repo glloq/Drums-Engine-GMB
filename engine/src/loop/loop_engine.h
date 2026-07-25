@@ -59,6 +59,13 @@ public:
   void loopToJson(const Loop& loop, JsonObject& obj) const;
   bool loopFromJson(const JsonObject& obj, Loop& loop);
 
+  // Validation (P1 #12) — shared by the API and the load path.
+  // Returns true if the time-signature parameters are in range AND the
+  // resulting tick count fits in uint16_t (no overflow / div-by-zero).
+  // On failure, errMsg points to a static reason string.
+  static bool validateLoopParams(uint16_t bpm, uint8_t bars, uint8_t beatsPerBar,
+                                 uint8_t beatValue, uint16_t ppq, const char*& errMsg);
+
   // Info de lecture
   uint8_t getCurrentLoopIndex() const { return _currentLoop; }
   uint16_t getCurrentTick() const { return _currentTick; }
@@ -94,6 +101,9 @@ private:
   uint16_t _totalTicks(const Loop& loop) const;
   void _sortEvents(Loop& loop);
   void _dispatchEvent(const LoopEvent& evt);
+  // Dispatch every event whose tickPosition == _currentTick (P1 #11: ensures
+  // events placed at tick 0 fire on start / loop restart / chain advance).
+  void _fireEventsAtCurrentTick(Loop& loop);
 };
 
 #endif // LOOP_ENGINE_H

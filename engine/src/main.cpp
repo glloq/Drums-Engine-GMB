@@ -39,6 +39,7 @@
 #include "core/global_state.h"
 #include "core/error_log.h"
 #include "core/status_led.h"
+#include "core/panic_state.h"
 
 // HAL
 #include "hal/i2c_scanner.h"
@@ -121,6 +122,9 @@ uint8_t pcaCount = 0;
 // Global I2C mutex (defined in hal_interface.h as extern)
 SemaphoreHandle_t g_i2cMutex = nullptr;
 
+// Global emergency-stop latch (declared extern in core/panic_state.h)
+std::atomic<bool> g_panicActive{false};
+
 // ============================================================================
 // Engine Core (statique, zero allocation dynamique)
 // ============================================================================
@@ -193,6 +197,7 @@ void setupSchedulerTimer() {
 void rtCoreTask(void* param) {
   DBGLN("[RTOS] RT Core task started (Core 1)");
   uint32_t lastWatchdogCheck = 0;
+  uint32_t lastEndStopCheck = 0;
 
   for (;;) {
     // Recevoir MIDI
@@ -204,8 +209,16 @@ void rtCoreTask(void* param) {
       scheduler.update();
     }
 
-    // Watchdog: verifier les timeouts des actionneurs periodiquement
     uint32_t now = micros();
+
+    // End stops: polling haute frequence (~1 kHz) pour reagir vite aux butees
+    // (review #5, separe du watchdog thermique).
+    if (now - lastEndStopCheck >= ENDSTOP_CHECK_US) {
+      lastEndStopCheck = now;
+      actuatorManager.checkEndStops();
+    }
+
+    // Watchdog thermique / duree max: basse frequence (~10 Hz)
     if (now - lastWatchdogCheck >= WATCHDOG_CHECK_US) {
       lastWatchdogCheck = now;
       actuatorManager.checkWatchdog();

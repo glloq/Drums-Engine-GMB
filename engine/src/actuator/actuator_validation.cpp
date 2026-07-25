@@ -1,6 +1,28 @@
 #include "actuator_validation.h"
 
 bool validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg) {
+  // --- Enum sentinel checks (review #6) ---
+  // An unknown type/bus would otherwise fall through every type-specific block
+  // to `return true`.
+  if ((uint8_t)cfg.type >= (uint8_t)ActuatorType::TYPE_COUNT) {
+    errMsg = "Invalid actuator type";
+    return false;
+  }
+  if ((uint8_t)cfg.bus >= (uint8_t)HardwareBus::BUS_COUNT) {
+    errMsg = "Invalid hardware bus";
+    return false;
+  }
+
+  // --- End-stop pins must be a valid GPIO (0..39) or 0xFF (disabled) ---
+  if (cfg.endStopPin1 != 0xFF && cfg.endStopPin1 > 39) {
+    errMsg = "endStopPin1 must be an ESP32 GPIO (0..39) or 255 (disabled)";
+    return false;
+  }
+  if (cfg.endStopPin2 != 0xFF && cfg.endStopPin2 > 39) {
+    errMsg = "endStopPin2 must be an ESP32 GPIO (0..39) or 255 (disabled)";
+    return false;
+  }
+
   // --- Generic direct-GPIO range check (P1 #15) ---
   // For buses driven straight off ESP32 pins, hwPin must be a real GPIO.
   if (cfg.bus == HardwareBus::GPIO_DIRECT || cfg.bus == HardwareBus::LEDC_PWM) {
@@ -8,6 +30,17 @@ bool validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg) {
       errMsg = "hwPin must be a valid ESP32 GPIO (0..39) for direct GPIO/LEDC bus";
       return false;
     }
+  }
+
+  // --- I2C expander pin/channel range (review #6) ---
+  // MCP23017: 16 GPIO (0..15). PCA9685: 16 PWM channels (0..15).
+  if (cfg.bus == HardwareBus::MCP23017 && cfg.hwPin > 15) {
+    errMsg = "MCP23017 pin must be in [0..15]";
+    return false;
+  }
+  if (cfg.bus == HardwareBus::PCA9685 && cfg.hwPin > 15) {
+    errMsg = "PCA9685 channel must be in [0..15]";
+    return false;
   }
 
   // SOLENOID_HOLD: paramMin=pwmActivation, paramMax=pwmHold (paramMin CAN be > paramMax)

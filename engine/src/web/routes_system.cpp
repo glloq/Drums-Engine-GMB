@@ -1,6 +1,7 @@
 #include "web_server.h"
 #include "../hal/i2c_scanner.h"
 #include "../core/error_log.h"
+#include "../core/panic_state.h"
 #include <LittleFS.h>
 
 // --- System ---
@@ -1004,6 +1005,12 @@ void WebServerManager::_handleFactoryReset(AsyncWebServerRequest* req) {
 // The stop path never goes through the normal command queue, so it stays
 // effective even when the queue is saturated.
 void WebServerManager::_handlePanic(AsyncWebServerRequest* req) {
+  // 0. Latch the panic state FIRST so that any activation racing on Core 1
+  //    (a NoteOn arriving between the steps below) is refused by the guards in
+  //    EventProcessor / ActuatorManager / LoopEngine. The latch stays set until
+  //    an explicit POST /api/panic/reset.
+  g_panicActive.store(true, std::memory_order_release);
+
   // 1. Halt loop playback (Core 0) so no further events are generated.
   if (_loopEngine) _loopEngine->stop();
 
@@ -1019,11 +1026,25 @@ void WebServerManager::_handlePanic(AsyncWebServerRequest* req) {
   // 4. Reset NoteOn / retrigger counters so a subsequent NoteOn works.
   if (_eventProc) _eventProc->panicReset();
 
-  DBGLN("[System] PANIC: all actuators stopped, queue cleared, loops halted");
-  ErrorLog::info("Panic: emergency stop triggered");
+  DBGLN("[System] PANIC: all actuators stopped, queue cleared, loops halted, LATCHED");
+  ErrorLog::info("Panic: emergency stop triggered (latched)");
 
   JsonDocument doc;
-  doc["message"] = "Emergency stop: all actuators halted";
+  doc["message"] = "Emergency stop: all actuators halted. System latched — POST /api/panic/reset to re-arm.";
   doc["stopped"] = true;
+  doc["latched"] = true;
+  _sendJson(req, 200, doc);
+}
+
+// Re-arm the system after an emergency stop (P0 #3). Explicit and deliberate:
+// auto-clearing the latch would reopen the activation race the latch closes.
+void WebServerManager::_handlePanicReset(AsyncWebServerRequest* req) {
+  g_panicActive.store(false, std::memory_order_release);
+  DBGLN("[System] Panic latch cleared — system re-armed");
+  ErrorLog::info("Panic latch cleared (re-armed)");
+
+  JsonDocument doc;
+  doc["message"] = "System re-armed";
+  doc["latched"] = false;
   _sendJson(req, 200, doc);
 }

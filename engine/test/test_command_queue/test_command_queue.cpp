@@ -146,6 +146,42 @@ void test_off_accepted_when_full() {
   TEST_ASSERT_EQUAL_UINT8((uint8_t)CommandType::OFF, out.command_type);
 }
 
+// #2 (review): a new OFF must never evict an ALREADY-QUEUED OFF, or some other
+// actuator would be left ON without its scheduled OFF.
+void test_off_eviction_never_drops_existing_off() {
+  CommandQueue q;
+  // Fill with 64 PULSE + 64 OFF (interleaved times) => full at 128.
+  for (int i = 0; i < 64; i++) {
+    TEST_ASSERT_TRUE(q.push(mk((uint8_t)i, CommandType::PULSE, (uint32_t)(100 + i))));
+  }
+  for (int i = 0; i < 64; i++) {
+    TEST_ASSERT_TRUE(q.push(mk((uint8_t)i, CommandType::OFF, (uint32_t)(10000 + i))));
+  }
+  TEST_ASSERT_TRUE(q.isFull());
+
+  auto countOffs = [](CommandQueue& qq) {
+    int offs = 0; ActuatorCommand c;
+    while (qq.pop(c)) if ((CommandType)c.command_type == CommandType::OFF) offs++;
+    return offs;
+  };
+
+  // Push one more OFF: it must displace a PULSE, not any of the 64 OFFs.
+  TEST_ASSERT_TRUE(q.push(mk(200, CommandType::OFF, 5)));
+  TEST_ASSERT_EQUAL_UINT16(COMMAND_QUEUE_SIZE, q.count());
+  TEST_ASSERT_EQUAL_INT(65, countOffs(q));  // 64 original + 1 new, none lost
+}
+
+// If the queue is entirely OFFs, a new OFF is rejected rather than dropping one.
+void test_off_rejected_when_all_offs() {
+  CommandQueue q;
+  for (int i = 0; i < COMMAND_QUEUE_SIZE; i++) {
+    TEST_ASSERT_TRUE(q.push(mk((uint8_t)i, CommandType::OFF, (uint32_t)i)));
+  }
+  TEST_ASSERT_TRUE(q.isFull());
+  TEST_ASSERT_FALSE(q.push(mk(200, CommandType::OFF, 500)));
+  TEST_ASSERT_EQUAL_UINT16(COMMAND_QUEUE_SIZE, q.count());
+}
+
 void test_clear_empties() {
   CommandQueue q;
   q.push(mk(1, CommandType::POSITION, 10));
@@ -167,6 +203,8 @@ int main(int, char**) {
   RUN_TEST(test_pushpair_inserts_both_sorted);
   RUN_TEST(test_pushpair_rejects_atomically_when_full);
   RUN_TEST(test_off_accepted_when_full);
+  RUN_TEST(test_off_eviction_never_drops_existing_off);
+  RUN_TEST(test_off_rejected_when_all_offs);
   RUN_TEST(test_clear_empties);
   return UNITY_END();
 }

@@ -53,8 +53,12 @@ public:
 
   // --- Safety ---
 
-  // Verifier les timeouts de tous les actionneurs (appeler periodiquement)
+  // Verifier les timeouts thermiques de tous les actionneurs (~10 Hz)
   uint8_t checkWatchdog();
+
+  // Verifier les fins de course de tous les actionneurs (~1 kHz, review #5).
+  // Separe du watchdog thermique pour une reaction rapide aux butees.
+  uint8_t checkEndStops();
 
   // Nombre d'actionneurs actuellement actifs (cached, O(1))
   uint8_t getActiveCount() const { return _activeCount; }

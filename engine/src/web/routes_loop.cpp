@@ -54,13 +54,17 @@ void WebServerManager::_handleCreateLoop(AsyncWebServerRequest* req, uint8_t* da
     }
   }
 
-  // Persist to LittleFS
+  // Persist to LittleFS (review #8: check the result, roll back on failure).
   Loop* createdLoop = _loopEngine->getLoop(idx);
   if (createdLoop) {
     JsonDocument loopDoc;
     JsonObject loopObj = loopDoc.to<JsonObject>();
     _loopEngine->loopToJson(*createdLoop, loopObj);
-    _storage->saveLoop(idx, loopObj);
+    if (!_storage->saveLoop(idx, loopObj)) {
+      _loopEngine->deleteLoop(idx);   // roll back the in-RAM loop
+      _sendError(req, 500, "Failed to persist loop");
+      return;
+    }
   }
 
   JsonDocument resp;
@@ -91,11 +95,14 @@ void WebServerManager::_handleUpdateLoop(AsyncWebServerRequest* req, uint8_t* da
 
   _loopEngine->loopFromJson(doc.as<JsonObject>(), *loop);
 
-  // Persist to LittleFS
+  // Persist to LittleFS (review #8: surface persistence failures).
   JsonDocument loopDoc;
   JsonObject loopObj = loopDoc.to<JsonObject>();
   _loopEngine->loopToJson(*loop, loopObj);
-  _storage->saveLoop(id, loopObj);
+  if (!_storage->saveLoop(id, loopObj)) {
+    _sendError(req, 500, "Loop updated in RAM but persistence failed");
+    return;
+  }
 
   _sendError(req, 200, "Updated");
 }
@@ -103,13 +110,22 @@ void WebServerManager::_handleUpdateLoop(AsyncWebServerRequest* req, uint8_t* da
 void WebServerManager::_handleDeleteLoop(AsyncWebServerRequest* req) {
   uint8_t id = _extractId(req, "id");
   if (!_loopEngine->deleteLoop(id)) { _sendError(req, 404, "Loop not found"); return; }
-  _storage->deleteLoop(id);
+  if (!_storage->deleteLoop(id)) {
+    // review #8: RAM state changed; report that the file lingers.
+    _sendError(req, 500, "Loop removed in RAM but its file could not be deleted");
+    return;
+  }
   _sendError(req, 200, "Deleted");
 }
 
 void WebServerManager::_handlePlayLoop(AsyncWebServerRequest* req) {
   uint8_t id = _extractId(req, "id");
-  _loopEngine->play(id);
+  // P1 #10: don't report success if the loop can't start (invalid/empty index
+  // or panic latched).
+  if (!_loopEngine->play(id)) {
+    _sendError(req, 409, "Loop could not start (invalid/empty loop or panic active)");
+    return;
+  }
   _sendError(req, 200, "Playing");
 }
 
@@ -133,7 +149,12 @@ void WebServerManager::_handlePlayChain(AsyncWebServerRequest* req, uint8_t* dat
   }
 
   bool repeat = doc["repeat"] | true;
-  _loopEngine->playChain(chain, count, repeat);
+  // P1 #10: playChain validates the first loop ID (and panic state) and returns
+  // false if the chain can't actually start.
+  if (!_loopEngine->playChain(chain, count, repeat)) {
+    _sendError(req, 409, "Chain could not start (invalid/empty first loop or panic active)");
+    return;
+  }
 
   JsonDocument resp;
   resp["message"] = "Chain started";

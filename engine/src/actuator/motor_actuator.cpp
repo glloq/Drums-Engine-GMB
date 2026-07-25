@@ -324,19 +324,18 @@ void MotorActuator::stop() {
 }
 
 // =========================================================================
-// checkTimeout — watchdog appele a 1 kHz par ActuatorManager
+// checkEndStops — polling HAUTE frequence (~1 kHz) des fins de course
 // =========================================================================
-// Logique par behavior :
-//   MOTOR_TIMED     → arret apres _timedDurationUs
-//   MOTOR_SWEEP     → 1 end stop: arret / 2 end stops: aller-retour puis arret
-//   MOTOR_ALTERNATE → inverse direction quand end stop atteint, continue
-//   MOTOR_SPEED     → timeout securite seulement
-//   OPTICAL_TRACK   → suivi compteur ISR
+// Separe du watchdog thermique (review #5) pour reagir en ~1 ms a une butee au
+// lieu de ~100 ms. Ne gere QUE les fins de course :
+//   MOTOR_SWEEP     → 1 end stop: arret / 2 end stops (dirPin): aller-retour
+//   MOTOR_ALTERNATE → inverse la direction a chaque butee, continue
+//   autres          → arret
+// Retourne true si le moteur a ete arrete.
 // =========================================================================
-bool MotorActuator::checkTimeout(uint32_t nowUs) {
+bool MotorActuator::checkEndStops(uint32_t nowUs) {
   if (!_active) return false;
 
-  // --- End stop (polling 1 kHz, front montant) ---
   if (_checkEndStops()) {
     if (!_endStopReached) {
       _endStopReached = true;
@@ -377,6 +376,20 @@ bool MotorActuator::checkTimeout(uint32_t nowUs) {
   } else {
     _endStopReached = false;
   }
+  return false;
+}
+
+// =========================================================================
+// checkTimeout — watchdog thermique / duree, appele a basse frequence (~10 Hz)
+// =========================================================================
+// Les fins de course sont traitees separement dans checkEndStops() (~1 kHz).
+// Logique par behavior :
+//   MOTOR_TIMED     → arret apres _timedDurationUs
+//   MOTOR_SPEED     → timeout securite seulement
+//   OPTICAL_TRACK   → suivi compteur ISR
+// =========================================================================
+bool MotorActuator::checkTimeout(uint32_t nowUs) {
+  if (!_active) return false;
 
   // --- MOTOR_OPTICAL_TRACK : suivi compteur ISR ---
   if (_config.behavior == ActuatorBehavior::MOTOR_OPTICAL_TRACK) {

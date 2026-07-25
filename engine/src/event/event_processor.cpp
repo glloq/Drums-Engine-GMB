@@ -1,4 +1,5 @@
 #include "event_processor.h"
+#include "../core/panic_state.h"
 #include <math.h>
 
 // Spinlock for _noteActive[] shared between Core 0 (LoopEngine) and Core 1 (MIDI RT)
@@ -27,6 +28,15 @@ void EventProcessor::panicReset() {
 }
 
 void EventProcessor::processMidiEvent(const MidiEvent& ev) {
+  // P0 #3: while the panic latch is set, drop everything that could activate an
+  // actuator. NoteOff (and NoteOn with velocity 0) are still processed so held
+  // notes can be released.
+  if (g_panicActive.load(std::memory_order_acquire)) {
+    bool isRelease = (ev.type == MIDI_EVT_NOTE_OFF) ||
+                     (ev.type == MIDI_EVT_NOTE_ON && ev.data2 == 0);
+    if (!isRelease) return;
+  }
+
   if (ev.type == MIDI_EVT_NOTE_ON && ev.data2 > 0) {
     uint8_t pipelineIdx = _lookup.note_to_pipeline[ev.data1];
     if (pipelineIdx == 0xFF || pipelineIdx >= _lookup.pipeline_count) return;

@@ -58,7 +58,8 @@ enum class HardwareBus : uint8_t {
   MCP23017 = 0,          // GPIO via I2C
   PCA9685,               // PWM via I2C
   GPIO_DIRECT,           // GPIO direct ESP32
-  LEDC_PWM               // PWM direct ESP32 (LEDC)
+  LEDC_PWM,              // PWM direct ESP32 (LEDC)
+  BUS_COUNT              // sentinel (validation bound)
 };
 
 // --- Types de commandes actuator ---

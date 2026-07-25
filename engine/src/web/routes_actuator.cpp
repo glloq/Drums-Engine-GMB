@@ -77,14 +77,22 @@ void WebServerManager::_handleCreateActuator(AsyncWebServerRequest* req, uint8_t
   }
 
   int idx = _actFactory->addConfig(cfg);
-  if (idx < 0) { _sendError(req, 507, "Max actuators reached"); return; }
+  if (idx < 0) { _sendError(req, 507, "Max actuators reached (or invalid config)"); return; }
+
+  uint8_t newId = _actFactory->getConfig(idx).id;
 
   // Reconstruire les actionneurs physiques
   _actFactory->rebuildAll();
-  _storage->saveActuators(*_actFactory);
+  // review #8: check persistence, roll back the new config on failure.
+  if (!_storage->saveActuators(*_actFactory)) {
+    _actFactory->removeConfig(newId);
+    _actFactory->rebuildAll();
+    _sendError(req, 500, "Failed to persist actuator");
+    return;
+  }
 
   JsonDocument resp;
-  resp["id"] = _actFactory->getConfig(idx).id;
+  resp["id"] = newId;
   resp["message"] = "Actuator created";
   _sendJson(req, 201, resp);
 }
@@ -126,7 +134,10 @@ void WebServerManager::_handleUpdateActuator(AsyncWebServerRequest* req, uint8_t
 
   // Reconstruire les actionneurs physiques
   _actFactory->rebuildAll();
-  _storage->saveActuators(*_actFactory);
+  if (!_storage->saveActuators(*_actFactory)) {   // review #8
+    _sendError(req, 500, "Actuator updated in RAM but persistence failed");
+    return;
+  }
 
   _sendError(req, 200, "Updated");
 }
@@ -215,13 +226,17 @@ void WebServerManager::_handleDeleteActuator(AsyncWebServerRequest* req) {
 
   _actFactory->removeConfig(id);
   _actFactory->rebuildAll();
-  _storage->saveActuators(*_actFactory);
+  bool ok = _storage->saveActuators(*_actFactory);   // review #8
 
   if (depCount > 0 && force) {
-    _storage->saveInstruments(*_instrMgr);
+    ok = _storage->saveInstruments(*_instrMgr) && ok;
     _recompileLookupFromInstruments();  // rebuild pipelines without the dead ID
   }
 
+  if (!ok) {
+    _sendError(req, 500, "Actuator removed in RAM but persistence failed");
+    return;
+  }
   _sendError(req, 200, "Deleted");
 }
 

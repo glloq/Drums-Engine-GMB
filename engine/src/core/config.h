@@ -66,7 +66,8 @@
 #define SOLENOID_MAX_ON_US       500000    // 500ms max solenoid activation (thermal)
 #define MOTOR_MAX_CONTINUOUS_US  5000000   // 5s max continuous motor run
 #define MAX_CONCURRENT_ACTIVE    8         // Max simultaneously active actuators
-#define WATCHDOG_CHECK_US        100000    // Check watchdog every 100ms
+#define WATCHDOG_CHECK_US        100000    // Thermal/duration watchdog every 100ms (~10 Hz)
+#define ENDSTOP_CHECK_US         1000      // End-stop polling every 1ms (~1 kHz, review #5)
 
 // --- Microphone (INMP441 via I2S) ---
 #define MIC_I2S_NUM          I2S_NUM_0    // I2S peripheral number

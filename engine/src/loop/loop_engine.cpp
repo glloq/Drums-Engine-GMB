@@ -1,5 +1,6 @@
 #include "loop_engine.h"
 #include "../event/event_processor.h"
+#include "../core/panic_state.h"
 
 LoopEngine::LoopEngine(InstrumentManager* instrumentMgr)
   : _instrumentMgr(instrumentMgr), _eventProc(nullptr), _loopCount(0),
@@ -10,10 +11,11 @@ LoopEngine::LoopEngine(InstrumentManager* instrumentMgr)
 
 // --- Lecture ---
 
-void LoopEngine::play(uint8_t loopIndex) {
-  if (loopIndex >= _loopCount) return;
+bool LoopEngine::play(uint8_t loopIndex) {
+  if (g_panicActive.load(std::memory_order_acquire)) return false;  // P0 #3
+  if (loopIndex >= _loopCount) return false;
   Loop& loop = _loops[loopIndex];
-  if (loop.eventCount == 0) return;
+  if (loop.eventCount == 0) return false;
 
   _currentLoop = loopIndex;
   _currentTick = 0;
@@ -29,17 +31,21 @@ void LoopEngine::play(uint8_t loopIndex) {
 
   DBGF("[Loop] Playing '%s' at %d BPM (%d events)\n",
        loop.name, loop.bpm, loop.eventCount);
+  return true;
 }
 
-void LoopEngine::playChain(const uint8_t* loopIds, uint8_t count, bool repeat) {
-  if (count == 0) return;
+bool LoopEngine::playChain(const uint8_t* loopIds, uint8_t count, bool repeat) {
+  if (g_panicActive.load(std::memory_order_acquire)) return false;  // P0 #3
+  if (count == 0) return false;
   _chainLength = (count > MAX_LOOPS) ? MAX_LOOPS : count;
   for (uint8_t i = 0; i < _chainLength; i++) _chain[i] = loopIds[i];
   _chainRepeat = repeat;
   _chainIndex = 0;
   _chainActive = true;
-  play(_chain[0]);
+  bool started = play(_chain[0]);
+  if (!started) { _chainActive = false; return false; }
   DBGF("[Loop] Chain started (%d loops, repeat=%d)\n", _chainLength, repeat);
+  return true;
 }
 
 void LoopEngine::stop() {
@@ -62,6 +68,7 @@ void LoopEngine::resume() {
 }
 
 void LoopEngine::update() {
+  if (g_panicActive.load(std::memory_order_acquire)) return;  // P0 #3
   if (!_playing || _paused) return;
   if (_currentLoop >= _loopCount) { stop(); return; }
 
@@ -222,6 +229,16 @@ int LoopEngine::addEvent(uint8_t loopIndex, uint16_t tick, uint8_t note,
   if (loopIndex >= _loopCount) return -1;
   Loop& loop = _loops[loopIndex];
   if (loop.eventCount >= MAX_LOOP_EVENTS) return -1;
+
+  // review #7: addEvent is the common insertion point — validate/clamp here so
+  // the create route (which passes JSON events straight through) can't inject
+  // out-of-range values. (loopFromJson clamps on the load path likewise.)
+  uint16_t total = _totalTicks(loop);
+  if (total > 0 && tick >= total) return -1;   // event past the loop end
+  if (note > 127) note = 127;
+  if (velocity > 127) velocity = 127;
+  if (channel < 1) channel = 1;
+  if (channel > 16) channel = 16;
 
   loop.events[loop.eventCount] = {tick, note, velocity, channel};
   loop.eventCount++;

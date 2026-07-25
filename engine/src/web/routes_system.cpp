@@ -953,9 +953,15 @@ void WebServerManager::_handleFactoryReset(AsyncWebServerRequest* req) {
   };
   int deleted = 0;
   for (const char* f : files) {
-    if (LittleFS.exists(f)) {
-      LittleFS.remove(f);
-      deleted++;
+    // Remove the file plus any crash-safe-write leftovers (.bak/.new), else a
+    // stale backup would be "recovered" on next boot and defeat the reset.
+    const char* suffixes[] = {"", ".bak", ".new"};
+    for (const char* sfx : suffixes) {
+      String p = String(f) + sfx;
+      if (LittleFS.exists(p.c_str())) {
+        LittleFS.remove(p.c_str());
+        deleted++;
+      }
     }
   }
 

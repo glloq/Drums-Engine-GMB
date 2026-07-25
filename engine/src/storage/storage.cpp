@@ -324,25 +324,64 @@ String Storage::formatInfo() {
 }
 
 bool Storage::_writeJson(const char* path, const JsonDocument& doc) {
-  // Atomic write: write to .tmp then rename to avoid corruption on crash
-  String tmpPath = String(path) + ".tmp";
-  File file = LittleFS.open(tmpPath.c_str(), "w");
+  // P1 #16: crash-safe write. The previous version removed the original BEFORE
+  // renaming the temp and never checked rename() — a power loss in between lost
+  // the file entirely. New scheme keeps a backup until success:
+  //   1. write + close .new
+  //   2. verify .new re-reads / re-parses (catches a truncated flash write)
+  //   3. move current -> .bak (backup, not deleted)
+  //   4. move .new -> final
+  //   5. on success remove .bak; on rename failure roll back from .bak
+  // Every filesystem call's result is checked. _readJson() transparently falls
+  // back to .bak if the main file is missing (interrupted write recovery).
+  String newPath = String(path) + ".new";
+  String bakPath = String(path) + ".bak";
+
+  File file = LittleFS.open(newPath.c_str(), "w");
   if (!file) {
-    DBGF("[Storage] Failed to open %s for writing\n", tmpPath.c_str());
+    DBGF("[Storage] Failed to open %s for writing\n", newPath.c_str());
     return false;
   }
   size_t written = serializeJson(doc, file);
   file.close();
 
   if (written == 0) {
-    LittleFS.remove(tmpPath.c_str());
+    LittleFS.remove(newPath.c_str());
     DBGF("[Storage] Write failed (0 bytes) for %s\n", path);
     return false;
   }
 
-  // Remove old file, rename tmp to final
-  LittleFS.remove(path);
-  LittleFS.rename(tmpPath.c_str(), path);
+  // 2. Verify the freshly written file parses back.
+  {
+    JsonDocument verify;
+    if (!_readJson(newPath.c_str(), verify)) {
+      DBGF("[Storage] Verification of %s failed, aborting write\n", newPath.c_str());
+      LittleFS.remove(newPath.c_str());
+      return false;
+    }
+  }
+
+  // 3. Back up the current file (if any).
+  bool hadOriginal = LittleFS.exists(path);
+  if (hadOriginal) {
+    LittleFS.remove(bakPath.c_str());            // clear any stale backup
+    if (!LittleFS.rename(path, bakPath.c_str())) {
+      DBGF("[Storage] Could not back up %s, aborting write\n", path);
+      LittleFS.remove(newPath.c_str());
+      return false;
+    }
+  }
+
+  // 4. Promote .new -> final.
+  if (!LittleFS.rename(newPath.c_str(), path)) {
+    DBGF("[Storage] Rename %s -> %s failed, restoring backup\n", newPath.c_str(), path);
+    if (hadOriginal) LittleFS.rename(bakPath.c_str(), path);  // roll back
+    LittleFS.remove(newPath.c_str());
+    return false;
+  }
+
+  // 5. Success — drop the backup.
+  if (hadOriginal) LittleFS.remove(bakPath.c_str());
   DBGF("[Storage] Wrote %d bytes to %s\n", written, path);
   return true;
 }
@@ -548,8 +587,18 @@ bool Storage::loadLedThemes(LedEngine& engine) {
 bool Storage::_readJson(const char* path, JsonDocument& doc) {
   File file = LittleFS.open(path, "r");
   if (!file) {
-    DBGF("[Storage] File not found: %s\n", path);
-    return false;
+    // P1 #16: crash recovery — a write interrupted after moving the original to
+    // .bak but before promoting .new leaves the main file missing. Fall back to
+    // the backup so the last good config is not lost.
+    String bakPath = String(path) + ".bak";
+    if (LittleFS.exists(bakPath.c_str())) {
+      DBGF("[Storage] %s missing, recovering from %s\n", path, bakPath.c_str());
+      file = LittleFS.open(bakPath.c_str(), "r");
+    }
+    if (!file) {
+      DBGF("[Storage] File not found: %s\n", path);
+      return false;
+    }
   }
   DeserializationError err = deserializeJson(doc, file);
   file.close();

@@ -2420,9 +2420,35 @@ async function saveActuator() {
   }
 }
 
-async function deleteActuator(id) {
-  await api('actuator?id=' + id, 'DELETE');
+async function deleteActuator(id, force) {
+  // Raw fetch so we can inspect a 409 (actuator still referenced) and offer a
+  // forced delete that cleans up the references (P1 #14).
+  const url = '/api/actuator?id=' + id + (force ? '&force=true' : '');
+  const opts = { method: 'DELETE', headers: {} };
+  if (apiToken) opts.headers['Authorization'] = 'Bearer ' + apiToken;
+  let r;
+  try {
+    r = await fetch(url, opts);
+  } catch (e) {
+    toast('Erreur reseau', 'error');
+    return;
+  }
+  if (r.status === 409) {
+    const body = await r.json().catch(() => ({}));
+    const deps = (body.dependencies || []).map(d => d.name || ('#' + d.id)).join(', ');
+    if (confirm('Cet actionneur est utilise par: ' + (deps || '?') +
+                '.\nSupprimer quand meme et retirer ces references ?')) {
+      return deleteActuator(id, true);
+    }
+    return;
+  }
+  if (!r.ok) {
+    const b = await r.json().catch(() => ({}));
+    toast('Erreur API: ' + (b.message || b.error || ('HTTP ' + r.status)), 'error');
+    return;
+  }
   await loadActuators();
+  if (force) await loadInstruments();  // references were cleaned server-side
   markConfigDirty();
   toast('Actionneur supprime', 'success');
 }

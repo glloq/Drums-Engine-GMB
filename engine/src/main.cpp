@@ -526,7 +526,13 @@ void loadLoops() {
         int idx = loopEngine.createLoop(name, bpm, bars, beatsPerBar, beatValue);
         if (idx >= 0) {
           Loop* loop = loopEngine.getLoop(idx);
-          if (loop) loopEngine.loopFromJson(loopObj, *loop);
+          if (loop) {
+            loopEngine.loopFromJson(loopObj, *loop);
+            // loopFromJson copies the stored id; the runtime addresses loops by
+            // array index, so force id == index to stay consistent even for
+            // legacy non-contiguous loop files.
+            loop->id = (uint8_t)idx;
+          }
         }
       }
     }

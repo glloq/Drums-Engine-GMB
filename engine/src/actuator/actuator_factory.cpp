@@ -120,6 +120,12 @@ Actuator* ActuatorFactory::createAndRegister(const ActuatorConfig& config) {
       MotorActuator& mot = _motorPool[_motorIdx];
       mot = MotorActuator(driver);
       mot.setConfig(config);
+      // Attach the LEDC channel eagerly here (build time, Core 0) so the RT
+      // dispatch path never triggers a first-use allocation — closes the narrow
+      // two-core first-attach race in LedcDriver.
+      if (config.bus == HardwareBus::LEDC_PWM && _ledcDriver) {
+        _ledcDriver->ensureAttached(config.hwPin);
+      }
       actuator = &mot;
       _motorIdx++;
       break;

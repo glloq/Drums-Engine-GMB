@@ -240,8 +240,9 @@ void EventProcessor::_processCcEvent(const MidiEvent& ev) {
     cmd.value = mapped;
     cmd.duration = 0;
     cmd.execute_at = ev.timestamp;
-    _scheduler->scheduleCommand(cmd);
-    _ccStats.routed_commands++;
+    if (_scheduler->scheduleCommand(cmd)) {   // review #5: count only accepted
+      _ccStats.routed_commands++;
+    }
   }
 }
 
@@ -314,8 +315,9 @@ void EventProcessor::_executePipeline(uint8_t pipelineIdx, uint8_t value, uint32
     cmd.value = currentValue;
     cmd.duration = 0;
     cmd.execute_at = timestamp + delayAccum;
-    _scheduler->scheduleCommand(cmd);
-    _ccStats.routed_commands++;
+    if (_scheduler->scheduleCommand(cmd)) {   // review #5: count only accepted
+      _ccStats.routed_commands++;
+    }
   }
 }
 

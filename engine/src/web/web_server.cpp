@@ -392,6 +392,18 @@ void WebServerManager::_setupRoutes() {
   _server.on("/api/login-status", HTTP_GET,
     [this](AsyncWebServerRequest* req) { _handleLoginStatus(req); });
 
+  // review #25: a real session-validation endpoint. GET routes skip auth, so the
+  // UI could not actually verify a saved token (any string "passed"). This POST
+  // requires the Bearer token via checkAuth: 200 => valid, 401 => invalid.
+  _server.on("/api/auth/check", HTTP_POST,
+    [this](AsyncWebServerRequest* req) {
+      if (!_rateLimiter.checkRate(req)) return;
+      if (!_auth.checkAuth(req)) return;   // sends 401 on failure
+      JsonDocument doc;
+      doc["ok"] = true;
+      _sendJson(req, 200, doc);
+    });
+
   _server.on("/api/pin", HTTP_POST,
     [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
     nullptr,

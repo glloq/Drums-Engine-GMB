@@ -106,8 +106,45 @@ void test_mcp_pin_out_of_range_rejected() {
   TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
 }
 
+// review #13: ESP32 GPIO capability helpers.
+void test_gpio_capability_table() {
+  TEST_ASSERT_TRUE(esp32GpioCanOutput(18));   // normal I/O
+  TEST_ASSERT_FALSE(esp32GpioCanOutput(34));  // input-only
+  TEST_ASSERT_FALSE(esp32GpioCanOutput(6));   // flash
+  TEST_ASSERT_FALSE(esp32GpioCanOutput(20));  // not bonded out
+  TEST_ASSERT_TRUE(esp32GpioCanInput(34));    // input-only is input-capable
+  TEST_ASSERT_FALSE(esp32GpioCanInput(9));    // flash
+}
+
+// A direct-GPIO solenoid on an input-only / flash pin must be rejected.
+void test_direct_gpio_output_on_bad_pin_rejected() {
+  ActuatorConfig c = baseSolenoid();
+  c.bus = HardwareBus::GPIO_DIRECT;
+  const char* err = nullptr;
+  c.hwPin = 34;  // input-only
+  TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
+  c.hwPin = 6;   // flash
+  TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
+  c.hwPin = 18;  // good
+  TEST_ASSERT_TRUE(validateActuatorConfig(c, err));
+}
+
+// End stop on a flash pin is rejected; on an input-only pin it is allowed.
+void test_endstop_pin_capability() {
+  ActuatorConfig c = baseSolenoid();
+  c.bus = HardwareBus::GPIO_DIRECT; c.hwPin = 18;
+  const char* err = nullptr;
+  c.endStopPin1 = 7;   // flash -> reject
+  TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
+  c.endStopPin1 = 35;  // input-only -> ok for a switch
+  TEST_ASSERT_TRUE(validateActuatorConfig(c, err));
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
+  RUN_TEST(test_gpio_capability_table);
+  RUN_TEST(test_direct_gpio_output_on_bad_pin_rejected);
+  RUN_TEST(test_endstop_pin_capability);
   RUN_TEST(test_valid_solenoid_passes);
   RUN_TEST(test_paramMin_gt_paramMax_rejected);
   RUN_TEST(test_default_outside_range_rejected);

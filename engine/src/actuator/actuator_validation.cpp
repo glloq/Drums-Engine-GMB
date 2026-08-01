@@ -1,5 +1,31 @@
 #include "actuator_validation.h"
 
+// ----------------------------------------------------------------------------
+// ESP32 (classic / WROOM-32) GPIO capability table (review #13)
+// ----------------------------------------------------------------------------
+bool esp32GpioExists(uint8_t pin) {
+  if (pin > 39) return false;
+  // Numbers not bonded out on the classic ESP32 (WROOM-32).
+  if (pin == 20 || pin == 24 || (pin >= 28 && pin <= 31)) return false;
+  return true;
+}
+
+bool esp32GpioIsFlashReserved(uint8_t pin) {
+  return pin >= 6 && pin <= 11;  // SPI flash (SD2/SD3/CMD/CLK/SD0/SD1)
+}
+
+bool esp32GpioIsInputOnly(uint8_t pin) {
+  return pin >= 34 && pin <= 39;  // no output driver on GPIO 34..39
+}
+
+bool esp32GpioCanOutput(uint8_t pin) {
+  return esp32GpioExists(pin) && !esp32GpioIsFlashReserved(pin) && !esp32GpioIsInputOnly(pin);
+}
+
+bool esp32GpioCanInput(uint8_t pin) {
+  return esp32GpioExists(pin) && !esp32GpioIsFlashReserved(pin);
+}
+
 bool validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg) {
   // --- Enum sentinel checks (review #6) ---
   // An unknown type/bus would otherwise fall through every type-specific block
@@ -13,21 +39,23 @@ bool validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg) {
     return false;
   }
 
-  // --- End-stop pins must be a valid GPIO (0..39) or 0xFF (disabled) ---
-  if (cfg.endStopPin1 != 0xFF && cfg.endStopPin1 > 39) {
-    errMsg = "endStopPin1 must be an ESP32 GPIO (0..39) or 255 (disabled)";
+  // --- End-stop pins must be input-capable GPIOs or 0xFF (disabled) ---
+  // Input-only pins (34..39) are fine for a limit switch; flash pins are not.
+  if (cfg.endStopPin1 != 0xFF && !esp32GpioCanInput(cfg.endStopPin1)) {
+    errMsg = "endStopPin1 is not an input-capable ESP32 GPIO (or 255=disabled)";
     return false;
   }
-  if (cfg.endStopPin2 != 0xFF && cfg.endStopPin2 > 39) {
-    errMsg = "endStopPin2 must be an ESP32 GPIO (0..39) or 255 (disabled)";
+  if (cfg.endStopPin2 != 0xFF && !esp32GpioCanInput(cfg.endStopPin2)) {
+    errMsg = "endStopPin2 is not an input-capable ESP32 GPIO (or 255=disabled)";
     return false;
   }
 
-  // --- Generic direct-GPIO range check (P1 #15) ---
-  // For buses driven straight off ESP32 pins, hwPin must be a real GPIO.
+  // --- Direct-GPIO output pins must actually be output-capable (review #13) ---
+  // Rejects input-only (34..39), flash (6..11) and non-existent pins that would
+  // silently produce no output.
   if (cfg.bus == HardwareBus::GPIO_DIRECT || cfg.bus == HardwareBus::LEDC_PWM) {
-    if (cfg.hwPin > 39) {
-      errMsg = "hwPin must be a valid ESP32 GPIO (0..39) for direct GPIO/LEDC bus";
+    if (!esp32GpioCanOutput(cfg.hwPin)) {
+      errMsg = "hwPin must be an output-capable ESP32 GPIO (not input-only/flash) for direct GPIO/LEDC bus";
       return false;
     }
   }
@@ -117,6 +145,10 @@ bool validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg) {
         errMsg = "MOTOR_SWEEP with 2 end stops requires hwAddress as direction GPIO pin (1-39)";
         return false;
       }
+      if (hasDirPin && !esp32GpioCanOutput(cfg.hwAddress)) {   // review #13
+        errMsg = "MOTOR_SWEEP direction pin (hwAddress) must be an output-capable GPIO";
+        return false;
+      }
     }
     // MOTOR_ALTERNATE requiert end stop + direction pin (hwAddress)
     if (cfg.behavior == ActuatorBehavior::MOTOR_ALTERNATE) {
@@ -132,6 +164,10 @@ bool validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg) {
         errMsg = "MOTOR_ALTERNATE requires hwAddress as direction GPIO pin (1-39)";
         return false;
       }
+      if (!esp32GpioCanOutput(cfg.hwAddress)) {   // review #13
+        errMsg = "MOTOR_ALTERNATE direction pin (hwAddress) must be an output-capable GPIO";
+        return false;
+      }
     }
   }
 
@@ -144,12 +180,13 @@ bool validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg) {
       errMsg = "Motor optical requires behavior MOTOR_OPTICAL_TRACK";
       return false;
     }
-    if (cfg.hwAddress > 39) {
-      errMsg = "Motor optical sensor pin (hwAddress) must be in [0..39]";
+    // Sensor pin (hwAddress) is read as an input; drive pin (hwPin) is an output.
+    if (!esp32GpioCanInput(cfg.hwAddress)) {    // review #13
+      errMsg = "Motor optical sensor pin (hwAddress) must be an input-capable ESP32 GPIO";
       return false;
     }
-    if (cfg.hwPin > 39) {
-      errMsg = "Motor optical drive pin (hwPin) must be in [0..39]";
+    if (!esp32GpioCanOutput(cfg.hwPin)) {       // review #13
+      errMsg = "Motor optical drive pin (hwPin) must be an output-capable ESP32 GPIO";
       return false;
     }
     if (cfg.hwPin == cfg.hwAddress) {

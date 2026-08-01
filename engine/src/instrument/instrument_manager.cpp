@@ -1,4 +1,5 @@
 #include "instrument_manager.h"
+#include "instrument_validation.h"
 
 InstrumentManager::InstrumentManager(ActuatorManager* actMgr, Scheduler* scheduler)
   : _actMgr(actMgr), _scheduler(scheduler), _count(0) {
@@ -272,13 +273,28 @@ bool InstrumentManager::fromJson(const JsonArray& arr) {
   _count = 0;
   memset(_noteMap, -1, sizeof(_noteMap));
 
+  // review #14: validate each loaded instrument with the SAME validator the API
+  // uses. Actuators are already created at this point, so resolve references via
+  // the actuator manager. Invalid instruments (bad note/channel, dangling
+  // actuator ref, incompatible command) are skipped rather than loaded.
+  auto lookup = [](void* ctx, uint8_t id) -> const ActuatorConfig* {
+    Actuator* a = ((ActuatorManager*)ctx)->getActuator(id);
+    return a ? &a->getConfig() : nullptr;
+  };
+
   for (JsonObject obj : arr) {
     if (_count >= MAX_INSTRUMENTS) break;
     InstrumentConfig inst;
-    if (instrumentFromJson(obj, inst)) {
-      _instruments[_count] = inst;
-      _count++;
+    if (!instrumentFromJson(obj, inst)) continue;
+
+    const char* err = nullptr;
+    if (!validateInstrumentConfig(inst, err, lookup, _actMgr)) {
+      DBGF("[InstrMgr] Skipped invalid instrument '%s': %s\n",
+           inst.name, err ? err : "?");
+      continue;
     }
+    _instruments[_count] = inst;
+    _count++;
   }
   _rebuildNoteMap();
   DBGF("[InstrMgr] Loaded %d instruments\n", _count);

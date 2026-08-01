@@ -1619,9 +1619,11 @@ async function init() {
       // PIN is set: show login screen
       const savedToken = localStorage.getItem('drumsApiToken');
       if (savedToken) {
-        // Try saved token
+        // Try saved token. Must hit an AUTHENTICATED endpoint — GET /api/status
+        // skips auth, so it "validated" any string (review #25). POST
+        // /api/auth/check requires the Bearer token.
         apiToken = savedToken;
-        const check = await api('status', 'GET', null, true);
+        const check = await api('auth/check', 'POST', null, true);
         if (check) {
           // Token still valid, proceed
           hideLogin();

@@ -89,6 +89,23 @@
 - **Actionneurs** : `addConfig` refuse l'id 255 et les doublons.
 - **clearAll** : mutations + reset `_activeCount` sous spinlock.
 
+### Corrections post-revue (4e passe)
+- **Validation broches ESP32 (#13)** : table de capacites GPIO (input-only 34-39,
+  flash 6-11, broches non cablees) ; les sorties directes/LEDC, fins de course,
+  pins capteur/direction sont validees selon leur role. Tests natifs ajoutes.
+- **Conflits materiels (#13)** : `ActuatorFactory::addConfig` rejette deux
+  actionneurs partageant une meme broche GPIO / un meme couple MCP addr+pin ou
+  PCA addr+canal.
+- **Validateur instrument partage (#14)** : extrait dans
+  `instrument_validation.*`, utilise par l'API ET le chargement LittleFS
+  (`InstrumentManager::fromJson`) ; instruments invalides ignores au boot.
+  Tests natifs ajoutes.
+- **Validation de session (#25)** : nouvelle route authentifiee
+  `POST /api/auth/check` ; l'UI valide reellement le token sauvegarde (le GET
+  precedent passait toujours car les GET sont exemptes d'auth).
+- **Stats CC** : `routed_commands` n'est incremente que si la commande est
+  effectivement acceptee par la file.
+
 ### Reste a faire (non traite — voir §fin)
 - Concurrence : modele proprietaire-unique Core 1, double-buffer des lookups,
   lookup canal MIDI, reconfiguration a chaud sure.

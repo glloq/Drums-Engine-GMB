@@ -1,6 +1,58 @@
 #include "actuator_factory.h"
 #include "actuator_validation.h"
 
+// ----------------------------------------------------------------------------
+// Hardware resource conflict detection (review #13)
+// ----------------------------------------------------------------------------
+// Collect the physical ESP32 GPIOs a config occupies (output pin on a GPIO bus,
+// end stops, optical sensor pin, motor direction pin).
+static void collectGpios(const ActuatorConfig& c, uint8_t* out, uint8_t& n) {
+  n = 0;
+  auto add = [&](uint8_t p) {
+    if (p == 0xFF || p > 39 || n >= 8) return;
+    for (uint8_t i = 0; i < n; i++) if (out[i] == p) return;  // dedup
+    out[n++] = p;
+  };
+  if (c.bus == HardwareBus::GPIO_DIRECT || c.bus == HardwareBus::LEDC_PWM) add(c.hwPin);
+  add(c.endStopPin1);
+  add(c.endStopPin2);
+  if (c.type == ActuatorType::MOTOR_OPTICAL) add(c.hwAddress);  // sensor pin (GPIO)
+  if (c.type == ActuatorType::PWM_MOTOR &&
+      (c.behavior == ActuatorBehavior::MOTOR_SWEEP ||
+       c.behavior == ActuatorBehavior::MOTOR_ALTERNATE) &&
+      c.bus == HardwareBus::LEDC_PWM &&
+      c.hwAddress > 0 && c.hwAddress < 40) {
+    add(c.hwAddress);  // direction pin (GPIO)
+  }
+}
+
+// I2C-expander resource (bus + address + channel/pin). Returns false for
+// GPIO/LEDC buses.
+static bool expanderResource(const ActuatorConfig& c, uint8_t& addr, uint8_t& chan) {
+  if (c.bus == HardwareBus::MCP23017 || c.bus == HardwareBus::PCA9685) {
+    addr = c.hwAddress;
+    chan = c.hwPin;
+    return true;
+  }
+  return false;
+}
+
+// True if configs `a` and `b` fight over any physical resource.
+static bool configsConflict(const ActuatorConfig& a, const ActuatorConfig& b) {
+  uint8_t ag[8], bg[8], an, bn;
+  collectGpios(a, ag, an);
+  collectGpios(b, bg, bn);
+  for (uint8_t i = 0; i < an; i++)
+    for (uint8_t j = 0; j < bn; j++)
+      if (ag[i] == bg[j]) return true;  // shared physical GPIO
+
+  uint8_t aAddr, aChan, bAddr, bChan;
+  if (expanderResource(a, aAddr, aChan) && expanderResource(b, bAddr, bChan)) {
+    if (a.bus == b.bus && aAddr == bAddr && aChan == bChan) return true;
+  }
+  return false;
+}
+
 ActuatorFactory::ActuatorFactory(ActuatorManager* manager,
                                   MCP23017Driver* mcpDrivers, uint8_t mcpCount,
                                   PCA9685Driver* pcaDrivers, uint8_t pcaCount,
@@ -141,6 +193,16 @@ int ActuatorFactory::addConfig(const ActuatorConfig& config) {
   for (uint8_t i = 0; i < _configCount; i++) {
     if (_configPool[i].id == cfg.id) {
       DBGF("[Factory] Rejected actuator config: duplicate id %d\n", cfg.id);
+      return -1;
+    }
+  }
+
+  // review #13: reject a config that would share a physical pin/channel with an
+  // already-registered one (two outputs on the same GPIO, MCP pin or PCA channel).
+  for (uint8_t i = 0; i < _configCount; i++) {
+    if (configsConflict(cfg, _configPool[i])) {
+      DBGF("[Factory] Rejected actuator '%s': hardware resource conflict with id %d\n",
+           cfg.name, _configPool[i].id);
       return -1;
     }
   }

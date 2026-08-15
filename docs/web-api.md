@@ -75,7 +75,10 @@ Base URL: `http://<ip-esp32>/`
 - `GET /api/status`
 - `GET /api/scan-i2c`
 - `GET /api/midi-notes`
-- `GET /api/capabilities`
+- `GET /api/capabilities` — types/behaviors d'actionneurs, limites de compilation,
+  courbes de velocite, plus un objet `hardware` (broches I2C, LED de statut,
+  bouton BOOT, micro I2S, adresses de base MCP/PCA, limites de securite) repris
+  de `config.h` et consomme par la page Cablage — voir [`wiring-page.md`](wiring-page.md)
 - `GET /api/templates`
 - `GET /api/cc-routes`
 - `POST /api/save`

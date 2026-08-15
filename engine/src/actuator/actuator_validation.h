@@ -64,4 +64,10 @@ const PinReservation* esp32PinReservation(uint8_t pin);
 // dragging in the HAL drivers.
 bool actuatorConfigsConflict(const ActuatorConfig& a, const ActuatorConfig& b);
 
+// Does `c` occupy the physical ESP32 GPIO `pin` (output pin on a GPIO/LEDC bus,
+// end stop, optical sensor or motor direction pin)? Used to check an actuator
+// against non-actuator consumers of the same pin — LED strips, the I2S
+// microphone — which actuatorConfigsConflict() cannot express.
+bool actuatorConfigUsesGpio(const ActuatorConfig& c, uint8_t pin);
+
 #endif // ACTUATOR_VALIDATION_H

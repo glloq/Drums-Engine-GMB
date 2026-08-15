@@ -91,6 +91,14 @@ static bool expanderResource(const ActuatorConfig& c, uint8_t& addr, uint8_t& ch
   return false;
 }
 
+bool actuatorConfigUsesGpio(const ActuatorConfig& c, uint8_t pin) {
+  if (pin == 0xFF) return false;
+  uint8_t pins[8], n;
+  collectGpios(c, pins, n);
+  for (uint8_t i = 0; i < n; i++) if (pins[i] == pin) return true;
+  return false;
+}
+
 bool actuatorConfigsConflict(const ActuatorConfig& a, const ActuatorConfig& b) {
   uint8_t ag[8], bg[8], an, bn;
   collectGpios(a, ag, an);
@@ -238,6 +246,13 @@ bool validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg) {
       errMsg = "Servo channel must be in [0..15]";
       return false;
     }
+    // paramMin/paramMax/paramDefault are angles in degrees; PCA9685Driver maps
+    // 0..180 onto the 150..600 pulse window, so a larger value silently drives
+    // the horn past its mechanical stop.
+    if (cfg.paramMin > 180 || cfg.paramMax > 180 || cfg.paramDefault > 180) {
+      errMsg = "Servo angles (paramMin/paramMax/paramDefault) must be in [0..180] degrees";
+      return false;
+    }
     // M7 fix: Validate behavior matches servo type
     if (cfg.behavior != ActuatorBehavior::SERVO_POSITION &&
         cfg.behavior != ActuatorBehavior::SERVO_STRIKE &&
@@ -251,8 +266,10 @@ bool validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg) {
   }
 
   if (cfg.type == ActuatorType::SOLENOID) {
-    if (cfg.bus != HardwareBus::MCP23017 && cfg.bus != HardwareBus::GPIO_DIRECT) {
-      errMsg = "Solenoid supports MCP23017 or GPIO_DIRECT";
+    if (cfg.bus != HardwareBus::MCP23017 &&
+        cfg.bus != HardwareBus::GPIO_DIRECT &&
+        cfg.bus != HardwareBus::LEDC_PWM) {
+      errMsg = "Solenoid supports MCP23017, GPIO_DIRECT or LEDC_PWM";
       return false;
     }
     // M7 fix: Validate behavior matches solenoid type
@@ -262,11 +279,42 @@ bool validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg) {
       errMsg = "Solenoid behavior must be SOLENOID_STRIKE, SOLENOID_HOLD or SOLENOID_MUTE";
       return false;
     }
+    // SAFETY: SOLENOID_HOLD drops the coil to a reduced holding current after
+    // the initial strike (paramMin = strike PWM, paramMax = hold PWM). That is
+    // only meaningful on a bus with real hardware PWM.
+    //
+    // MCP23017 and GPIO_DIRECT are digital-only: their pwmWrite() is
+    // all-or-nothing, so BOTH levels came out as 100 % duty and a coil sized
+    // for a brief strike followed by a reduced hold was left at full current —
+    // a thermal hazard, not merely a wrong sound.
+    if (cfg.behavior == ActuatorBehavior::SOLENOID_HOLD &&
+        cfg.bus != HardwareBus::LEDC_PWM) {
+      errMsg = "SOLENOID_HOLD requires the LEDC_PWM bus: MCP23017/GPIO_DIRECT have no "
+               "hardware PWM, so the hold level would stay at full current (overheating risk)";
+      return false;
+    }
+    // The hold level must actually be a reduction, otherwise the behaviour is
+    // a permanently energised coil under a misleading name.
+    if (cfg.behavior == ActuatorBehavior::SOLENOID_HOLD) {
+      if (cfg.paramMin > 255 || cfg.paramMax > 255) {
+        errMsg = "SOLENOID_HOLD strike/hold PWM must be in [0..255]";
+        return false;
+      }
+      if (cfg.paramMax >= cfg.paramMin) {
+        errMsg = "SOLENOID_HOLD hold PWM (paramMax) must be lower than the strike PWM (paramMin)";
+        return false;
+      }
+    }
   }
 
   if (cfg.type == ActuatorType::PWM_MOTOR) {
-    if (cfg.bus != HardwareBus::LEDC_PWM && cfg.bus != HardwareBus::PCA9685) {
-      errMsg = "PWM motor supports LEDC_PWM or PCA9685";
+    // PCA9685 is deliberately excluded: the whole board is clocked at
+    // PCA_FREQUENCY (50 Hz) for servos, which is far too slow to drive a motor
+    // through a MOSFET/H-bridge — it produces audible torque ripple and
+    // dissipation in the switch. Motors go through LEDC (5 kHz).
+    if (cfg.bus != HardwareBus::LEDC_PWM) {
+      errMsg = "PWM motor requires LEDC_PWM (PCA9685 runs at 50 Hz for servos, "
+               "which is unsuitable for motor drive)";
       return false;
     }
     // Valider le behavior pour PWM_MOTOR
@@ -275,6 +323,13 @@ bool validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg) {
         cfg.behavior != ActuatorBehavior::MOTOR_SWEEP &&
         cfg.behavior != ActuatorBehavior::MOTOR_ALTERNATE) {
       errMsg = "PWM motor behavior must be MOTOR_TIMED, MOTOR_SPEED, MOTOR_SWEEP or MOTOR_ALTERNATE";
+      return false;
+    }
+    // paramMin/paramMax are percentages of full speed (core/types.h). Values
+    // above 100 used to be accepted and silently produced a different duty on
+    // each bus; now the unit is enforced at the boundary.
+    if (cfg.paramMin > 100 || cfg.paramMax > 100) {
+      errMsg = "PWM motor paramMin/paramMax are percentages and must be in [0..100]";
       return false;
     }
     // MOTOR_SWEEP requiert au moins un end stop
@@ -317,8 +372,13 @@ bool validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg) {
   }
 
   if (cfg.type == ActuatorType::MOTOR_OPTICAL) {
-    if (cfg.bus != HardwareBus::GPIO_DIRECT) {
-      errMsg = "Motor optical currently requires GPIO_DIRECT (sensor read not available on PWM-only drivers)";
+    // The optical sensor is read straight from the GPIO (pinMode +
+    // attachInterrupt in MotorActuator), not through the HAL driver, so the
+    // DRIVE pin is free to use LEDC. GPIO_DIRECT stays allowed for bang-bang
+    // wiring, but then paramDefault (driveSpeed) has no effect: that bus has
+    // no hardware PWM and any non-zero value means full power.
+    if (cfg.bus != HardwareBus::GPIO_DIRECT && cfg.bus != HardwareBus::LEDC_PWM) {
+      errMsg = "Motor optical requires GPIO_DIRECT or LEDC_PWM (LEDC_PWM for real speed control)";
       return false;
     }
     if (cfg.behavior != ActuatorBehavior::MOTOR_OPTICAL_TRACK) {

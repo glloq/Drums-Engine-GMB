@@ -23,7 +23,8 @@ public:
 
   bool begin() override;
   void digitalWrite(uint8_t pin, bool value) override;
-  void pwmWrite(uint8_t pin, uint16_t value) override;   // pin = GPIO (0-255 duty)
+  void pwmWrite(uint8_t pin, uint16_t duty) override;    // pin = GPIO, duty 0..PWM_DUTY_MAX
+  bool supportsPwm() const override { return true; }     // vrai PWM materiel
   bool digitalRead(uint8_t pin) override;
   bool isReady() const override { return true; }
   uint8_t channelCount() const override { return LEDC_CHANNELS; }

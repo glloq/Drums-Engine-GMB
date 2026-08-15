@@ -1,5 +1,6 @@
 #include "web_server.h"
 #include "../instrument/instrument_validation.h"
+#include "../core/reconfig_barrier.h"
 
 // --- Instruments ---
 
@@ -22,6 +23,8 @@ void WebServerManager::_handleGetInstrument(AsyncWebServerRequest* req) {
 }
 
 void WebServerManager::_handleCreateInstrument(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
+  ReconfigLock lock;   // hold the RT core parked for the whole transaction
+  if (!lock.ok()) { _sendError(req, 503, "Reconfiguration busy, no change applied"); return; }
   JsonDocument doc;
   if (deserializeJson(doc, data, len)) { _sendError(req, 400, "Invalid JSON"); return; }
 
@@ -55,6 +58,8 @@ void WebServerManager::_handleCreateInstrument(AsyncWebServerRequest* req, uint8
 }
 
 void WebServerManager::_handleUpdateInstrument(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
+  ReconfigLock lock;   // hold the RT core parked for the whole transaction
+  if (!lock.ok()) { _sendError(req, 503, "Reconfiguration busy, no change applied"); return; }
   uint8_t id = _extractId(req, "id");
   JsonDocument doc;
   if (deserializeJson(doc, data, len)) { _sendError(req, 400, "Invalid JSON"); return; }
@@ -87,6 +92,8 @@ void WebServerManager::_handleUpdateInstrument(AsyncWebServerRequest* req, uint8
 }
 
 void WebServerManager::_handleDeleteInstrument(AsyncWebServerRequest* req) {
+  ReconfigLock lock;   // hold the RT core parked for the whole transaction
+  if (!lock.ok()) { _sendError(req, 503, "Reconfiguration busy, no change applied"); return; }
   uint8_t id = _extractId(req, "id");
   InstrumentConfig* live = _instrMgr->getInstrument(id);
   if (!live) { _sendError(req, 404, "Instrument not found"); return; }

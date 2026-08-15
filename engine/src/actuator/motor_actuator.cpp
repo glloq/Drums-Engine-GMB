@@ -85,7 +85,11 @@ void MotorActuator::execute(const ActuatorCommand& cmd) {
       _positionTracking = false;
 
       uint16_t cmdVal = _config.inverted ? (127 - cmd.value) : cmd.value;
-      uint16_t speed = map(cmdVal, 0, 127, _config.paramMin, _config.paramMax);
+      // paramMin/paramMax are PERCENTAGES (see core/types.h). They used to be
+      // handed to pwmWrite() as if they were raw duty counts, so "100 %" came
+      // out as 100/255 = 39 % on LEDC and 100/4095 = 2.4 % on PCA9685.
+      uint16_t speedPercent = map(cmdVal, 0, 127, _config.paramMin, _config.paramMax);
+      uint16_t speed = pwmDutyFromPercent(speedPercent);
 
       switch (_config.behavior) {
 
@@ -153,7 +157,11 @@ void MotorActuator::execute(const ActuatorCommand& cmd) {
       _targetEdges = 0;
 
       uint16_t cmdVal = _config.inverted ? (127 - cmd.value) : cmd.value;
-      uint16_t speed = map(cmdVal, 0, 127, _config.paramMin, _config.paramMax);
+      // paramMin/paramMax are PERCENTAGES (see core/types.h). They used to be
+      // handed to pwmWrite() as if they were raw duty counts, so "100 %" came
+      // out as 100/255 = 39 % on LEDC and 100/4095 = 2.4 % on PCA9685.
+      uint16_t speedPercent = map(cmdVal, 0, 127, _config.paramMin, _config.paramMax);
+      uint16_t speed = pwmDutyFromPercent(speedPercent);
       _driver->pwmWrite(_config.hwPin, speed);
       _currentSpeed = speed;
 
@@ -179,8 +187,9 @@ void MotorActuator::execute(const ActuatorCommand& cmd) {
 
       _attachOpticalISR();
 
-      uint16_t drive = (_config.paramDefault == 0) ? 128 : _config.paramDefault;
-      if (drive > 255) drive = 255;
+      // MOTOR_OPTICAL keeps driveSpeed on the historical 0..255 scale (default
+      // 128 = half power), unlike the percentage-based motor behaviours.
+      uint16_t drive = pwmDutyFrom8Bit((_config.paramDefault == 0) ? 128 : _config.paramDefault);
       _driver->pwmWrite(_config.hwPin, drive);
       _currentSpeed = drive;
       markActivation(now);

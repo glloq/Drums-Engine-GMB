@@ -199,15 +199,21 @@ ActuatorConfig* ActuatorFactory::findConfig(uint8_t id) {
   return nullptr;
 }
 
-uint8_t ActuatorFactory::rebuildAll() {
+int ActuatorFactory::rebuildAll() {
   // clearAll() vide le registre et createAll() reconstruit les objets dans les
   // pools statiques — deux operations que le Scheduler lit en continu depuis
   // Core 1. On met donc le coeur temps reel en pause pendant la reconstruction
   // (voir core/reconfig_barrier.h) ; sans cela, un dispatch concurrent pouvait
   // atteindre un Actuator en cours de reaffectation.
+  //
+  // FAIL-CLOSED : si le RT ne confirme pas son arret, on n'ecrit RIEN. Ceder
+  // ici (l'ancien comportement : un simple avertissement puis reconstruction)
+  // revenait a desactiver la barriere exactement dans le cas ou elle est
+  // necessaire — le RT est occupe, donc probablement en train de lire.
   ReconfigLock lock;
   if (!lock.ok()) {
-    DBGLN("[Factory] WARNING: RT core did not park before rebuild");
+    DBGLN("[Factory] Rebuild refused: RT core did not park");
+    return REBUILD_BUSY;
   }
 
   // Nettoyer les enregistrements existants dans le manager

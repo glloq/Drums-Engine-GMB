@@ -1,4 +1,5 @@
 #include "web_server.h"
+#include "../actuator/actuator_validation.h"
 
 // ============================================================================
 // LED API Handlers
@@ -157,6 +158,39 @@ void WebServerManager::_handleConfigureLedStrip(AsyncWebServerRequest* req, uint
   if (cfg.ledCount > LED_MAX_PIXELS) {
     _sendError(req, 400, "Led count exceeds max");
     return;
+  }
+
+  // LedStripDriver emits WS2812B timing and converts RGB->GRB unconditionally,
+  // with a fixed 3 bytes per pixel. Accepting other chip types / colour orders
+  // told the UI they were supported while the wire format never changed (an
+  // SK6812 RGBW strip would simply be driven wrong). Reject them until the
+  // driver actually implements them.
+  if (cfg.chipType != 0) {
+    _sendError(req, 400, "Only chipType 0 (WS2812B) is implemented by the LED driver");
+    return;
+  }
+  if (cfg.colorOrder != 0) {
+    _sendError(req, 400, "Only colorOrder 0 (GRB) is implemented by the LED driver");
+    return;
+  }
+
+  // The data pin gets the same treatment as an actuator pin: it must be a real
+  // output-capable GPIO, and it must not already belong to the I2C bus, the
+  // status LED, an actuator, another strip or the microphone. None of this was
+  // checked — a strip could be pointed straight at the I2C bus.
+  if (cfg.enabled && cfg.ledCount > 0) {
+    if (!esp32GpioCanOutput(cfg.gpioPin)) {
+      _sendError(req, 400, "LED data pin must be an output-capable ESP32 GPIO");
+      return;
+    }
+    const char* owner = nullptr;
+    if (_gpioClaimedBy(cfg.gpioPin, stripIdx, owner)) {
+      char msg[112];
+      snprintf(msg, sizeof(msg), "GPIO %u is already used by %s",
+               (unsigned)cfg.gpioPin, owner ? owner : "another peripheral");
+      _sendError(req, 409, msg);
+      return;
+    }
   }
 
   if (!_ledEngine->configureStrip(stripIdx, cfg)) {

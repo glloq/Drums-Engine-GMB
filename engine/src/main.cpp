@@ -53,6 +53,7 @@
 // Actuator
 #include "actuator/actuator_manager.h"
 #include "actuator/actuator_factory.h"
+#include "actuator/actuator_validation.h"
 
 // Scheduler
 #include "scheduler/scheduler.h"
@@ -346,7 +347,7 @@ void loadConfiguration() {
     }
 
     // 2. Creer et enregistrer les actionneurs physiques
-    uint8_t created = actuatorFactory.rebuildAll();
+    int created = actuatorFactory.rebuildAll();
     DBGF("[Config] Created %d actuators from configs\n", created);
 
     // 3. Charger les instruments
@@ -362,7 +363,7 @@ void loadConfiguration() {
 
     if (storage.loadLegacyV4(actuatorFactory, instrumentManager)) {
       // Creer les actionneurs physiques
-      uint8_t created = actuatorFactory.rebuildAll();
+      int created = actuatorFactory.rebuildAll();
       DBGF("[Config] Migration OK: %d instruments, %d actuators\n",
            instrumentManager.getInstrumentCount(), created);
     } else {
@@ -675,11 +676,30 @@ void initTask(void* param) {
     }
   }
 
-  // 8b. Microphone (INMP441) — optional, auto-detected
-  if (mic.begin()) {
-    DBGLN("[Setup] INMP441 microphone detected — latency measurement available");
-  } else {
-    DBGLN("[Setup] No INMP441 detected — latency measurement disabled");
+  // 8b. Microphone (INMP441) — optional, auto-detected.
+  // Its pins (25/26/33) are reserved only as OPTIONAL, so an actuator is
+  // allowed to take one on a board with no microphone. Starting I2S anyway
+  // would then silently steal that pin back from a live actuator, so check
+  // first and leave the actuator in charge.
+  {
+    const uint8_t micPins[] = { MIC_I2S_WS, MIC_I2S_SCK, MIC_I2S_SD };
+    uint8_t clash = 0xFF;
+    for (uint8_t p = 0; p < 3 && clash == 0xFF; p++) {
+      for (uint8_t i = 0; i < actuatorFactory.getConfigCount(); i++) {
+        if (actuatorConfigUsesGpio(actuatorFactory.getConfig(i), micPins[p])) {
+          clash = micPins[p];
+          break;
+        }
+      }
+    }
+    if (clash != 0xFF) {
+      DBGF("[Setup] Microphone disabled: GPIO %d is driven by an actuator\n", clash);
+      ErrorLog::warn("Microphone disabled: I2S pin used by an actuator");
+    } else if (mic.begin()) {
+      DBGLN("[Setup] INMP441 microphone detected — latency measurement available");
+    } else {
+      DBGLN("[Setup] No INMP441 detected — latency measurement disabled");
+    }
   }
 
   // 9. Web Server (includes auth, rate-limiting, WiFi API, logs API)

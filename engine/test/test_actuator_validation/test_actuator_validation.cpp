@@ -239,8 +239,132 @@ void test_no_conflict_across_buses() {
   TEST_ASSERT_FALSE(actuatorConfigsConflict(a, b));
 }
 
+// ----------------------------------------------------------------------------
+// PWM capability — the hazardous cases
+// ----------------------------------------------------------------------------
+
+// SOLENOID_HOLD drops the coil to a reduced holding current. On a digital-only
+// bus both levels came out at 100 % duty, leaving the coil at full current.
+void test_solenoid_hold_requires_real_pwm() {
+  const char* err = nullptr;
+  ActuatorConfig c = baseSolenoid();
+  c.behavior = ActuatorBehavior::SOLENOID_HOLD;
+  c.paramMin = 255;   // strike
+  c.paramMax = 60;    // hold
+  c.paramDefault = 20;
+
+  c.bus = HardwareBus::MCP23017;
+  TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
+  c.bus = HardwareBus::GPIO_DIRECT; c.hwPin = 18;
+  TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
+
+  c.bus = HardwareBus::LEDC_PWM; c.hwPin = 18;
+  TEST_ASSERT_TRUE(validateActuatorConfig(c, err));
+}
+
+// A "hold" that is not lower than the strike is a permanently energised coil.
+void test_solenoid_hold_must_reduce_current() {
+  const char* err = nullptr;
+  ActuatorConfig c = baseSolenoid();
+  c.behavior = ActuatorBehavior::SOLENOID_HOLD;
+  c.bus = HardwareBus::LEDC_PWM; c.hwPin = 18;
+  c.paramDefault = 20;
+
+  c.paramMin = 200; c.paramMax = 200;          // equal -> reject
+  TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
+  c.paramMin = 100; c.paramMax = 250;          // hold above strike -> reject
+  TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
+  c.paramMin = 255; c.paramMax = 60;           // proper strike/hold
+  TEST_ASSERT_TRUE(validateActuatorConfig(c, err));
+}
+
+// STRIKE and MUTE are bang-bang, so they remain valid on the digital buses.
+void test_solenoid_strike_still_allowed_on_digital_buses() {
+  const char* err = nullptr;
+  ActuatorConfig c = baseSolenoid();          // MCP23017 / SOLENOID_STRIKE
+  TEST_ASSERT_TRUE(validateActuatorConfig(c, err));
+  c.bus = HardwareBus::GPIO_DIRECT; c.hwPin = 18;
+  TEST_ASSERT_TRUE(validateActuatorConfig(c, err));
+}
+
+static ActuatorConfig baseMotor() {
+  ActuatorConfig c;
+  c.type = ActuatorType::PWM_MOTOR;
+  c.behavior = ActuatorBehavior::MOTOR_SPEED;
+  c.bus = HardwareBus::LEDC_PWM;
+  c.hwPin = 18;
+  c.paramMin = 30; c.paramMax = 100; c.paramDefault = 50;
+  return c;
+}
+
+// PCA9685 is clocked at 50 Hz for servos — unusable as a motor drive.
+void test_pwm_motor_requires_ledc() {
+  const char* err = nullptr;
+  ActuatorConfig c = baseMotor();
+  TEST_ASSERT_TRUE(validateActuatorConfig(c, err));
+  c.bus = HardwareBus::PCA9685; c.hwPin = 3;
+  TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
+}
+
+// paramMin/paramMax are percentages; anything above 100 is a unit error.
+void test_motor_percent_range_enforced() {
+  const char* err = nullptr;
+  ActuatorConfig c = baseMotor();
+  c.paramMin = 0; c.paramMax = 100; c.paramDefault = 50;
+  TEST_ASSERT_TRUE(validateActuatorConfig(c, err));
+  c.paramMax = 255;                      // raw duty mistaken for a percentage
+  TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
+}
+
+// Percent -> normalised duty, and the 8-bit helper used by SOLENOID_HOLD.
+void test_duty_conversion_helpers() {
+  TEST_ASSERT_EQUAL_UINT16(0, pwmDutyFromPercent(0));
+  TEST_ASSERT_EQUAL_UINT16(PWM_DUTY_MAX, pwmDutyFromPercent(100));
+  TEST_ASSERT_EQUAL_UINT16(PWM_DUTY_MAX, pwmDutyFromPercent(150));   // clamped
+  TEST_ASSERT_UINT16_WITHIN(20, PWM_DUTY_MAX / 2, pwmDutyFromPercent(50));
+
+  TEST_ASSERT_EQUAL_UINT16(0, pwmDutyFrom8Bit(0));
+  TEST_ASSERT_EQUAL_UINT16(PWM_DUTY_MAX, pwmDutyFrom8Bit(255));
+  TEST_ASSERT_UINT16_WITHIN(20, PWM_DUTY_MAX / 2, pwmDutyFrom8Bit(128));
+}
+
+// Servo angles drive a fixed 150..600 pulse window; >180 deg runs the horn
+// past its mechanical stop.
+void test_servo_angle_range_enforced() {
+  const char* err = nullptr;
+  ActuatorConfig c;
+  c.type = ActuatorType::SERVO;
+  c.behavior = ActuatorBehavior::SERVO_POSITION;
+  c.bus = HardwareBus::PCA9685;
+  c.hwAddress = 0x40; c.hwPin = 0;
+  c.paramMin = 0; c.paramMax = 180; c.paramDefault = 90;
+  TEST_ASSERT_TRUE(validateActuatorConfig(c, err));
+  c.paramMax = 200;
+  TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
+}
+
+// Cross-subsystem pin ownership: LED strips and the mic need this too.
+void test_actuator_config_uses_gpio() {
+  ActuatorConfig c = baseSolenoid();
+  c.bus = HardwareBus::GPIO_DIRECT;
+  c.hwPin = 18;
+  c.endStopPin1 = 19;
+  TEST_ASSERT_TRUE(actuatorConfigUsesGpio(c, 18));
+  TEST_ASSERT_TRUE(actuatorConfigUsesGpio(c, 19));
+  TEST_ASSERT_FALSE(actuatorConfigUsesGpio(c, 21));
+  TEST_ASSERT_FALSE(actuatorConfigUsesGpio(c, 0xFF));
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
+  RUN_TEST(test_solenoid_hold_requires_real_pwm);
+  RUN_TEST(test_solenoid_hold_must_reduce_current);
+  RUN_TEST(test_solenoid_strike_still_allowed_on_digital_buses);
+  RUN_TEST(test_pwm_motor_requires_ledc);
+  RUN_TEST(test_motor_percent_range_enforced);
+  RUN_TEST(test_duty_conversion_helpers);
+  RUN_TEST(test_servo_angle_range_enforced);
+  RUN_TEST(test_actuator_config_uses_gpio);
   RUN_TEST(test_exclusively_reserved_pins_rejected);
   RUN_TEST(test_optional_reserved_pins_allowed);
   RUN_TEST(test_reservation_table_lookup);

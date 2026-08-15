@@ -21,6 +21,7 @@ public:
   bool begin() override;
   void digitalWrite(uint8_t pin, bool value) override;
   void pwmWrite(uint8_t channel, uint16_t value) override;
+  bool supportsPwm() const override { return true; }   // 12 bits natifs
   bool digitalRead(uint8_t pin) override;
   bool isReady() const override { return _ready; }
   uint8_t channelCount() const override { return 16; }

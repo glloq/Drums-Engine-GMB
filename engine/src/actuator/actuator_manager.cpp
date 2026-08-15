@@ -132,6 +132,11 @@ void ActuatorManager::testActuator(uint8_t id, uint8_t value) {
   DBGF("[ActMgr] Test actuator '%s' (id=%d, val=%d)\n",
        act->getConfig().name, id, value);
 
+  // Every actuation below goes through dispatch() (or the scheduler), never
+  // straight to Actuator::execute(). dispatch() is where the concurrent-
+  // activation limit (MAX_CONCURRENT_ACTIVE) and the cached active count live,
+  // so calling execute() directly let the UI's test buttons drive more
+  // actuators at once than the MIDI path would ever allow.
   const ActuatorConfig& cfg = act->getConfig();
 
   switch (cfg.type) {
@@ -150,7 +155,7 @@ void ActuatorManager::testActuator(uint8_t id, uint8_t value) {
         cmd.value = value;
         cmd.duration = 0;
         cmd.execute_at = micros();
-        act->execute(cmd);
+        dispatch(cmd);
       }
       break;
     }
@@ -161,7 +166,7 @@ void ActuatorManager::testActuator(uint8_t id, uint8_t value) {
       cmd.value = value;
       cmd.duration = 0;
       cmd.execute_at = micros();
-      act->execute(cmd);
+      dispatch(cmd);
       break;
     }
     case ActuatorType::PWM_MOTOR:
@@ -172,7 +177,7 @@ void ActuatorManager::testActuator(uint8_t id, uint8_t value) {
       cmd.value = value;
       cmd.duration = 0;
       cmd.execute_at = micros();
-      act->execute(cmd);
+      dispatch(cmd);
       break;
     }
     default:
@@ -180,6 +185,10 @@ void ActuatorManager::testActuator(uint8_t id, uint8_t value) {
   }
 }
 
+// Deliberate exception to the "everything through dispatch()" rule: raw-angle
+// calibration bypasses paramMin/paramMax on purpose, which no ActuatorCommand
+// can express. It stays direct, but only for a servo — a low-power, position-
+// holding device, not something the overload limit is protecting against.
 void ActuatorManager::testServoAngle(uint8_t id, uint8_t angle) {
   if (g_panicActive.load(std::memory_order_acquire)) return;  // P0 #3
   Actuator* act = getActuator(id);

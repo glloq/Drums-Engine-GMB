@@ -176,6 +176,17 @@ private:
   bool _collectBody(AsyncWebServerRequest* req, uint8_t* data, size_t len,
                     size_t index, size_t total,
                     uint8_t*& body, size_t& bodyLen);
+
+  // ---- Cross-subsystem GPIO ownership -------------------------------------
+  // actuator_validation only knows about actuators. A GPIO can also be taken by
+  // an LED strip, by the I2S microphone or by the engine itself, and nothing
+  // checked across those boundaries: an LED strip could be pointed at the I2C
+  // bus or at a pin already driving a solenoid.
+  //
+  // Returns true if `pin` is already claimed, with `owner` set to a static
+  // description of the claimant. `excludeStrip` (0xFF = none) lets a strip keep
+  // its own pin while being reconfigured.
+  bool _gpioClaimedBy(uint8_t pin, uint8_t excludeStrip, const char*& owner) const;
   bool _panicActiveReject(AsyncWebServerRequest* req);  // P0 #3
   uint8_t _extractId(AsyncWebServerRequest* req, const char* param);
   void _wsBroadcast(const char* type, const JsonObject& data);

@@ -1,5 +1,6 @@
 #include "web_server.h"
 #include "../actuator/actuator_validation.h"
+#include "../core/reconfig_barrier.h"
 
 // --- Actuators ---
 
@@ -50,6 +51,14 @@ void WebServerManager::_handleGetActuatorStatus(AsyncWebServerRequest* req) {
 }
 
 void WebServerManager::_handleCreateActuator(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
+  // Hold the RT core parked for the WHOLE transaction (validate -> mutate ->
+  // rebuild -> persist -> commit-or-rollback). The barrier is reentrant, so the
+  // nested acquisition inside rebuildAll() succeeds immediately; and if the RT
+  // core cannot be parked, we refuse before touching anything rather than
+  // reconfiguring underneath it.
+  ReconfigLock lock;
+  if (!lock.ok()) { _sendError(req, 503, "Reconfiguration busy, no change applied"); return; }
+
   JsonDocument doc;
   if (deserializeJson(doc, data, len)) { _sendError(req, 400, "Invalid JSON"); return; }
 
@@ -76,6 +85,25 @@ void WebServerManager::_handleCreateActuator(AsyncWebServerRequest* req, uint8_t
     return;
   }
 
+  // addConfig() only compares against other ACTUATORS. Check the pins this
+  // config wants against everything else in the running system too (LED strips,
+  // a fitted microphone), which nothing did before.
+  {
+    const uint8_t pins[] = { cfg.hwPin, cfg.hwAddress, cfg.endStopPin1, cfg.endStopPin2 };
+    for (uint8_t i = 0; i < 4; i++) {
+      if (!actuatorConfigUsesGpio(cfg, pins[i])) continue;
+      const char* owner = nullptr;
+      if (_gpioClaimedBy(pins[i], 0xFF, owner) &&
+          strcmp(owner ? owner : "", "an actuator") != 0) {
+        char msg[112];
+        snprintf(msg, sizeof(msg), "GPIO %u is already used by %s",
+                 (unsigned)pins[i], owner);
+        _sendError(req, 409, msg);
+        return;
+      }
+    }
+  }
+
   int idx = _actFactory->addConfig(cfg);
   if (idx < 0) { _sendError(req, 507, "Max actuators reached (or invalid config)"); return; }
 
@@ -98,6 +126,9 @@ void WebServerManager::_handleCreateActuator(AsyncWebServerRequest* req, uint8_t
 }
 
 void WebServerManager::_handleUpdateActuator(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
+  ReconfigLock lock;   // see _handleCreateActuator
+  if (!lock.ok()) { _sendError(req, 503, "Reconfiguration busy, no change applied"); return; }
+
   uint8_t id = _extractId(req, "id");
   JsonDocument doc;
   if (deserializeJson(doc, data, len)) { _sendError(req, 400, "Invalid JSON"); return; }
@@ -200,6 +231,9 @@ static void stripActuatorReferences(InstrumentConfig& inst, uint8_t actId) {
 }
 
 void WebServerManager::_handleDeleteActuator(AsyncWebServerRequest* req) {
+  ReconfigLock lock;   // see _handleCreateActuator
+  if (!lock.ok()) { _sendError(req, 503, "Reconfiguration busy, no change applied"); return; }
+
   uint8_t id = _extractId(req, "id");
   if (!_actFactory->findConfig(id)) {
     _sendError(req, 404, "Actuator config not found"); return;

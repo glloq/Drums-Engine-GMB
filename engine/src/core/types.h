@@ -11,6 +11,31 @@
 // Toutes les unites temporelles sont en microsecondes
 // ============================================================================
 
+// ----------------------------------------------------------------------------
+// Rapport cyclique normalise
+// ----------------------------------------------------------------------------
+// HalDriver::pwmWrite() prend un rapport cyclique NORMALISE 0..PWM_DUTY_MAX,
+// identique quel que soit le bus. Chaque driver le convertit vers sa resolution
+// native (PCA9685 : 12 bits, aucune conversion ; LEDC : 8 bits).
+//
+// Auparavant l'unite dependait du driver ("0-4095 pour PCA9685, 0-255 pour
+// LEDC") : les actionneurs ecrivaient la meme valeur sur les deux bus et
+// obtenaient deux rapports cycliques differents — un moteur regle a 100 %
+// tournait a 39 % via LEDC et a 2,4 % via PCA9685.
+#define PWM_DUTY_MAX 4095
+
+// Convertir un pourcentage (0..100) en rapport cyclique normalise.
+inline uint16_t pwmDutyFromPercent(uint16_t percent) {
+  if (percent > 100) percent = 100;
+  return (uint16_t)(((uint32_t)percent * PWM_DUTY_MAX) / 100);
+}
+
+// Convertir une echelle 0..255 en rapport cyclique normalise.
+inline uint16_t pwmDutyFrom8Bit(uint16_t value) {
+  if (value > 255) value = 255;
+  return (uint16_t)(((uint32_t)value * PWM_DUTY_MAX) / 255);
+}
+
 // --- Types d'entree ---
 enum class InputType : uint8_t {
   NOTE = 0,
@@ -171,12 +196,20 @@ struct ActuatorConfig {
   uint8_t endStopPin2;     // End stop pin 2 GPIO (0xFF = disabled)
 
   // --- Behavior-specific param semantics ---
+  // NB: every PWM figure below is converted to the normalised 0..PWM_DUTY_MAX
+  // duty of HalDriver::pwmWrite() (hal/hal_interface.h) before reaching the
+  // hardware; the units here are the CONFIG units, not raw duty counts.
+  //
   // SOLENOID_STRIKE:   paramMin=durMin(ms), paramMax=durMax(ms), cooldownUs=cooldown/100
   // SOLENOID_HOLD:     paramMin=pwmActivation(0-255), paramMax=pwmHold(0-255),
   //                    paramDefault=transitionMs, cooldownUs=maxActiveTime*10
+  //                    REQUIRES bus=LEDC_PWM (real PWM) and paramMax < paramMin.
   // SERVO_*:           paramMin=angleMin, paramMax=angleMax, paramDefault=angleDefault
-  // MOTOR_OPTICAL:     paramMin=edgesMin, paramMax=edgesMax, paramDefault=driveSpeed,
+  //                    (degrees, 0..180)
+  // MOTOR_OPTICAL:     paramMin=edgesMin, paramMax=edgesMax, paramDefault=driveSpeed(0-255),
   //                    hwAddress=sensorPin GPIO, endStopPin1/2 for limit switches
+  //                    (driveSpeed only has an effect on bus=LEDC_PWM)
+  // Motor percentages below are 0..100 and require bus=LEDC_PWM.
   // MOTOR_TIMED:       paramMin=pwmMin%, paramMax=pwmMax%, duration from command
   // MOTOR_SPEED:       paramMin=pwmMin%, paramMax=pwmMax% (PWM command → vitesse)
   // MOTOR_SWEEP:       paramMin=pwmMin%, paramMax=pwmMax%, endStopPin1/2 requis

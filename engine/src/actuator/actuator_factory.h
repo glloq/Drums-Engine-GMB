@@ -66,8 +66,12 @@ public:
   bool hasResourceConflict(const ActuatorConfig& candidate, uint8_t excludeId,
                            uint8_t& conflictId) const;
 
-  // Reconstruire tous les actionneurs depuis le pool de configs
-  uint8_t rebuildAll();
+  // Reconstruire tous les actionneurs depuis le pool de configs.
+  // Retourne le nombre d'actionneurs crees, ou REBUILD_BUSY (<0) si le coeur
+  // temps reel n'a pas pu etre mis en pause — dans ce cas RIEN n'a ete modifie
+  // et l'appelant doit renvoyer une erreur plutot que de supposer le succes.
+  static const int REBUILD_BUSY = -1;
+  int rebuildAll();
 
 private:
   ActuatorManager* _manager;

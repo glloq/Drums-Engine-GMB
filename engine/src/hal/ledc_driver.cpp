@@ -37,9 +37,13 @@ bool LedcDriver::ensureAttached(uint8_t pin) {
   return true;
 }
 
-void LedcDriver::pwmWrite(uint8_t pin, uint16_t value) {
+void LedcDriver::pwmWrite(uint8_t pin, uint16_t duty) {
   if (!ensureAttached(pin)) return;
-  if (value > 255) value = 255;
+  // `duty` is normalised 0..PWM_DUTY_MAX (12 bits); the LEDC channels are
+  // configured with LEDC_RES_BITS (8), so scale down instead of clamping.
+  // Clamping was the bug: any duty above 255 — i.e. above 6 % — became 100 %.
+  if (duty > PWM_DUTY_MAX) duty = PWM_DUTY_MAX;
+  uint16_t value = (uint16_t)(((uint32_t)duty * 255) / PWM_DUTY_MAX);
 #if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
   ledcWrite(pin, value);                       // by GPIO pin
 #else

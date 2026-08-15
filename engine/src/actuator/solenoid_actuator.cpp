@@ -39,7 +39,7 @@ void SolenoidActuator::execute(const ActuatorCommand& cmd) {
       // Activation: ecrire HIGH (ou PWM pour solenoid hold)
       if (_config.behavior == ActuatorBehavior::SOLENOID_HOLD) {
         // Start at full activation PWM (paramMin stores activation level 0-255)
-        uint16_t activationPwm = map(_config.paramMin, 0, 255, 0, 4095);
+        uint16_t activationPwm = pwmDutyFrom8Bit(_config.paramMin);
         _driver->pwmWrite(_config.hwPin, activationPwm);
         _holdTransitioned = false;
       } else {
@@ -94,7 +94,7 @@ bool SolenoidActuator::checkTimeout(uint32_t nowUs) {
   if (_config.behavior == ActuatorBehavior::SOLENOID_HOLD && !_holdTransitioned && _active) {
     uint32_t transitionUs = (uint32_t)_config.paramDefault * 1000;
     if (elapsed >= transitionUs) {
-      uint16_t holdPwm = map(_config.paramMax, 0, 255, 0, 4095);
+      uint16_t holdPwm = pwmDutyFrom8Bit(_config.paramMax);
       _driver->pwmWrite(_config.hwPin, holdPwm);
       _holdTransitioned = true;
       DBGF("[Actuator] Solenoid HOLD '%s' transitioned to hold PWM (%d)\n",

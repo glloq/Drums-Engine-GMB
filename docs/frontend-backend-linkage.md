@@ -16,7 +16,7 @@ Ce document vérifie le raccord UI ↔ API pour le modèle action/CC.
 | Création depuis template | `api('instruments/from-template', 'POST', ...)` | `POST /api/instruments/from-template` |
 | Routage CC compilé | `api('cc-routes')` | `GET /api/cc-routes` |
 | Capacités UI (types/bus) + carte matérielle (`hardware`) | `api('capabilities')` | `GET /api/capabilities` |
-| Page Cablage (rapport de branchements) | aucun appel dédié : recompose `actuators`, `led/strips`, `capabilities.hardware`, `mic/status` déjà chargés | — |
+| Page Cablage (schéma + rapport de branchements) | aucun appel dédié : recompose `actuators`, `instruments`, `led/strips`, `capabilities.hardware`, `mic/status` déjà chargés | — |
 | Notes MIDI | `api('midi-notes')` | `GET /api/midi-notes` |
 | Statut système | `api('status')` | `GET /api/status` |
 | Scan I2C | `api('scan-i2c')` | `GET /api/scan-i2c` |

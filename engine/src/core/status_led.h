@@ -2,6 +2,7 @@
 #define ENGINE_STATUS_LED_H
 
 #include <Arduino.h>
+#include "config.h"   // STATUS_LED_PIN / BOOT_BUTTON_PIN
 
 // ============================================================================
 // StatusLed - LED de statut sur GPIO 2 (LED intégrée ESP32)
@@ -13,8 +14,10 @@
 //   ERROR       : double clignotement rapide
 // ============================================================================
 
-#define STATUS_LED_PIN  2   // LED intégrée ESP32 DevKit
-#define BOOT_BUTTON_PIN 0   // Bouton BOOT ESP32
+// STATUS_LED_PIN / BOOT_BUTTON_PIN sont definis dans core/config.h, avec les
+// autres broches de la carte, pour que la table des broches reservees
+// (actuator/actuator_validation.cpp) et la page "Cablage" partagent la meme
+// source de verite.
 
 enum class LedPattern : uint8_t {
   OFF = 0,

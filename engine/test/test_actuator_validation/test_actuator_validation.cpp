@@ -140,8 +140,114 @@ void test_endstop_pin_capability() {
   TEST_ASSERT_TRUE(validateActuatorConfig(c, err));
 }
 
+// ----------------------------------------------------------------------------
+// Pins reserved by the engine itself
+// ----------------------------------------------------------------------------
+
+// The I2C bus, the status LED and the BOOT strapping pin can never be handed to
+// an actuator: taking GPIO 21/22 would drop every MCP23017/PCA9685 actuator.
+void test_exclusively_reserved_pins_rejected() {
+  const char* err = nullptr;
+  const uint8_t exclusive[] = { I2C_SDA, I2C_SCL, STATUS_LED_PIN };
+
+  for (uint8_t i = 0; i < sizeof(exclusive) / sizeof(exclusive[0]); i++) {
+    ActuatorConfig c = baseSolenoid();
+    c.bus = HardwareBus::GPIO_DIRECT;
+    c.hwPin = exclusive[i];
+    TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
+    TEST_ASSERT_NOT_NULL(err);
+  }
+
+  // ... and not just as the output pin: an end stop on the I2C bus is just as
+  // destructive.
+  ActuatorConfig c = baseSolenoid();
+  c.bus = HardwareBus::GPIO_DIRECT;
+  c.hwPin = 18;
+  c.endStopPin1 = I2C_SCL;
+  TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
+}
+
+// Optional peripherals (I2S mic, default LED strip pins) stay usable: they are
+// only wired when the user enables that feature.
+void test_optional_reserved_pins_allowed() {
+  ActuatorConfig c = baseSolenoid();
+  c.bus = HardwareBus::GPIO_DIRECT;
+  c.hwPin = MIC_I2S_SD;          // 33 — free unless a microphone is fitted
+  const char* err = nullptr;
+  TEST_ASSERT_TRUE(validateActuatorConfig(c, err));
+
+  const PinReservation* r = esp32PinReservation(MIC_I2S_SD);
+  TEST_ASSERT_NOT_NULL(r);
+  TEST_ASSERT_FALSE(r->exclusive);
+}
+
+// The table must stay consistent with the pins the firmware actually drives.
+void test_reservation_table_lookup() {
+  uint8_t count = 0;
+  const PinReservation* all = esp32PinReservations(count);
+  TEST_ASSERT_NOT_NULL(all);
+  TEST_ASSERT_TRUE(count > 0);
+
+  const PinReservation* sda = esp32PinReservation(I2C_SDA);
+  TEST_ASSERT_NOT_NULL(sda);
+  TEST_ASSERT_TRUE(sda->exclusive);
+
+  TEST_ASSERT_NULL(esp32PinReservation(18));  // ordinary free GPIO
+}
+
+// ----------------------------------------------------------------------------
+// Hardware resource conflicts
+// ----------------------------------------------------------------------------
+
+void test_conflict_same_gpio() {
+  ActuatorConfig a = baseSolenoid();
+  a.bus = HardwareBus::GPIO_DIRECT; a.hwPin = 18;
+  ActuatorConfig b = a;
+  b.hwPin = 19;
+  TEST_ASSERT_FALSE(actuatorConfigsConflict(a, b));
+  b.hwPin = 18;                       // the case the UPDATE path used to accept
+  TEST_ASSERT_TRUE(actuatorConfigsConflict(a, b));
+}
+
+void test_conflict_endstop_vs_output() {
+  ActuatorConfig a = baseSolenoid();
+  a.bus = HardwareBus::GPIO_DIRECT; a.hwPin = 18;
+  ActuatorConfig b = baseSolenoid();
+  b.bus = HardwareBus::GPIO_DIRECT; b.hwPin = 19; b.endStopPin1 = 18;
+  TEST_ASSERT_TRUE(actuatorConfigsConflict(a, b));
+}
+
+void test_conflict_expander_channel() {
+  ActuatorConfig a = baseSolenoid();   // MCP23017 bus by default
+  a.hwAddress = 0x20; a.hwPin = 3;
+  ActuatorConfig b = a;
+  b.hwPin = 4;
+  TEST_ASSERT_FALSE(actuatorConfigsConflict(a, b));
+  b.hwPin = 3;
+  TEST_ASSERT_TRUE(actuatorConfigsConflict(a, b));
+  b.hwAddress = 0x21;                  // different module, same pin -> fine
+  TEST_ASSERT_FALSE(actuatorConfigsConflict(a, b));
+}
+
+// An expander actuator and a direct-GPIO one never share a resource, even when
+// the raw numbers happen to match (MCP pin 3 is not GPIO 3).
+void test_no_conflict_across_buses() {
+  ActuatorConfig a = baseSolenoid();
+  a.hwAddress = 0x20; a.hwPin = 18;
+  ActuatorConfig b = baseSolenoid();
+  b.bus = HardwareBus::GPIO_DIRECT; b.hwPin = 18;
+  TEST_ASSERT_FALSE(actuatorConfigsConflict(a, b));
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
+  RUN_TEST(test_exclusively_reserved_pins_rejected);
+  RUN_TEST(test_optional_reserved_pins_allowed);
+  RUN_TEST(test_reservation_table_lookup);
+  RUN_TEST(test_conflict_same_gpio);
+  RUN_TEST(test_conflict_endstop_vs_output);
+  RUN_TEST(test_conflict_expander_channel);
+  RUN_TEST(test_no_conflict_across_buses);
   RUN_TEST(test_gpio_capability_table);
   RUN_TEST(test_direct_gpio_output_on_bad_pin_rejected);
   RUN_TEST(test_endstop_pin_capability);

@@ -37,8 +37,16 @@ void WebServerManager::_handleCreateInstrument(AsyncWebServerRequest* req, uint8
 
   if (idx < 0) { _sendError(req, 507, "Max instruments reached"); return; }
 
+  // review #8 (follow-up): persistence failures used to be ignored here, so RAM
+  // and flash silently diverged and a reboot resurrected the old config.
+  uint8_t newId = _instrMgr->getInstrumentByIndex(idx)->id;
   _recompileLookupFromInstruments();
-  _storage->saveInstruments(*_instrMgr);
+  if (!_storage->saveInstruments(*_instrMgr)) {
+    _instrMgr->removeInstrument(newId);
+    _recompileLookupFromInstruments();
+    _sendError(req, 500, "Failed to persist instrument (creation rolled back)");
+    return;
+  }
 
   JsonDocument resp;
   JsonObject obj = resp.to<JsonObject>();
@@ -59,22 +67,43 @@ void WebServerManager::_handleUpdateInstrument(AsyncWebServerRequest* req, uint8
     return;
   }
 
+  // Snapshot for rollback before the live config is replaced.
+  InstrumentConfig* live = _instrMgr->getInstrument(id);
+  if (!live) { _sendError(req, 404, "Instrument not found"); return; }
+  const InstrumentConfig previous = *live;
+
   if (!_instrMgr->updateInstrument(id, inst)) {
     _sendError(req, 404, "Instrument not found"); return;
   }
 
   _recompileLookupFromInstruments();
-  _storage->saveInstruments(*_instrMgr);
+  if (!_storage->saveInstruments(*_instrMgr)) {
+    _instrMgr->updateInstrument(id, previous);
+    _recompileLookupFromInstruments();
+    _sendError(req, 500, "Failed to persist instrument (change rolled back)");
+    return;
+  }
   _sendError(req, 200, "Updated");
 }
 
 void WebServerManager::_handleDeleteInstrument(AsyncWebServerRequest* req) {
   uint8_t id = _extractId(req, "id");
+  InstrumentConfig* live = _instrMgr->getInstrument(id);
+  if (!live) { _sendError(req, 404, "Instrument not found"); return; }
+  const InstrumentConfig previous = *live;   // for rollback
+
   if (!_instrMgr->removeInstrument(id)) {
     _sendError(req, 404, "Instrument not found"); return;
   }
   _recompileLookupFromInstruments();
-  _storage->saveInstruments(*_instrMgr);
+  if (!_storage->saveInstruments(*_instrMgr)) {
+    // Re-adding keeps the id (it is carried in the config) but may change the
+    // instrument's position in the list — acceptable next to losing the delete.
+    _instrMgr->addInstrument(previous);
+    _recompileLookupFromInstruments();
+    _sendError(req, 500, "Failed to persist deletion (instrument restored)");
+    return;
+  }
   _sendError(req, 200, "Deleted");
 }
 

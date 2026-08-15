@@ -48,6 +48,51 @@ jobs:
       - name: Build firmware
         working-directory: engine
         run: pio run -e esp32
+      - name: Report flash/RAM usage
+        working-directory: engine
+        run: pio run -e esp32 --target size | tail -n 40
+      # Keep the flashable images so a build can be tried on real hardware
+      # without reproducing the toolchain locally.
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-esp32
+          path: |
+            engine/.pio/build/esp32/firmware.bin
+            engine/.pio/build/esp32/firmware.elf
+            engine/.pio/build/esp32/bootloader.bin
+            engine/.pio/build/esp32/partitions.bin
+          if-no-files-found: error
+
+  filesystem-build:
+    name: Build LittleFS image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-esp32-${{ hashFiles('engine/platformio.ini') }}
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+      # The web UI is served from LittleFS (data/index.html). Building the image
+      # in CI catches a data/ payload that no longer fits the partition — which
+      # would otherwise only show up at `pio run -t uploadfs` time.
+      - name: Build filesystem image
+        working-directory: engine
+        run: pio run -e esp32 --target buildfs
+      - name: Upload filesystem artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: littlefs-esp32
+          path: engine/.pio/build/esp32/littlefs.bin
+          if-no-files-found: error
 
   static-analysis:
     name: cppcheck

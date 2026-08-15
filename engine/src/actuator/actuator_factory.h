@@ -24,9 +24,14 @@
 
 class ActuatorFactory {
 public:
+  // `mcpSlots`/`pcaSlots` are the SIZES of the driver arrays (MCP_MAX_MODULES /
+  // PCA_MAX_MODULES), not the number of modules that answered the I2C scan.
+  // Drivers are indexed by (address - base), so a gap in the populated
+  // addresses (e.g. 0x20 absent, 0x21 present) must not shrink the addressable
+  // range — readiness is decided per slot by MCP23017Driver::isReady().
   ActuatorFactory(ActuatorManager* manager,
-                  MCP23017Driver* mcpDrivers, uint8_t mcpCount,
-                  PCA9685Driver* pcaDrivers, uint8_t pcaCount,
+                  MCP23017Driver* mcpDrivers, uint8_t mcpSlots,
+                  PCA9685Driver* pcaDrivers, uint8_t pcaSlots,
                   GpioDriver* gpioDriver, LedcDriver* ledcDriver);
 
   // Creer un actionneur a partir de sa config et l'enregistrer
@@ -49,17 +54,30 @@ public:
   bool removeConfig(uint8_t id);
   ActuatorConfig* findConfig(uint8_t id);
 
+  // review #13 (follow-up): shared hardware-resource conflict check.
+  // Returns true if `candidate` would fight over a physical GPIO, MCP23017 pin
+  // or PCA9685 channel already claimed by another config. `excludeId` is the id
+  // to ignore (0xFF for none) — an UPDATE must not conflict with itself.
+  // On conflict, `conflictId` receives the id of the offending config.
+  //
+  // Both the create path (addConfig) and the REST update path go through this,
+  // so editing an actuator can no longer move it onto a pin that is already in
+  // use — a check that previously existed only at creation time.
+  bool hasResourceConflict(const ActuatorConfig& candidate, uint8_t excludeId,
+                           uint8_t& conflictId) const;
+
   // Reconstruire tous les actionneurs depuis le pool de configs
   uint8_t rebuildAll();
 
 private:
   ActuatorManager* _manager;
 
-  // HAL drivers references
+  // HAL drivers references. The counts are ARRAY SIZES (addressable slots), not
+  // the number of modules present on the bus — see the constructor comment.
   MCP23017Driver* _mcpDrivers;
-  uint8_t _mcpCount;
+  uint8_t _mcpSlots;
   PCA9685Driver* _pcaDrivers;
-  uint8_t _pcaCount;
+  uint8_t _pcaSlots;
   GpioDriver* _gpioDriver;
   LedcDriver* _ledcDriver;
 

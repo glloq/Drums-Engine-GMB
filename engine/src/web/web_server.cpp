@@ -136,8 +136,11 @@ void WebServerManager::_setupRoutes() {
     [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
       if (index == 0) {
         if (!_auth.checkAuth(req)) return;
-        _handleCreateInstrument(req, data, len);
       }
+      uint8_t* body = nullptr;
+      size_t bodyLen = 0;
+      if (!_collectBody(req, data, len, index, total, body, bodyLen)) return;
+      _handleCreateInstrument(req, body, bodyLen);
     });
 
   _server.on("/api/instrument", HTTP_PUT,
@@ -146,8 +149,11 @@ void WebServerManager::_setupRoutes() {
     [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
       if (index == 0) {
         if (!_auth.checkAuth(req)) return;
-        _handleUpdateInstrument(req, data, len);
       }
+      uint8_t* body = nullptr;
+      size_t bodyLen = 0;
+      if (!_collectBody(req, data, len, index, total, body, bodyLen)) return;
+      _handleUpdateInstrument(req, body, bodyLen);
     });
 
   _server.on("/api/instrument", HTTP_DELETE,
@@ -170,8 +176,11 @@ void WebServerManager::_setupRoutes() {
     [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
       if (index == 0) {
         if (!_auth.checkAuth(req)) return;
-        _handleCreateActuator(req, data, len);
       }
+      uint8_t* body = nullptr;
+      size_t bodyLen = 0;
+      if (!_collectBody(req, data, len, index, total, body, bodyLen)) return;
+      _handleCreateActuator(req, body, bodyLen);
     });
 
   _server.on("/api/actuator", HTTP_PUT,
@@ -180,8 +189,11 @@ void WebServerManager::_setupRoutes() {
     [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
       if (index == 0) {
         if (!_auth.checkAuth(req)) return;
-        _handleUpdateActuator(req, data, len);
       }
+      uint8_t* body = nullptr;
+      size_t bodyLen = 0;
+      if (!_collectBody(req, data, len, index, total, body, bodyLen)) return;
+      _handleUpdateActuator(req, body, bodyLen);
     });
 
   _server.on("/api/actuator", HTTP_DELETE,
@@ -199,8 +211,11 @@ void WebServerManager::_setupRoutes() {
       if (index == 0) {
         if (!_auth.checkAuth(req)) return;
         if (_panicActiveReject(req)) return;
-        _handleTestInstrument(req, data, len);
       }
+      uint8_t* body = nullptr;
+      size_t bodyLen = 0;
+      if (!_collectBody(req, data, len, index, total, body, bodyLen)) return;
+      _handleTestInstrument(req, body, bodyLen);
     });
 
   _server.on("/api/instruments/test-action", HTTP_POST,
@@ -210,8 +225,11 @@ void WebServerManager::_setupRoutes() {
       if (index == 0) {
         if (!_auth.checkAuth(req)) return;
         if (_panicActiveReject(req)) return;
-        _handleTestInstrumentAction(req, data, len);
       }
+      uint8_t* body = nullptr;
+      size_t bodyLen = 0;
+      if (!_collectBody(req, data, len, index, total, body, bodyLen)) return;
+      _handleTestInstrumentAction(req, body, bodyLen);
     });
 
   _server.on("/api/test/actuator", HTTP_POST,
@@ -221,8 +239,11 @@ void WebServerManager::_setupRoutes() {
       if (index == 0) {
         if (!_auth.checkAuth(req)) return;
         if (_panicActiveReject(req)) return;
-        _handleTestActuator(req, data, len);
       }
+      uint8_t* body = nullptr;
+      size_t bodyLen = 0;
+      if (!_collectBody(req, data, len, index, total, body, bodyLen)) return;
+      _handleTestActuator(req, body, bodyLen);
     });
 
   _server.on("/api/test/cc", HTTP_POST,
@@ -232,8 +253,11 @@ void WebServerManager::_setupRoutes() {
       if (index == 0) {
         if (!_auth.checkAuth(req)) return;
         if (_panicActiveReject(req)) return;
-        _handleTestCC(req, data, len);
       }
+      uint8_t* body = nullptr;
+      size_t bodyLen = 0;
+      if (!_collectBody(req, data, len, index, total, body, bodyLen)) return;
+      _handleTestCC(req, body, bodyLen);
     });
 
   _server.on("/api/test/note", HTTP_POST,
@@ -243,8 +267,11 @@ void WebServerManager::_setupRoutes() {
       if (index == 0) {
         if (!_auth.checkAuth(req)) return;
         if (_panicActiveReject(req)) return;
-        _handleTestNote(req, data, len);
       }
+      uint8_t* body = nullptr;
+      size_t bodyLen = 0;
+      if (!_collectBody(req, data, len, index, total, body, bodyLen)) return;
+      _handleTestNote(req, body, bodyLen);
     });
 
   // Active notes (for real-time piano display)
@@ -264,8 +291,11 @@ void WebServerManager::_setupRoutes() {
     [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
       if (index == 0) {
         if (!_auth.checkAuth(req)) return;
-        _handleCreateLoop(req, data, len);
       }
+      uint8_t* body = nullptr;
+      size_t bodyLen = 0;
+      if (!_collectBody(req, data, len, index, total, body, bodyLen)) return;
+      _handleCreateLoop(req, body, bodyLen);
     });
 
   _server.on("/api/loop", HTTP_PUT,
@@ -274,8 +304,11 @@ void WebServerManager::_setupRoutes() {
     [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
       if (index == 0) {
         if (!_auth.checkAuth(req)) return;
-        _handleUpdateLoop(req, data, len);
       }
+      uint8_t* body = nullptr;
+      size_t bodyLen = 0;
+      if (!_collectBody(req, data, len, index, total, body, bodyLen)) return;
+      _handleUpdateLoop(req, body, bodyLen);
     });
 
   _server.on("/api/loop", HTTP_DELETE,
@@ -325,9 +358,14 @@ void WebServerManager::_setupRoutes() {
     [this](AsyncWebServerRequest* req) {},
     NULL,
     [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
-      if (!_rateLimiter.checkRate(req)) return;
-      if (!_auth.checkAuth(req)) return;
-      _handlePlayChain(req, data, len);
+      if (index == 0) {
+        if (!_rateLimiter.checkRate(req)) return;
+        if (!_auth.checkAuth(req)) return;
+      }
+      uint8_t* body = nullptr;
+      size_t bodyLen = 0;
+      if (!_collectBody(req, data, len, index, total, body, bodyLen)) return;
+      _handlePlayChain(req, body, bodyLen);
     });
 
   // --- System API ---
@@ -355,8 +393,11 @@ void WebServerManager::_setupRoutes() {
     [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
       if (index == 0) {
         if (!_auth.checkAuth(req)) return;
-        _handleCreateInstrumentFromTemplate(req, data, len);
       }
+      uint8_t* body = nullptr;
+      size_t bodyLen = 0;
+      if (!_collectBody(req, data, len, index, total, body, bodyLen)) return;
+      _handleCreateInstrumentFromTemplate(req, body, bodyLen);
     });
 
   _server.on("/api/save", HTTP_POST,
@@ -386,7 +427,10 @@ void WebServerManager::_setupRoutes() {
     [this](AsyncWebServerRequest* req) { if (!_rateLimiter.checkRate(req)) return; },
     nullptr,
     [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
-      if (index == 0) _handlePostAuthToken(req, data, len);
+      uint8_t* body = nullptr;
+      size_t bodyLen = 0;
+      if (!_collectBody(req, data, len, index, total, body, bodyLen)) return;
+      _handlePostAuthToken(req, body, bodyLen);
     });
 
   _server.on("/api/login-status", HTTP_GET,
@@ -410,8 +454,11 @@ void WebServerManager::_setupRoutes() {
     [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
       if (index == 0) {
         if (!_auth.checkAuth(req)) return;
-        _handleSetPin(req, data, len);
       }
+      uint8_t* body = nullptr;
+      size_t bodyLen = 0;
+      if (!_collectBody(req, data, len, index, total, body, bodyLen)) return;
+      _handleSetPin(req, body, bodyLen);
     });
 
   // --- Validation ---
@@ -457,8 +504,11 @@ void WebServerManager::_setupRoutes() {
     [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
       if (index == 0) {
         if (!_auth.checkAuth(req)) return;
-        _handleSetMidiChannels(req, data, len);
       }
+      uint8_t* body = nullptr;
+      size_t bodyLen = 0;
+      if (!_collectBody(req, data, len, index, total, body, bodyLen)) return;
+      _handleSetMidiChannels(req, body, bodyLen);
     });
 
   // --- LED Strips API ---
@@ -471,8 +521,11 @@ void WebServerManager::_setupRoutes() {
     [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
       if (index == 0) {
         if (!_auth.checkAuth(req)) return;
-        _handleConfigureLedStrip(req, data, len);
       }
+      uint8_t* body = nullptr;
+      size_t bodyLen = 0;
+      if (!_collectBody(req, data, len, index, total, body, bodyLen)) return;
+      _handleConfigureLedStrip(req, body, bodyLen);
     });
 
   _server.on("/api/led/strip", HTTP_DELETE,
@@ -488,8 +541,11 @@ void WebServerManager::_setupRoutes() {
     [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
       if (index == 0) {
         if (!_auth.checkAuth(req)) return;
-        _handleTestLedStrip(req, data, len);
       }
+      uint8_t* body = nullptr;
+      size_t bodyLen = 0;
+      if (!_collectBody(req, data, len, index, total, body, bodyLen)) return;
+      _handleTestLedStrip(req, body, bodyLen);
     });
 
   // --- LED Segments API ---
@@ -502,8 +558,11 @@ void WebServerManager::_setupRoutes() {
     [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
       if (index == 0) {
         if (!_auth.checkAuth(req)) return;
-        _handleCreateLedSegment(req, data, len);
       }
+      uint8_t* body = nullptr;
+      size_t bodyLen = 0;
+      if (!_collectBody(req, data, len, index, total, body, bodyLen)) return;
+      _handleCreateLedSegment(req, body, bodyLen);
     });
 
   _server.on("/api/led/segment", HTTP_PUT,
@@ -512,8 +571,11 @@ void WebServerManager::_setupRoutes() {
     [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
       if (index == 0) {
         if (!_auth.checkAuth(req)) return;
-        _handleUpdateLedSegment(req, data, len);
       }
+      uint8_t* body = nullptr;
+      size_t bodyLen = 0;
+      if (!_collectBody(req, data, len, index, total, body, bodyLen)) return;
+      _handleUpdateLedSegment(req, body, bodyLen);
     });
 
   _server.on("/api/led/segment", HTTP_DELETE,
@@ -529,8 +591,11 @@ void WebServerManager::_setupRoutes() {
     [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
       if (index == 0) {
         if (!_auth.checkAuth(req)) return;
-        _handleTestLedSegment(req, data, len);
       }
+      uint8_t* body = nullptr;
+      size_t bodyLen = 0;
+      if (!_collectBody(req, data, len, index, total, body, bodyLen)) return;
+      _handleTestLedSegment(req, body, bodyLen);
     });
 
   // --- LED Themes API ---
@@ -543,8 +608,11 @@ void WebServerManager::_setupRoutes() {
     [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
       if (index == 0) {
         if (!_auth.checkAuth(req)) return;
-        _handleCreateLedTheme(req, data, len);
       }
+      uint8_t* body = nullptr;
+      size_t bodyLen = 0;
+      if (!_collectBody(req, data, len, index, total, body, bodyLen)) return;
+      _handleCreateLedTheme(req, body, bodyLen);
     });
 
   _server.on("/api/led/theme", HTTP_PUT,
@@ -553,8 +621,11 @@ void WebServerManager::_setupRoutes() {
     [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
       if (index == 0) {
         if (!_auth.checkAuth(req)) return;
-        _handleUpdateLedTheme(req, data, len);
       }
+      uint8_t* body = nullptr;
+      size_t bodyLen = 0;
+      if (!_collectBody(req, data, len, index, total, body, bodyLen)) return;
+      _handleUpdateLedTheme(req, body, bodyLen);
     });
 
   _server.on("/api/led/theme", HTTP_DELETE,
@@ -570,8 +641,11 @@ void WebServerManager::_setupRoutes() {
     [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
       if (index == 0) {
         if (!_auth.checkAuth(req)) return;
-        _handleSetActiveLedTheme(req, data, len);
       }
+      uint8_t* body = nullptr;
+      size_t bodyLen = 0;
+      if (!_collectBody(req, data, len, index, total, body, bodyLen)) return;
+      _handleSetActiveLedTheme(req, body, bodyLen);
     });
 
   // --- Pipeline Editor API ---
@@ -587,8 +661,11 @@ void WebServerManager::_setupRoutes() {
     [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
       if (index == 0) {
         if (!_auth.checkAuth(req)) return;
-        _handleSetPipelineBlocks(req, data, len);
       }
+      uint8_t* body = nullptr;
+      size_t bodyLen = 0;
+      if (!_collectBody(req, data, len, index, total, body, bodyLen)) return;
+      _handleSetPipelineBlocks(req, body, bodyLen);
     });
 
   _server.on("/api/pipeline/test", HTTP_POST,
@@ -598,8 +675,11 @@ void WebServerManager::_setupRoutes() {
       if (index == 0) {
         if (!_auth.checkAuth(req)) return;
         if (_panicActiveReject(req)) return;
-        _handleTestPipeline(req, data, len);
       }
+      uint8_t* body = nullptr;
+      size_t bodyLen = 0;
+      if (!_collectBody(req, data, len, index, total, body, bodyLen)) return;
+      _handleTestPipeline(req, body, bodyLen);
     });
 
   // --- LED Status / Brightness ---
@@ -612,8 +692,11 @@ void WebServerManager::_setupRoutes() {
     [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
       if (index == 0) {
         if (!_auth.checkAuth(req)) return;
-        _handleSetLedBrightness(req, data, len);
       }
+      uint8_t* body = nullptr;
+      size_t bodyLen = 0;
+      if (!_collectBody(req, data, len, index, total, body, bodyLen)) return;
+      _handleSetLedBrightness(req, body, bodyLen);
     });
 
   // --- Microphone / Latency Measurement ---
@@ -626,8 +709,11 @@ void WebServerManager::_setupRoutes() {
     [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
       if (index == 0) {
         if (!_auth.checkAuth(req)) return;
-        _handleMeasureLatency(req, data, len);
       }
+      uint8_t* body = nullptr;
+      size_t bodyLen = 0;
+      if (!_collectBody(req, data, len, index, total, body, bodyLen)) return;
+      _handleMeasureLatency(req, body, bodyLen);
     });
 
   _server.onNotFound([](AsyncWebServerRequest* req) {
@@ -694,6 +780,73 @@ void WebServerManager::_sendError(AsyncWebServerRequest* req, int code, const ch
   JsonDocument doc;
   doc["message"] = msg;
   _sendJson(req, code, doc);
+}
+
+// Reassemble a chunked request body — see the declaration in web_server.h.
+//
+// The accumulator lives in the request's _tempObject, which AsyncWebServerRequest
+// frees in its destructor, so an aborted upload cannot leak it.
+namespace {
+struct BodyAccum {
+  size_t total;   // expected body size
+  size_t filled;  // bytes received so far
+  uint8_t data[]; // total + 1 bytes (room for a NUL terminator)
+};
+}  // namespace
+
+bool WebServerManager::_collectBody(AsyncWebServerRequest* req, uint8_t* data, size_t len,
+                                    size_t index, size_t total,
+                                    uint8_t*& body, size_t& bodyLen) {
+  // Fast path: the whole body arrived in one callback (the common case for
+  // small JSON payloads). No allocation needed.
+  if (index == 0 && len == total) {
+    body = data;
+    bodyLen = len;
+    return true;
+  }
+
+  if (index == 0) {
+    if (total > MAX_REQUEST_BODY) {
+      _sendError(req, 413, "Request body too large");
+      return false;
+    }
+    // A previous handler on the same request should never have left one behind,
+    // but free defensively rather than leak.
+    if (req->_tempObject) {
+      free(req->_tempObject);
+      req->_tempObject = nullptr;
+    }
+    BodyAccum* acc = (BodyAccum*)malloc(sizeof(BodyAccum) + total + 1);
+    if (!acc) {
+      _sendError(req, 507, "Out of memory buffering request body");
+      return false;
+    }
+    acc->total = total;
+    acc->filled = 0;
+    req->_tempObject = acc;
+  }
+
+  BodyAccum* acc = (BodyAccum*)req->_tempObject;
+  // No accumulator means this request was already rejected (auth, panic, size
+  // or OOM) on its first chunk — stay silent, the response has been sent.
+  if (!acc) return false;
+
+  if (index != acc->filled || index + len > acc->total) {
+    // Out-of-order or overlong body: refuse rather than assemble garbage.
+    free(acc);
+    req->_tempObject = nullptr;
+    _sendError(req, 400, "Malformed request body");
+    return false;
+  }
+
+  memcpy(acc->data + index, data, len);
+  acc->filled += len;
+  if (acc->filled < acc->total) return false;  // more chunks to come
+
+  acc->data[acc->total] = '\0';
+  body = acc->data;
+  bodyLen = acc->total;
+  return true;  // buffer stays owned by the request; freed with it
 }
 
 uint8_t WebServerManager::_extractId(AsyncWebServerRequest* req, const char* param) {

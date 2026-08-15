@@ -28,4 +28,40 @@ bool esp32GpioIsInputOnly(uint8_t pin);     // 34..39 (no output driver)
 bool esp32GpioCanOutput(uint8_t pin);       // usable as a digital/PWM output
 bool esp32GpioCanInput(uint8_t pin);        // usable as a digital input
 
+// ----------------------------------------------------------------------------
+// Pins reserved by Drums Engine itself
+// ----------------------------------------------------------------------------
+// The capability helpers above only describe the SoC. They say nothing about
+// the pins this firmware already drives (I2C bus, status LED, BOOT button, I2S
+// microphone, default LED-strip data lines), so an actuator could previously be
+// configured onto GPIO 21 and silently kill the whole I2C bus.
+//
+// This table is the single source of truth: the validator rejects the exclusive
+// entries, and /api/system/info exports the whole list so the "Cablage" page
+// documents exactly the same pins instead of hardcoding its own copy.
+struct PinReservation {
+  uint8_t     pin;
+  const char* function;   // stable identifier, e.g. "i2c_sda"
+  const char* label;      // human-readable, shown by the UI
+  bool        exclusive;  // true: an actuator may never take this pin
+};
+
+// All reservations, in pin order. `count` receives the entry count.
+const PinReservation* esp32PinReservations(uint8_t& count);
+
+// The reservation covering `pin`, or nullptr when the pin is free.
+const PinReservation* esp32PinReservation(uint8_t pin);
+
+// ----------------------------------------------------------------------------
+// Hardware resource conflict detection (review #13)
+// ----------------------------------------------------------------------------
+// True when configs `a` and `b` fight over the same physical resource: an ESP32
+// GPIO (output pin, end stop, optical sensor, motor direction pin), an MCP23017
+// pin or a PCA9685 channel.
+//
+// Lives here rather than in ActuatorFactory so both the create and the update
+// path share it, and so it can be exercised by the native unit tests without
+// dragging in the HAL drivers.
+bool actuatorConfigsConflict(const ActuatorConfig& a, const ActuatorConfig& b);
+
 #endif // ACTUATOR_VALIDATION_H

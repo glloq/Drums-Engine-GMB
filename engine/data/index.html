@@ -255,6 +255,63 @@ input[type=checkbox] { width: auto; }
 .wlist code { background: rgba(255,255,255,0.07); padding: 1px 5px; border-radius: 3px; font-size: 0.95em; }
 [data-theme="light"] .wlist code { background: rgba(0,0,0,0.07); }
 .wtext { font-size: 0.84em; color: var(--fg2); line-height: 1.6; margin: 6px 0; }
+/* Couleurs par type d'actionneur, partagees par le schema et les cartes */
+:root { --w-servo: #4fc3f7; --w-solenoid: #ff8a50; --w-motor: #66bb6a; --w-optical: #ffca28; }
+[data-theme="light"] { --w-servo: #0288d1; --w-solenoid: #e65100; --w-motor: #2e7d32; --w-optical: #f9a825; }
+/* Schema synoptique */
+.wdiag-wrap { background: var(--bg); border: 1px solid rgba(255,255,255,0.07); border-radius: var(--radius); padding: 10px; overflow-x: auto; margin: 8px 0 4px; }
+[data-theme="light"] .wdiag-wrap { border-color: rgba(0,0,0,0.1); }
+.wdiag-wrap svg { display: block; width: 100%; min-width: 760px; height: auto; }
+.wdiag-wrap svg .wch { cursor: pointer; }
+.wdiag-wrap svg .wch:hover rect.cell { stroke: var(--fg); stroke-width: 2; }
+.wlegend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.74em; color: var(--fg2); margin: 8px 2px 2px; }
+.wlegend span { display: inline-flex; align-items: center; gap: 5px; }
+.wlegend i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; flex: 0 0 auto; }
+.wlegend i.wire { height: 3px; width: 18px; border-radius: 2px; }
+/* Tuiles de synthese */
+.wtiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 8px; margin: 8px 0 4px; }
+.wtile { background: var(--bg); border-radius: var(--radius); padding: 10px 12px; border-left: 3px solid var(--accent2); }
+.wtile .k { font-size: 0.66em; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fg2); }
+.wtile .v { font-size: 1.45em; font-weight: 700; line-height: 1.25; }
+.wtile .v small { font-size: 0.45em; font-weight: 600; color: var(--fg2); margin-left: 3px; }
+.wtile .s { font-size: 0.7em; color: var(--fg2); margin-top: 2px; line-height: 1.4; }
+.wtile.err { border-left-color: var(--accent); }
+.wtile.warn { border-left-color: var(--warn); }
+.wtile.ok { border-left-color: var(--success); }
+/* Verifications */
+.wchk { display: flex; gap: 9px; align-items: flex-start; padding: 8px 10px; border-radius: 4px; font-size: 0.82em; line-height: 1.5; margin-bottom: 6px; }
+.wchk .ico { flex: 0 0 auto; font-weight: 700; font-size: 1.05em; line-height: 1.3; }
+.wchk.info { background: rgba(83,52,131,0.18); border-left: 3px solid var(--accent2); }
+.wchk.ok { background: rgba(76,175,80,0.12); border-left: 3px solid var(--success); }
+.wchk.warn { background: rgba(255,152,0,0.12); border-left: 3px solid var(--warn); }
+.wchk.err { background: rgba(233,69,96,0.14); border-left: 3px solid var(--accent); }
+.wchk .fix { display: block; color: var(--fg2); font-size: 0.92em; margin-top: 3px; }
+/* Cartes de sorties par module */
+.wboard { border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius); padding: 10px 12px; margin: 10px 0; background: var(--bg); }
+[data-theme="light"] .wboard { border-color: rgba(0,0,0,0.1); }
+.wboard h4 { font-size: 0.88em; margin: 0; display: flex; justify-content: space-between; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.wboard h4 .addr { font-family: ui-monospace, monospace; color: var(--accent); }
+.wboard .bsub { font-size: 0.74em; color: var(--fg2); margin-top: 3px; line-height: 1.5; }
+.wchans { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 6px; margin-top: 9px; }
+.wchan { border-radius: 6px; padding: 6px 8px; font-size: 0.73em; line-height: 1.4; background: var(--bg2); border: 1px solid rgba(255,255,255,0.07); border-left: 4px solid var(--fg2); }
+[data-theme="light"] .wchan { border-color: rgba(0,0,0,0.1); }
+.wchan .ch { display: flex; justify-content: space-between; gap: 6px; font-family: ui-monospace, monospace; font-weight: 700; }
+.wchan .ch .tag { font-family: inherit; font-weight: 600; font-size: 0.9em; opacity: 0.85; }
+.wchan .nm { font-weight: 600; margin-top: 2px; }
+.wchan .li { color: var(--fg2); }
+.wchan.free { opacity: 0.5; border-style: dashed; }
+.wchan.flash, .wsub.flash { animation: wflash 1.4s ease-out; border-radius: 6px; }
+@keyframes wflash { from { box-shadow: 0 0 0 3px var(--accent); } to { box-shadow: 0 0 0 0 rgba(0,0,0,0); } }
+/* Checklist de mise en service */
+.wtodo { list-style: none; margin: 6px 0 2px; padding: 0; font-size: 0.82em; }
+.wtodo li { display: flex; gap: 9px; align-items: flex-start; padding: 7px 2px; border-bottom: 1px solid rgba(255,255,255,0.06); line-height: 1.5; }
+[data-theme="light"] .wtodo li { border-bottom-color: rgba(0,0,0,0.07); }
+.wtodo li:last-child { border-bottom: none; }
+.wtodo input { margin-top: 3px; flex: 0 0 auto; }
+.wtodo li.done { opacity: 0.5; }
+.wtodo li.done .tt { text-decoration: line-through; }
+.wtodo .tt b { display: block; }
+.wtodo .tt span { color: var(--fg2); }
 @media print {
   body.print-wiring .header, body.print-wiring .tabs, body.print-wiring .toast,
   body.print-wiring .modal-overlay, body.print-wiring .no-print { display: none !important; }
@@ -264,6 +321,11 @@ input[type=checkbox] { width: auto; }
   body.print-wiring .card { box-shadow: none; border: 1px solid #bbb; background: #fff; page-break-inside: avoid; }
   body.print-wiring .wschem, body.print-wiring .wnote { background: #f5f5f5; color: #000; }
   body.print-wiring .wt th, body.print-wiring .wt td { border-bottom-color: #ccc; }
+  body.print-wiring .wdiag-wrap { background: #fff; border-color: #bbb; overflow: visible; }
+  body.print-wiring .wdiag-wrap svg { min-width: 0; }
+  body.print-wiring .wtile, body.print-wiring .wboard, body.print-wiring .wchan { background: #fff; border-color: #ccc; color: #000; }
+  body.print-wiring .wchk, body.print-wiring .wtile .s, body.print-wiring .wchan .li { color: #000; }
+  body.print-wiring .wboard, body.print-wiring .wtile { page-break-inside: avoid; }
 }
 
 /* Login screen */
@@ -461,14 +523,17 @@ input[type=checkbox] { width: auto; }
       <div class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn btn-sm btn-secondary" onclick="refreshWiring()">Actualiser</button>
         <button class="btn btn-sm btn-secondary" onclick="downloadWiringMarkdown()">Exporter .md</button>
+        <button class="btn btn-sm btn-secondary" onclick="downloadWiringSvg()">Exporter .svg</button>
         <button class="btn btn-sm btn-primary" onclick="printWiring()">Imprimer</button>
       </div>
     </div>
 
     <div class="help-box no-print" style="margin-bottom:16px;">
-      Page <strong>generee automatiquement</strong> a partir des actionneurs, des fins de course et des strips LED
-      configures : affectation des GPIO de l'ESP32, modules MCP23017 / PCA9685, etage de puissance (MOSFET, diodes de
-      roue libre, condensateurs de reservoir, fusibles) et dimensionnement des alimentations.
+      Page <strong>generee automatiquement</strong> a partir de vos actionneurs, instruments, fins de course et strips
+      LED : <strong>schema synoptique</strong> (survolez une voie pour savoir quel instrument elle pilote et ce qu'elle
+      y fait), verifications automatiques, affectation des GPIO de l'ESP32, modules MCP23017 / PCA9685, etage de
+      puissance (MOSFET, diodes de roue libre, condensateurs de reservoir, fusibles) et dimensionnement des
+      alimentations.
       Les valeurs de courant et de tension ne sont pas connues du firmware : ajustez-les ci-dessous pour votre materiel.
       <strong>Verifiez toujours les datasheets de vos composants avant de cabler.</strong>
     </div>
@@ -6592,7 +6657,9 @@ function resetWiringParams() {
 }
 
 async function refreshWiring() {
-  await Promise.all([loadActuators(), loadLedData()]);
+  // Les instruments sont necessaires au schema : ce sont eux qui donnent le nom
+  // et l'action MIDI de chaque sortie.
+  await Promise.all([loadActuators(), loadInstruments(), loadLedData()]);
   renderWiring();
   toast('Cablage regenere', 'success');
 }
@@ -6651,7 +6718,8 @@ function wV(x) { return (Math.round(x * 10) / 10).toFixed(1) + ' V'; }
 function wMcpPinLabel(pin) { return pin < 8 ? ('GPA' + pin) : ('GPB' + (pin - 8)); }
 function wJumpers(addr, base, bits) {
   const n = Number(addr) - Number(base);
-  if (n < 0) return 'adresse hors plage';
+  // Hors de la plage du composant : aucun jeu de cavaliers ne donne cette adresse.
+  if (n < 0 || n >= (1 << bits)) return 'adresse hors plage';
   const out = [];
   for (let i = bits - 1; i >= 0; i--) out.push('A' + i + '=' + ((n >> i) & 1));
   return out.join(' ');
@@ -6663,6 +6731,18 @@ function wIsHBridge(a) {
   return a.type === 2 && (a.behavior === 12 || a.behavior === 13) && a.hwAddress > 0 && a.hwAddress < 40;
 }
 
+// Ce que l'on branche physiquement sur la sortie (texte court)
+function wOutputWiring(a, p) {
+  if (a.type === 0) return 'Connecteur servo 3 points : signal / V+ / GND';
+  if (a.type === 1) {
+    if (p.driver === 'uln2803') return 'Entree INx du ULN2803A';
+    if (p.driver === 'module')  return 'Entree SIG du module de puissance';
+    return 'Gate du MOSFET via 100 Ohm (+ pull-down 10 kOhm)';
+  }
+  if (wIsHBridge(a)) return 'Entree PWM / IN1 du pont en H';
+  return 'Gate du MOSFET via 100 Ohm (+ pull-down 10 kOhm)';
+}
+
 // Source du signal logique d'un actionneur (texte court, reutilise partout)
 function wSignalSource(a) {
   if (a.bus === 0) return 'MCP23017 ' + wHex(a.hwAddress) + ' broche ' + wMcpPinLabel(a.hwPin);
@@ -6670,6 +6750,445 @@ function wSignalSource(a) {
   if (a.bus === 2) return 'ESP32 GPIO ' + a.hwPin;
   if (a.bus === 3) return 'ESP32 GPIO ' + a.hwPin + ' (LEDC PWM)';
   return 'bus inconnu';
+}
+
+// --------------------------------------------------------------------
+// Qui utilise quelle sortie : instrument + geste musical + action MIDI
+// --------------------------------------------------------------------
+// Une sortie de PCA9685 / MCP23017 n'a de sens pour celui qui cable que si
+// l'on sait quel instrument elle frappe et ce qu'elle fait sur cet instrument.
+// Ces trois informations vivent dans trois objets differents cote firmware
+// (actionneur -> instrument -> action MIDI) : elles sont recollees ici une
+// seule fois, puis reutilisees par le schema, les cartes de sorties et les
+// tableaux.
+const W_GESTURES = {
+  0: 'Frappe', 1: 'Maintien (PWM)', 2: 'Position', 3: 'Frappe oscillante',
+  4: 'Peigne / brosse', 5: 'Tension de peau', 6: 'Rotation suivie (optique)',
+  7: 'Pedale hi-hat (CC#4)', 8: 'Etouffoir (servo)', 9: 'Etouffoir (solenoide)',
+  10: 'Rotation minutee', 11: 'Vitesse continue', 12: 'Balayage', 13: 'Alternance'
+};
+const W_TYPE_LABELS = ['Servo', 'Solenoide', 'Moteur PWM', 'Moteur optique'];
+// Couleurs par type d'actionneur, identiques a celles de l'onglet Actionneurs.
+const W_TYPE_KEYS = ['servo', 'solenoid', 'motor', 'optical'];
+
+function wGesture(a) { return W_GESTURES[a.behavior] || (a.behaviorName || 'Action'); }
+function wTypeLabel(a) { return W_TYPE_LABELS[a.type] || (a.typeName || 'Actionneur'); }
+
+// Libelle d'une action MIDI (note on / note off / CC) sur un actionneur.
+function wStepLabel(ev, s) {
+  const cmd = s.commandType;
+  let base;
+  if (cmd === 0) {
+    base = 'impulsion';
+    const mn = s.durationMinMs || 0, mx = s.durationMaxMs || 0;
+    if (mx) base += ' ' + (mn === mx ? mx + ' ms' : mn + '-' + mx + ' ms');
+  } else if (cmd === 1) base = 'position';
+  else if (cmd === 2) base = 'PWM';
+  else base = 'arret';
+  if (cmd !== 3) {
+    const src = s.valueSource;
+    if (src === 2) base += ' pilotee par CC#' + (s.ccIndex || 0);
+    else if (src === 1) base += ' fixe (' + (s.valueFixed || 0) + ')';
+    else if (src === 3) base += ' selon velocite inversee';
+    else base += ' selon velocite';
+  }
+  if (s.delayMs) base += ', retard ' + s.delayMs + ' ms';
+  if (s.alternateGroup) base += ', groupe alterne ' + s.alternateGroup;
+  return ev + ' -> ' + base;
+}
+
+// actuatorId -> { instruments: [...], actions: [...] }
+function wBuildRoles() {
+  const roles = {};
+  const get = id => (roles[id] = roles[id] || {instruments: [], actions: []});
+  (instruments || []).forEach(inst => {
+    const tag = {
+      id: inst.id,
+      name: inst.name || ('Instrument #' + inst.id),
+      note: inst.midiNote,
+      gm: GM_DRUMS[inst.midiNote] || '',
+      channel: inst.midiChannel,
+      enabled: inst.enabled !== false
+    };
+    const seen = {};
+    const link = aid => {
+      if (aid === undefined || aid === null || aid === 255) return null;
+      const r = get(aid);
+      if (!seen[aid]) { r.instruments.push(tag); seen[aid] = true; }
+      return r;
+    };
+    (inst.actuatorIds || []).forEach(link);
+    (inst.noteOnActions || []).forEach(s => {
+      const r = link(s.actuatorId);
+      if (r) r.actions.push({inst: tag, text: wStepLabel('Note ON', s)});
+    });
+    (inst.noteOffActions || []).forEach(s => {
+      const r = link(s.actuatorId);
+      if (r) r.actions.push({inst: tag, text: wStepLabel('Note OFF', s)});
+    });
+    (inst.ccBindings || []).forEach(b => {
+      const r = link(b.actuatorId);
+      if (!r) return;
+      const cmd = ['impulsion', 'position', 'PWM', 'arret'][b.commandType] || 'action';
+      r.actions.push({inst: tag, text: 'CC#' + b.ccNumber + ' -> ' + cmd +
+        ' ' + b.rangeMin + '-' + b.rangeMax + (b.inverted ? ' (inverse)' : '')});
+    });
+  });
+  return roles;
+}
+
+// Noms d'instruments d'un actionneur, sous forme courte ("Caisse claire (38)").
+function wRoleInstruments(role, max) {
+  if (!role || !role.instruments.length) return '';
+  const list = role.instruments.map(i => i.name + ' (note ' + i.note + ')');
+  if (max && list.length > max) return list.slice(0, max).join(', ') + ' +' + (list.length - max);
+  return list.join(', ');
+}
+function wRoleActions(role, max) {
+  if (!role || !role.actions.length) return '';
+  const list = role.actions.map(x => x.text);
+  if (max && list.length > max) return list.slice(0, max).join(' / ') + ' +' + (list.length - max);
+  return list.join(' / ');
+}
+
+// --------------------------------------------------------------------
+// Modules I2C : occupation reelle des 16 voies de chaque module
+// --------------------------------------------------------------------
+function wBuildBoards(acts, hw) {
+  const boards = [];
+  const key = (kind, addr) => kind + ':' + addr;
+  const index = {};
+  const board = (kind, addr) => {
+    const k = key(kind, addr);
+    if (!index[k]) {
+      index[k] = {
+        kind: kind, addr: addr, channels: new Array(16).fill(null), used: 0, conflicts: 0,
+        base: kind === 'PCA9685' ? hw.pcaBaseAddress : hw.mcpBaseAddress,
+        bits: kind === 'PCA9685' ? 6 : 3,
+        maxModules: kind === 'PCA9685' ? hw.pcaMaxModules : hw.mcpMaxModules
+      };
+      boards.push(index[k]);
+    }
+    return index[k];
+  };
+  acts.forEach(a => {
+    if (a.bus !== 0 && a.bus !== 1) return;
+    const b = board(a.bus === 1 ? 'PCA9685' : 'MCP23017', a.hwAddress);
+    const ch = a.hwPin;
+    if (ch < 0 || ch > 15) return;
+    if (!b.channels[ch]) { b.channels[ch] = {acts: []}; b.used++; }
+    b.channels[ch].acts.push(a);
+    if (b.channels[ch].acts.length > 1) b.conflicts++;
+  });
+  boards.sort((x, y) => (x.kind < y.kind ? -1 : x.kind > y.kind ? 1 : x.addr - y.addr));
+  boards.forEach((b, i) => { b.index = i; });
+  // numerotation par famille (PCA9685 #1, #2...)
+  const seq = {};
+  boards.forEach(b => { seq[b.kind] = (seq[b.kind] || 0) + 1; b.num = seq[b.kind]; });
+  return boards;
+}
+
+function wChannelLabel(board, ch) {
+  return board.kind === 'MCP23017' ? wMcpPinLabel(ch) : ('CH' + ch);
+}
+
+// --------------------------------------------------------------------
+// Schema synoptique (SVG) : ESP32, modules, rails de signal et de puissance
+// --------------------------------------------------------------------
+function wPalette() {
+  const light = document.documentElement.getAttribute('data-theme') === 'light';
+  if (light) return {
+    bg: '#ffffff', card: '#f4f6fc', edge: '#c3cadd', groupEdge: '#ccd3e4',
+    text: '#161b2e', dim: '#5d6478', mono: '#39405a',
+    free: '#e8ebf5', freeEdge: '#c3cadd', freeText: '#8d94aa',
+    servo: '#0288d1', solenoid: '#e65100', motor: '#2e7d32', optical: '#f9a825',
+    conflict: '#c62828', off: '#9aa1b6',
+    sda: '#0288d1', scl: '#7b1fa2', v33: '#c17900', vplus: '#d32f2f', gnd: '#6b7280',
+    sig: '#2e7d32', led: '#00897b'
+  };
+  return {
+    bg: '#141a2e', card: '#1b2340', edge: '#333e63', groupEdge: '#2c3554',
+    text: '#e6e9f5', dim: '#98a1bb', mono: '#c3cbe4',
+    free: '#212a46', freeEdge: '#333e63', freeText: '#6d7796',
+    servo: '#4fc3f7', solenoid: '#ff8a50', motor: '#66bb6a', optical: '#ffca28',
+    conflict: '#ff5370', off: '#6d7796',
+    sda: '#4fc3f7', scl: '#b388ff', v33: '#ffca28', vplus: '#ff5252', gnd: '#9e9e9e',
+    sig: '#69f0ae', led: '#4db6ac'
+  };
+}
+function wTypeColor(a, P) { return P[W_TYPE_KEYS[a.type]] || P.dim; }
+
+// Info-bulle d'une voie : c'est elle qui repond a "cette sortie fait quoi ?"
+function wChannelTip(board, ch, cell, role) {
+  const label = wChannelLabel(board, ch);
+  if (!cell) return label + ' : voie libre';
+  const lines = [];
+  cell.acts.forEach(a => {
+    lines.push(label + ' : ' + wActName(a) + ' (#' + a.id + ')');
+    lines.push('  Type : ' + wTypeLabel(a) + ' - ' + wGesture(a) + (a.enabled ? '' : ' [DESACTIVE]'));
+    const r = role[a.id];
+    lines.push('  Instrument : ' + (wRoleInstruments(r) || 'aucun - actionneur non assigne'));
+    const acts = r && r.actions.length ? r.actions.map(x => x.text) : [];
+    lines.push('  Action : ' + (acts.length ? acts.join(' | ') : 'aucune action MIDI declaree'));
+  });
+  if (cell.acts.length > 1) lines.push('CONFLIT : ' + cell.acts.length + ' actionneurs sur la meme voie');
+  return lines.join('\n');
+}
+
+function wBuildDiagram(d) {
+  const P = wPalette();
+  const esc = escapeHtml;
+  const F = "font-family:ui-monospace,SFMono-Regular,Menlo,monospace";
+  const wires = [], nodes = [];
+  const W = 1280, PAD = 14;
+  const RAIL_LABEL_W = 150;   // zone reservee aux libelles de rails, a droite
+
+  const txt = (x, y, s, o) => {
+    o = o || {};
+    return '<text x="' + x + '" y="' + y + '" fill="' + (o.fill || P.text) + '" font-size="' + (o.size || 10) +
+      '" text-anchor="' + (o.anchor || 'start') + '" style="' + F +
+      (o.weight ? ';font-weight:' + o.weight : '') + '">' + esc(s) + '</text>';
+  };
+  const rect = (x, y, w, h, o) => {
+    o = o || {};
+    return '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" rx="' + (o.r === undefined ? 6 : o.r) +
+      '" fill="' + (o.fill || 'none') + '" stroke="' + (o.stroke || 'none') + '" stroke-width="' + (o.sw || 1) + '"' +
+      (o.dash ? ' stroke-dasharray="' + o.dash + '"' : '') + (o.cls ? ' class="' + o.cls + '"' : '') + '/>';
+  };
+  const line = (pts, o) => {
+    o = o || {};
+    return '<path d="M ' + pts.map(p => p[0] + ' ' + p[1]).join(' L ') + '" fill="none" stroke="' + (o.stroke || P.edge) +
+      '" stroke-width="' + (o.sw || 1.5) + '"' + (o.dash ? ' stroke-dasharray="' + o.dash + '"' : '') +
+      ' stroke-linejoin="round" stroke-linecap="round"/>';
+  };
+  const dot = (x, y, c) => '<circle cx="' + x + '" cy="' + y + '" r="2.7" fill="' + c + '"/>';
+
+  // ---------------- colonne de gauche : ESP32 + alimentations ----------------
+  const LX = PAD, LW = 254, ROW = 15;
+  const rows = d.espRows;
+  let y = PAD;
+  const espH = 32 + rows.length * ROW + 10;
+  nodes.push(rect(LX, y, LW, espH, {fill: P.card, stroke: P.edge}));
+  nodes.push(txt(LX + 12, y + 20, d.hw.board, {weight: 700, size: 11.5}));
+  rows.forEach((r, i) => {
+    r.y = y + 38 + i * ROW;
+    nodes.push(txt(LX + LW - 16, r.y + 3.5, r.label, {anchor: 'end', size: 9.5, fill: r.faint ? P.dim : P.mono}));
+    nodes.push(rect(LX + LW - 9, r.y - 3.5, 9, 7, {fill: r.color, r: 1.5}));
+    r.x = LX + LW;
+  });
+  y += espH + 12;
+  const prows = d.powerRows;
+  if (prows.length) {
+    const powH = 28 + prows.length * ROW + 8;
+    nodes.push(rect(LX, y, LW, powH, {fill: P.card, stroke: P.vplus, dash: '5 4'}));
+    nodes.push(txt(LX + 12, y + 18, 'Alimentations de puissance', {weight: 700, size: 10.5, fill: P.vplus}));
+    prows.forEach((r, i) => {
+      r.y = y + 34 + i * ROW;
+      nodes.push(txt(LX + LW - 16, r.y + 3.5, r.label, {anchor: 'end', size: 9.5, fill: P.mono}));
+      nodes.push(rect(LX + LW - 9, r.y - 3.5, 9, 7, {fill: r.color, r: 1.5}));
+      r.x = LX + LW;
+    });
+    y += powH;
+  }
+  const leftBottom = y;
+
+  // ---------------- couloirs de cables ----------------
+  // Un couloir vertical par signal : les traits ne se superposent jamais. Le pas
+  // est calcule d'apres le nombre de couloirs reellement necessaires, sinon une
+  // grosse configuration deborderait sur les blocs de droite.
+  const GAP = 140;
+  const GX = LX + LW + GAP, GW = W - GX - PAD;
+  let laneNeeded = 0;
+  if (d.boards.length) laneNeeded += 4 + (d.boards.some(b => b.kind === 'PCA9685') && d.pinRefs.vservo ? 1 : 0);
+  if (d.direct.length) laneNeeded += 2 + (d.directRails || []).length;
+  if (d.inputs.length) laneNeeded += 2;
+  if (d.strips.length) laneNeeded += 2 + (d.pinRefs.vled ? 1 : 0);
+  const laneStep = Math.min(11, Math.max(5, Math.floor((GAP - 24) / Math.max(1, laneNeeded))));
+  const laneX = {};
+  let laneN = 0;
+  const lane = k => (laneX[k] === undefined ? (laneX[k] = LX + LW + 10 + (laneN++) * laneStep) : laneX[k]);
+
+  // ---------------- groupes de droite ----------------
+  let gy = PAD;
+  const groups = [];
+  const groupBox = (title, sub, bodyH, rails) => {
+    const railH = rails.length ? rails.length * 13 + 10 : 0;
+    const h = 30 + bodyH + railH + 12;
+    nodes.push(rect(GX, gy, GW, h, {fill: 'none', stroke: P.groupEdge, dash: '5 4'}));
+    nodes.push(txt(GX + 12, gy + 19, title, {weight: 700, size: 10.5}));
+    if (sub) nodes.push(txt(GX + GW - 12, gy + 19, sub, {anchor: 'end', size: 9.5, fill: P.dim}));
+    const g = {y: gy, h: h, bodyY: gy + 30, rails: {}};
+    rails.forEach((rl, i) => {
+      const ry = gy + 30 + bodyH + 10 + i * 13;
+      g.rails[rl.key] = ry;
+      wires.push(line([[GX + 10, ry], [GX + GW - RAIL_LABEL_W + 4, ry]], {stroke: rl.color, sw: rl.sw || 1.6}));
+      wires.push(txt(GX + GW - RAIL_LABEL_W + 10, ry + 3.5, rl.label, {size: 9, fill: rl.color}));
+      // alimentation du couloir : ESP32 (ou bloc alim) -> couloir -> rail du groupe
+      const src = rl.from;
+      if (src) {
+        const lx = lane(rl.key + '@' + (rl.laneKey || rl.key));
+        wires.push(line([[src.x, src.y], [lx, src.y], [lx, ry], [GX + 10, ry]], {stroke: rl.color, sw: rl.sw || 1.6}));
+      }
+    });
+    gy += h + 14;
+    groups.push(g);
+    return g;
+  };
+
+  // --- modules I2C ---
+  const CW = 214, CH = 116, CGAP = 12;
+  const drawBoard = (b, bx, by) => {
+    const isPca = b.kind === 'PCA9685';
+    const accent = isPca ? P.servo : P.solenoid;
+    nodes.push(rect(bx, by, CW, CH, {fill: P.card, stroke: b.conflicts ? P.conflict : P.edge,
+      sw: b.conflicts ? 1.8 : 1, dash: b.conflicts ? '4 3' : ''}));
+    nodes.push(txt(bx + 10, by + 18, b.kind + ' #' + b.num, {weight: 700, size: 10.5}));
+    nodes.push(txt(bx + CW - 10, by + 18, wHex(b.addr), {anchor: 'end', weight: 700, size: 10.5, fill: accent}));
+    nodes.push(txt(bx + 10, by + 32, b.used + '/16 voies - ' + (isPca ? 'servos (V+ direct)' : 'vers ' + d.driverShort),
+      {size: 9, fill: P.dim}));
+    for (let c = 0; c < 16; c++) {
+      const col = c % 8, rw = Math.floor(c / 8);
+      const cx = bx + 10 + col * 24, cy = by + 40 + rw * 24;
+      const cell = b.channels[c];
+      const conflict = cell && cell.acts.length > 1;
+      const a = cell ? cell.acts[0] : null;
+      const fill = !cell ? P.free : (conflict ? P.conflict : (a.enabled ? wTypeColor(a, P) : P.off));
+      const g = [];
+      g.push(rect(cx, cy, 22, 22, {fill: fill, r: 3, cls: 'cell',
+        stroke: cell ? 'none' : P.freeEdge, dash: cell ? '' : '3 2'}));
+      g.push(txt(cx + 11, cy + 14.5, String(c), {anchor: 'middle', size: 8.5, weight: 700,
+        fill: cell ? (P.bg === '#ffffff' ? '#ffffff' : '#101528') : P.freeText}));
+      const tip = wChannelTip(b, c, cell, d.roles);
+      nodes.push('<g class="wch"' + (a ? ' onclick="wFocusAct(' + a.id + ')"' : '') + '><title>' + esc(tip) + '</title>' +
+        g.join('') + '</g>');
+    }
+    nodes.push(txt(bx + 10, by + CH - 10, 'Cavaliers ' + wJumpers(b.addr, b.base, b.bits), {size: 8.5, fill: P.dim}));
+  };
+
+  if (d.boards.length) {
+    // Les modules restent a gauche de la zone des libelles de rails : les
+    // descentes vers les rails tombent donc toujours sur un trait existant.
+    const perRow = Math.max(1, Math.floor((GW - 24 - RAIL_LABEL_W + CGAP) / (CW + CGAP)));
+    const bodyRows = Math.ceil(d.boards.length / perRow);
+    const bodyH = bodyRows * CH + (bodyRows - 1) * CGAP;
+    const rails = [
+      {key: 'sda', label: 'SDA - GPIO ' + d.hw.i2cSda, color: P.sda, from: d.pinRefs.sda},
+      {key: 'scl', label: 'SCL - GPIO ' + d.hw.i2cScl, color: P.scl, from: d.pinRefs.scl},
+      {key: 'v33', label: '3.3 V - logique', color: P.v33, from: d.pinRefs.v33},
+      {key: 'gnd', label: 'GND - commun', color: P.gnd, from: d.pinRefs.gnd}
+    ];
+    if (d.boards.some(b => b.kind === 'PCA9685') && d.pinRefs.vservo) {
+      rails.push({key: 'vservo', label: 'V+ servos ' + wV(d.params.servoV), color: P.vplus, sw: 2.4, from: d.pinRefs.vservo});
+    }
+    const g = groupBox('Bus I2C - ' + Math.round(d.hw.i2cFreq / 1000) + ' kHz',
+      d.boards.length + ' module(s) sur le meme bus', bodyH, rails);
+    d.boards.forEach((b, i) => {
+      const col = i % perRow, rw = Math.floor(i / perRow);
+      const bx = GX + 12 + col * (CW + CGAP), by = g.bodyY + rw * (CH + CGAP);
+      drawBoard(b, bx, by);
+      // descentes du module vers chaque rail
+      const stubs = [['sda', 40], ['scl', 68], ['v33', 96], ['gnd', 124]];
+      if (b.kind === 'PCA9685' && g.rails.vservo !== undefined) stubs.push(['vservo', 152]);
+      stubs.forEach(([k, off]) => {
+        const ry = g.rails[k];
+        if (ry === undefined) return;
+        const sx = bx + Math.min(off, CW - 12);
+        wires.push(line([[sx, by + CH], [sx, ry]], {stroke: rails.find(r => r.key === k).color, sw: k === 'vservo' ? 2.4 : 1.5}));
+        wires.push(dot(sx, ry, rails.find(r => r.key === k).color));
+      });
+    });
+  }
+
+  // --- bloc generique (sorties directes, entrees, LED) ---
+  const PILL_H = 30, PILL_GAP = 6;
+  const drawPills = (items, g, cols) => {
+    const pw = Math.floor((GW - 24 - (cols - 1) * PILL_GAP) / cols);
+    // Largeurs en caracteres : le monospace fait ~0.6 em, on coupe pour que rien
+    // ne deborde de la pastille quelle que soit la longueur des noms.
+    const nTitle = Math.max(8, Math.floor((pw - 22) / (9.5 * 0.6)));
+    const nSub = Math.max(10, Math.floor((pw - 22) / (8.5 * 0.6)));
+    const cut = (s, n) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
+    items.forEach((it, i) => {
+      const col = i % cols, rw = Math.floor(i / cols);
+      const px = GX + 12 + col * (pw + PILL_GAP), py = g.bodyY + rw * (PILL_H + PILL_GAP);
+      const grp = [];
+      grp.push(rect(px, py, pw, PILL_H, {fill: P.card, stroke: it.color, sw: 1.2, r: 5}));
+      grp.push(rect(px, py, 4, PILL_H, {fill: it.color, r: 2}));
+      grp.push(txt(px + 11, py + 13, cut(it.title, nTitle), {size: 9.5, weight: 700}));
+      grp.push(txt(px + 11, py + 24, cut(it.sub, nSub), {size: 8.5, fill: P.dim}));
+      nodes.push('<g' + (it.actId !== undefined ? ' class="wch" onclick="wFocusAct(' + it.actId + ')"' : '') + '>' +
+        (it.tip ? '<title>' + esc(it.tip) + '</title>' : '') + grp.join('') + '</g>');
+    });
+  };
+  const pillsHeight = (n, cols) => {
+    const r = Math.max(1, Math.ceil(n / cols));
+    return r * PILL_H + (r - 1) * PILL_GAP;
+  };
+
+  if (d.direct.length) {
+    const cols = GW > 700 ? 3 : 2;
+    const rails = [{key: 'gnd', laneKey: 'dir', label: 'GND - commun', color: P.gnd, from: d.pinRefs.gnd}];
+    // Le rail de puissance affiche ici est celui des charges reellement pilotees
+    // en direct : solenoides, moteurs, ou les deux.
+    (d.directRails || []).forEach(r => rails.push(
+      {key: r.key, label: r.label, color: P.vplus, sw: 2.4, from: r.from}));
+    const g = groupBox('Sorties directes ESP32 (GPIO / LEDC)',
+      d.direct.length + ' signal/signaux vers les etages de puissance', pillsHeight(d.direct.length, cols), rails);
+    drawPills(d.direct, g, cols);
+    // faisceau depuis l'ESP32
+    if (d.pinRefs.outBundle) {
+      const b = d.pinRefs.outBundle, lx = lane('outbus');
+      wires.push(line([[b.x, b.y], [lx, b.y], [lx, g.bodyY + 14], [GX, g.bodyY + 14]], {stroke: P.sig, sw: 2.2}));
+    }
+  }
+
+  if (d.inputs.length) {
+    const cols = GW > 700 ? 3 : 2;
+    const g = groupBox('Entrees et indicateurs', d.inputs.length + ' signal/signaux vers l\'ESP32',
+      pillsHeight(d.inputs.length, cols), [{key: 'gnd', laneKey: 'in', label: 'GND - commun', color: P.gnd, from: d.pinRefs.gnd}]);
+    drawPills(d.inputs, g, cols);
+    if (d.pinRefs.inBundle) {
+      const b = d.pinRefs.inBundle, lx = lane('inbus');
+      wires.push(line([[b.x, b.y], [lx, b.y], [lx, g.bodyY + 14], [GX, g.bodyY + 14]], {stroke: P.sig, sw: 2.2, dash: '6 4'}));
+    }
+  }
+
+  if (d.strips.length) {
+    const cols = GW > 700 ? 3 : 2;
+    const rails = [{key: 'gnd', laneKey: 'led', label: 'GND - commun', color: P.gnd, from: d.pinRefs.gnd}];
+    if (d.pinRefs.vled) rails.push({key: 'vled', label: '5 V strips', color: P.vplus, sw: 2.4, from: d.pinRefs.vled});
+    const g = groupBox('Strips LED (WS2812B)', d.strips.length + ' strip(s)',
+      pillsHeight(d.strips.length, cols), rails);
+    drawPills(d.strips, g, cols);
+    if (d.pinRefs.ledBundle) {
+      const b = d.pinRefs.ledBundle, lx = lane('ledbus');
+      wires.push(line([[b.x, b.y], [lx, b.y], [lx, g.bodyY + 14], [GX, g.bodyY + 14]], {stroke: P.led, sw: 2.2}));
+    }
+  }
+
+  if (!d.boards.length && !d.direct.length && !d.inputs.length && !d.strips.length) {
+    nodes.push(rect(GX, PAD, GW, 76, {fill: 'none', stroke: P.groupEdge, dash: '5 4'}));
+    nodes.push(txt(GX + 16, PAD + 32, 'Aucun actionneur configure.', {size: 11, weight: 700}));
+    nodes.push(txt(GX + 16, PAD + 52, 'Ajoutez vos actionneurs dans l\'onglet Actionneurs : le schema se dessine tout seul.',
+      {size: 9.5, fill: P.dim}));
+    gy = PAD + 76 + 14;
+  }
+
+  const H = Math.max(gy, leftBottom + PAD);
+  return '<svg id="wDiagramSvg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H +
+    '" width="' + W + '" height="' + H + '" role="img">' +
+    '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="' + P.bg + '"/>' +
+    wires.join('') + nodes.join('') + '</svg>';
+}
+
+// Clic sur une voie du schema : met en evidence la carte de sortie correspondante.
+function wFocusAct(id) {
+  const el = document.getElementById('wact-' + id);
+  if (!el) return;
+  el.scrollIntoView({behavior: 'smooth', block: 'center'});
+  el.classList.remove('flash');
+  void el.offsetWidth;   // force le redemarrage de l'animation
+  el.classList.add('flash');
 }
 
 // --------------------------------------------------------------------
@@ -6695,6 +7214,10 @@ function buildWiringModel() {
   const mcpAddrs = Object.keys(mcpMap).map(Number).sort((a, b) => a - b);
   const pcaAddrs = Object.keys(pcaMap).map(Number).sort((a, b) => a - b);
   const usesI2c = mcpAddrs.length + pcaAddrs.length > 0;
+
+  // Qui pilote quoi (instrument + action MIDI) et occupation des modules I2C
+  const roles = wBuildRoles();
+  const boards = wBuildBoards(acts, hw);
 
   // --- Affectation des GPIO ESP32 ---
   const pins = [];
@@ -6824,15 +7347,305 @@ function buildWiringModel() {
   addBom(1, 'Barre de masse / bornier', 'bornier a vis', 'Masse commune ESP32 + alimentations (obligatoire)');
 
   // --------------------------------------------------------------
+  // Donnees du schema synoptique
+  // --------------------------------------------------------------
+  const P = wPalette();
+  const clip = (s, n) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
+  const actTip = a => {
+    const r = roles[a.id];
+    return wActName(a) + ' (#' + a.id + ')\n' +
+      'Type : ' + wTypeLabel(a) + ' - ' + wGesture(a) + (a.enabled ? '' : ' [DESACTIVE]') + '\n' +
+      'Instrument : ' + (wRoleInstruments(r) || 'aucun - actionneur non assigne') + '\n' +
+      'Action : ' + (wRoleActions(r) || 'aucune action MIDI declaree');
+  };
+
+  const espRows = [], powerRows = [], pinRefs = {};
+  const pushEsp = (label, color, faint) => {
+    const r = {label: label, color: color, faint: !!faint};
+    espRows.push(r);
+    return r;
+  };
+  if (usesI2c) {
+    pinRefs.sda = pushEsp('SDA   GPIO ' + hw.i2cSda, P.sda);
+    pinRefs.scl = pushEsp('SCL   GPIO ' + hw.i2cScl, P.scl);
+  }
+  pinRefs.v33 = pushEsp('3.3 V  logique des modules', P.v33);
+  pinRefs.gnd = pushEsp('GND   masse commune', P.gnd);
+  pushEsp('LED statut  GPIO ' + hw.statusLedPin, P.dim, true);
+  if (micConnected) {
+    pushEsp('I2S WS   GPIO ' + hw.micWs, P.dim, true);
+    pushEsp('I2S SCK  GPIO ' + hw.micSck, P.dim, true);
+    pushEsp('I2S SD   GPIO ' + hw.micSd, P.dim, true);
+  }
+
+  const directActs = acts.filter(a => a.bus === 2 || a.bus === 3);
+  const direct = directActs.map(a => ({
+    title: clip(wActName(a), 26),
+    sub: 'GPIO ' + a.hwPin + ' - ' + (a.bus === 3 ? 'LEDC PWM' : 'sortie logique') + ' - ' + wGesture(a),
+    color: wTypeColor(a, P), actId: a.id, tip: actTip(a)
+  }));
+  acts.filter(wIsHBridge).forEach(a => direct.push({
+    title: clip('Direction ' + wActName(a), 26),
+    sub: 'GPIO ' + a.hwAddress + ' - sens de rotation (DIR / IN2)',
+    color: wTypeColor(a, P), actId: a.id, tip: actTip(a)
+  }));
+
+  const inputs = [];
+  acts.forEach(a => {
+    [a.endStopPin1, a.endStopPin2].forEach((pin, i) => {
+      if (pin === undefined || pin === 255) return;
+      inputs.push({title: 'Fin de course ' + (i + 1), sub: 'GPIO ' + pin + ' - ' + clip(wActName(a), 20) + ' (contact vers GND)',
+        color: P.sig, actId: a.id, tip: 'Fin de course ' + (i + 1) + ' de ' + wActName(a) + '\nGPIO ' + pin +
+        '\nContact vers GND, pull-up interne, actif a l\'etat bas'});
+    });
+    if (a.type === 3) inputs.push({title: 'Capteur optique', sub: 'GPIO ' + a.hwAddress + ' - ' + clip(wActName(a), 20),
+      color: P.optical, actId: a.id, tip: actTip(a)});
+  });
+  if (micConnected) inputs.push({title: 'Micro INMP441', sub: 'I2S - calibration acoustique (optionnel)', color: P.dim,
+    tip: 'Micro INMP441 (optionnel)\nWS GPIO ' + hw.micWs + ' - SCK GPIO ' + hw.micSck + ' - SD GPIO ' + hw.micSd});
+  inputs.push({title: 'LED de statut', sub: 'GPIO ' + hw.statusLedPin + ' - LED integree a la carte', color: P.dim,
+    tip: 'LED de statut de la carte DevKit, GPIO ' + hw.statusLedPin});
+
+  const stripPills = strips.map(s => ({
+    title: 'Strip LED #' + s.id,
+    sub: 'GPIO ' + s.gpioPin + ' - ' + s.ledCount + ' LEDs - adaptateur 3.3 -> 5 V',
+    color: P.led,
+    tip: 'Strip LED #' + s.id + '\nData GPIO ' + s.gpioPin + '\n' + s.ledCount + ' LEDs\n' +
+      'Adaptateur de niveau SN74HCT125 puis resistance 330-470 Ohm'
+  }));
+
+  // Lignes de l'ESP32 pour les signaux directs (bornees pour rester lisibles)
+  const bundleRows = (list, label, color, dashed) => {
+    if (!list.length) return null;
+    const shown = list.slice(0, 8);
+    const rs = shown.map(it => pushEsp(clip(it.sub.split(' - ')[0] + '  ' + it.title, 30), color, dashed));
+    if (list.length > shown.length) pushEsp('+ ' + (list.length - shown.length) + ' autres (voir tableau)', color, true);
+    return rs[Math.floor(rs.length / 2)];
+  };
+  pinRefs.outBundle = bundleRows(direct, 'sorties', P.sig);
+  pinRefs.inBundle = bundleRows(inputs.filter(i => i.actId !== undefined), 'entrees', P.sig, true);
+  pinRefs.ledBundle = bundleRows(stripPills, 'LED', P.led);
+
+  const pushPower = (label, color) => { const r = {label: label, color: color}; powerRows.push(r); return r; };
+  if (servos.length)    pinRefs.vservo  = pushPower('V+ servos      ' + wV(p.servoV), P.vplus);
+  if (solenoids.length) pinRefs.vsolRow = pushPower('V+ solenoides  ' + wV(p.solV), P.vplus);
+  if (motors.length)    pinRefs.vmotRow = pushPower('V+ moteurs     ' + wV(p.motorV), P.vplus);
+  if (strips.length)    pinRefs.vled    = pushPower('5 V strips LED', P.vplus);
+  if (powerRows.length) pushPower('GND - barre de masse commune', P.gnd);
+
+  const directRails = [];
+  if (directActs.some(a => a.type === 1) && pinRefs.vsolRow)
+    directRails.push({key: 'vsolD', label: 'V+ solenoides ' + wV(p.solV), from: pinRefs.vsolRow});
+  if (directActs.some(a => a.type !== 1) && pinRefs.vmotRow)
+    directRails.push({key: 'vmotD', label: 'V+ moteurs ' + wV(p.motorV), from: pinRefs.vmotRow});
+
+  const diagramSvg = wBuildDiagram({
+    hw: hw, params: p, roles: roles, boards: boards, direct: direct, inputs: inputs,
+    strips: stripPills, espRows: espRows, powerRows: powerRows, pinRefs: pinRefs,
+    directRails: directRails, driverShort: {mosfet: 'MOSFET', uln2803: 'ULN2803A', module: 'modules'}[p.driver]
+  });
+
+  // --------------------------------------------------------------
+  // Verifications automatiques
+  // --------------------------------------------------------------
+  const checks = [];
+  const addCheck = (level, text, fix) => checks.push({level: level, text: text, fix: fix || ''});
+
+  conflicts.forEach(pin => addCheck('err',
+    'GPIO ' + pin + ' est utilise par ' + byPin[pin].length + ' fonctions : ' + byPin[pin].map(e => e.role).join(' + ') + '.',
+    'Un GPIO ne peut porter qu\'une fonction : changez la broche dans l\'onglet Actionneurs avant de cabler.'));
+
+  boards.forEach(b => {
+    b.channels.forEach((cell, ch) => {
+      if (!cell || cell.acts.length < 2) return;
+      addCheck('err', b.kind + ' ' + wHex(b.addr) + ' : ' + cell.acts.length + ' actionneurs sur la voie ' +
+        wChannelLabel(b, ch) + ' (' + cell.acts.map(a => wActName(a) + ' #' + a.id).join(', ') + ').',
+        'Une voie ne pilote qu\'un actionneur : deplacez-en un sur une voie libre du module.');
+    });
+    const span = b.kind === 'PCA9685' ? 64 : 8;
+    if (b.addr < b.base || b.addr >= b.base + span) {
+      addCheck('err', b.kind + ' ' + wHex(b.addr) + ' est hors de la plage d\'adresses du composant (' +
+        wHex(b.base) + ' a ' + wHex(b.base + span - 1) + ').',
+        'Corrigez l\'adresse de l\'actionneur : aucun module ne repondra a cette adresse.');
+    }
+  });
+  ['PCA9685', 'MCP23017'].forEach(kind => {
+    const list = boards.filter(b => b.kind === kind);
+    if (list.length && list[0].maxModules && list.length > list[0].maxModules) {
+      addCheck('err', list.length + ' modules ' + kind + ' declares, le firmware n\'en gere que ' + list[0].maxModules + '.',
+        'Regroupez les actionneurs sur moins de modules, ou augmentez la constante dans engine/src/core/config.h.');
+    }
+  });
+
+  if (flashUsed.length) addCheck('err',
+    'Broches reservees a la flash SPI utilisees (GPIO 6-11) : ' + flashUsed.map(e => 'GPIO ' + e.pin + ' / ' + e.role).join(' ; ') + '.',
+    'La carte ne demarrera pas : ces broches relient l\'ESP32 a sa memoire flash.');
+
+  const inputOnly = pins.filter(e => e.pin >= 34 && e.pin <= 39);
+  const inputOnlyOut = inputOnly.filter(e => e.dir.indexOf('OUT') === 0);
+  const inputOnlyIn = inputOnly.filter(e => e.dir.indexOf('OUT') !== 0);
+  if (inputOnlyOut.length) addCheck('err',
+    'GPIO 34-39 utilises en sortie (' + inputOnlyOut.map(e => 'GPIO ' + e.pin + ' / ' + e.role).join(' ; ') + ').',
+    'Ces broches sont des entrees seules : elles ne peuvent rien commander.');
+  if (inputOnlyIn.length) addCheck('warn',
+    'Entrees sur GPIO 34-39 (' + inputOnlyIn.map(e => 'GPIO ' + e.pin).join(', ') + ') : ces broches n\'ont pas de pull-up interne.',
+    'Ajoutez une resistance de 10 kOhm vers 3.3 V sur chacune, sinon le contact restera toujours a l\'etat bas.');
+
+  if (strapUsed.length) addCheck('warn',
+    'Broches de strapping utilisees (' + strapUsed.map(e => 'GPIO ' + e.pin).join(', ') + ') : leur niveau est lu au demarrage.',
+    'Le pull-down de gate 10 kOhm est indispensable, et rien ne doit tirer GPIO 12 au niveau haut pendant le boot.');
+
+  if (solenoids.length && p.driver === 'uln2803' && p.solA > 0.5) addCheck('err',
+    'Le ULN2803A est limite a 500 mA par voie, or le courant declare par solenoide est de ' + wA(p.solA) + '.',
+    'Passez a des MOSFET canal N, ou verifiez le courant reel de vos bobines.');
+
+  const orphanActs = acts.filter(a => !roles[a.id] || !roles[a.id].instruments.length);
+  if (orphanActs.length) addCheck('warn',
+    orphanActs.length + ' actionneur(s) ne sont relies a aucun instrument : ' +
+      orphanActs.map(a => wActName(a) + ' (#' + a.id + ')').join(', ') + '.',
+    'Ils sont cables mais jamais declenches : assignez-les dans l\'onglet Instruments.');
+
+  const silentActs = acts.filter(a => roles[a.id] && roles[a.id].instruments.length && !roles[a.id].actions.length);
+  if (silentActs.length) addCheck('warn',
+    silentActs.length + ' actionneur(s) sont lies a un instrument mais sans action MIDI : ' +
+      silentActs.map(a => wActName(a) + ' (#' + a.id + ')').join(', ') + '.',
+    'Ajoutez-leur une action Note ON / Note OFF / CC dans l\'instrument concerne.');
+
+  const knownIds = {};
+  acts.forEach(a => { knownIds[a.id] = true; });
+  const dangling = [];
+  Object.keys(roles).forEach(id => { if (!knownIds[id]) dangling.push(id); });
+  if (dangling.length) addCheck('err',
+    'Instrument(s) pointant vers des actionneurs inexistants (#' + dangling.join(', #') + ').',
+    'Corrigez ces instruments : rien ne sera cable ni pilote pour ces references.');
+
+  const disabledActs = acts.filter(a => !a.enabled);
+  if (disabledActs.length) addCheck('info',
+    disabledActs.length + ' actionneur(s) desactives : ' + disabledActs.map(a => wActName(a) + ' (#' + a.id + ')').join(', ') + '.',
+    'Ils apparaissent en gris sur le schema : cablez-les si vous comptez les reactiver.');
+
+  if (usesI2c) addCheck('info',
+    'Un seul jeu de resistances de pull-up (4.7 kOhm sur SDA et SCL) pour tout le bus I2C.',
+    'Retirez ou desoudez celles des modules supplementaires, sinon le bus devient trop charge.');
+
+  if (!acts.length && !strips.length) addCheck('warn',
+    'Aucun actionneur ni strip LED configure.',
+    'Commencez par l\'onglet Actionneurs : le schema et le dossier de cablage se remplissent automatiquement.');
+
+  const nErr = checks.filter(c => c.level === 'err').length;
+  const nWarn = checks.filter(c => c.level === 'warn').length;
+  if (!nErr && !nWarn && (acts.length || strips.length)) addCheck('ok',
+    'Aucune erreur de cablage detectee dans la configuration actuelle.',
+    'Il reste a verifier les valeurs electriques (tensions, courants) avec les datasheets de votre materiel.');
+
+  // --------------------------------------------------------------
+  // Tuiles de synthese
+  // --------------------------------------------------------------
+  const pulsedRails = rails.filter(r => r.name !== 'Logique (ESP32 + modules)');
+  const simTotal = pulsedRails.reduce((s, r) => s + r.simA, 0);
+  const worstTotal = pulsedRails.reduce((s, r) => s + r.worstA, 0);
+  const chanTotal = boards.length * 16;
+  const chanUsed = boards.reduce((s, b) => s + b.used, 0);
+  const tiles = [
+    {k: 'Actionneurs', v: String(acts.length), s: servos.length + ' servo - ' + solenoids.length +
+      ' solenoide - ' + motors.length + ' moteur' + (disabledActs.length ? ' - ' + disabledActs.length + ' desactive(s)' : '')},
+    {k: 'Modules I2C', v: String(boards.length), s: chanTotal ? (chanUsed + '/' + chanTotal + ' voies cablees') : 'aucun module'},
+    {k: 'GPIO ESP32', v: String(Object.keys(byPin).length), s: pins.filter(e => e.system).length + ' reserves par le firmware'},
+    {k: 'Courant simultane', v: (Math.round(simTotal * 10) / 10).toFixed(1), u: 'A',
+      s: nSim + ' actionneurs actifs - alim conseillee ' + wA(simTotal * (1 + p.margin / 100))},
+    {k: 'Pire cas', v: (Math.round(worstTotal * 10) / 10).toFixed(1), u: 'A', s: 'tous les actionneurs en meme temps'},
+    {k: 'Verifications', v: nErr ? String(nErr) : (nWarn ? String(nWarn) : 'OK'),
+      u: nErr ? 'erreur' + (nErr > 1 ? 's' : '') : (nWarn ? 'avert.' : ''),
+      s: nErr ? 'a corriger avant de cabler' : (nWarn ? 'points a verifier' : 'configuration coherente'),
+      tone: nErr ? 'err' : (nWarn ? 'warn' : 'ok')}
+  ];
+
+  // --------------------------------------------------------------
+  // Cartes de sorties : voie -> actionneur -> instrument -> action
+  // --------------------------------------------------------------
+  const cellFor = (label, a) => {
+    const r = a ? roles[a.id] : null;
+    return {
+      label: label, free: !a,
+      id: a ? a.id : null,
+      name: a ? wActName(a) + ' (#' + a.id + ')' : 'libre',
+      type: a ? wTypeLabel(a) : '',
+      gesture: a ? wGesture(a) : '',
+      color: a ? W_TYPE_KEYS[a.type] : '',
+      enabled: a ? a.enabled !== false : true,
+      instrument: wRoleInstruments(r) || (a ? 'non assigne' : ''),
+      action: wRoleActions(r) || (a ? 'aucune action MIDI' : ''),
+      wiring: a ? wOutputWiring(a, p) : ''
+    };
+  };
+  const outputGroups = boards.map(b => {
+    const cells = [];
+    for (let c = 0; c < 16; c++) {
+      const cell = b.channels[c];
+      if (!cell) { cells.push(cellFor(wChannelLabel(b, c), null)); continue; }
+      cell.acts.forEach((a, k) => {
+        const cc = cellFor(wChannelLabel(b, c) + (cell.acts.length > 1 ? ' (' + (k + 1) + '/' + cell.acts.length + ')' : ''), a);
+        cc.conflict = cell.acts.length > 1;
+        cells.push(cc);
+      });
+    }
+    return {
+      title: b.kind + ' #' + b.num, addr: wHex(b.addr),
+      sub: b.used + '/16 voies utilisees - cavaliers ' + wJumpers(b.addr, b.base, b.bits) +
+        ' - ' + (b.kind === 'PCA9685' ? 'VCC 3.3 V (logique), V+ = rail servos, OE a GND'
+                                      : 'VCC 3.3 V, RESET a 3.3 V, sorties vers les etages de puissance'),
+      cells: cells
+    };
+  });
+  if (directActs.length) {
+    outputGroups.push({
+      title: 'Sorties directes ESP32', addr: 'GPIO / LEDC',
+      sub: directActs.length + ' sortie(s) pilotees directement par le microcontroleur',
+      cells: directActs.map(a => cellFor((a.bus === 3 ? 'LEDC ' : 'GPIO ') + a.hwPin, a))
+    });
+  }
+
+  // --------------------------------------------------------------
   // Sections
   // --------------------------------------------------------------
   const sections = [];
 
-  // 1. Synthese
+  // 1. Vue d'ensemble : tuiles + schema synoptique
+  const overview = {title: 'Vue d\'ensemble du cablage', blocks: []};
+  overview.blocks.push({t: 'tiles', items: tiles});
+  overview.blocks.push({t: 'diag', svg: diagramSvg,
+    alt: 'Schema synoptique : ' + acts.length + ' actionneur(s), ' + boards.length + ' module(s) I2C, ' +
+      strips.length + ' strip(s) LED.'});
+  overview.blocks.push({t: 'legend', items: [
+    {c: P.servo, l: 'Voie servo'},
+    {c: P.solenoid, l: 'Voie solenoide'},
+    {c: P.motor, l: 'Voie moteur'},
+    {c: P.optical, l: 'Capteur optique'},
+    {c: P.free, l: 'Voie libre'},
+    {c: P.conflict, l: 'Conflit'},
+    {c: P.off, l: 'Actionneur desactive'},
+    {c: P.sda, l: 'SDA', wire: true},
+    {c: P.scl, l: 'SCL', wire: true},
+    {c: P.v33, l: '3.3 V logique', wire: true},
+    {c: P.vplus, l: 'V+ puissance', wire: true},
+    {c: P.gnd, l: 'GND commun', wire: true},
+    {c: P.sig, l: 'Signaux directs', wire: true}
+  ]});
+  overview.blocks.push({t: 'p', text: 'Chaque carre numerote est une voie physique du module. Survolez-le pour lire ' +
+    'l\'actionneur, l\'instrument et l\'action MIDI qui lui sont affectes ; cliquez pour ouvrir sa fiche detaillee ' +
+    'plus bas dans la page. Les traits horizontaux au bas de chaque bloc sont les rails a tirer : un fil par rail, ' +
+    'partage entre tous les modules du bloc.'});
+  sections.push(overview);
+
+  // 2. Verifications automatiques
+  sections.push({title: 'Verifications avant cablage', blocks: [
+    {t: 'checks', items: checks},
+    {t: 'p', text: 'Ces controles portent sur la configuration du firmware (broches, adresses, affectations). ' +
+      'Ils ne remplacent pas la verification des tensions et des courants reels de votre materiel.'}
+  ]});
+
+  // 3. Synthese
   const synth = {title: 'Synthese', blocks: []};
-  if (!acts.length && !strips.length) {
-    synth.blocks.push({t: 'note', level: 'warn', text: 'Aucun actionneur ni strip LED configure : commencez par l\'onglet Actionneurs, la page de cablage se remplira toute seule.'});
-  }
   synth.blocks.push({t: 'table', head: ['Element', 'Quantite', 'Detail'], rows: [
     ['Solenoides', String(solenoids.length), solenoids.length ? WIRING_DRIVERS[p.driver] : '-'],
     ['Servos', String(servos.length), servos.length ? 'PCA9685, ' + hw.pcaFrequency + ' Hz' : '-'],
@@ -6843,30 +7656,20 @@ function buildWiringModel() {
     ['Fins de course', String(endstops), endstops ? 'entrees a pull-up interne' : '-'],
     ['Strips LED', String(strips.length), strips.length ? (ledTotalLeds + ' LEDs au total') : '-']
   ]});
-  if (conflicts.length) {
-    synth.blocks.push({t: 'note', level: 'err', text: 'Conflit de broches : ' + conflicts.map(pin =>
-      'GPIO ' + pin + ' (' + byPin[pin].map(e => e.role).join(' + ') + ')').join(' ; ') +
-      '. Corrigez la configuration avant de cabler.'});
-  } else if (acts.length || strips.length) {
-    synth.blocks.push({t: 'note', level: 'ok', text: 'Aucun conflit de broches detecte.'});
-  }
-  if (solenoids.length && p.driver === 'uln2803' && p.solA > 0.5) {
-    synth.blocks.push({t: 'note', level: 'err', text: 'Le ULN2803A est limite a 500 mA par voie (et moins si plusieurs ' +
-      'voies conduisent en meme temps), or le courant declare par solenoide est de ' + wA(p.solA) + '. ' +
-      'Passez a des MOSFET canal N, ou verifiez le courant reel de vos bobines.'});
-  }
-  if (flashUsed.length) {
-    synth.blocks.push({t: 'note', level: 'err', text: 'Broches reservees a la flash SPI utilisees (GPIO 6-11) : ' +
-      flashUsed.map(e => 'GPIO ' + e.pin + ' / ' + e.role).join(' ; ') + '. La carte ne demarrera pas.'});
-  }
-  if (strapUsed.length) {
-    synth.blocks.push({t: 'note', level: 'warn', text: 'Broches de strapping utilisees (' +
-      strapUsed.map(e => 'GPIO ' + e.pin).join(', ') + ') : leur etat est lu au demarrage. Le pull-down de gate 10 kOhm ' +
-      'est indispensable, et rien ne doit tirer GPIO 12 au niveau haut pendant le boot.'});
-  }
+  synth.blocks.push({t: 'p', text: 'Les anomalies eventuelles (conflits, adresses, broches sensibles) sont listees ' +
+    'dans la section Verifications ci-dessus.'});
   sections.push(synth);
 
-  // 2. Nomenclature
+  // 4. Affectation des sorties : voie -> actionneur -> instrument -> action
+  if (outputGroups.length) {
+    sections.push({title: 'Affectation des sorties (instrument et action)', blocks: [
+      {t: 'p', text: 'Une fiche par voie physique : ce qu\'elle pilote, sur quel instrument, et ce que fait cet ' +
+        'instrument quand la note arrive. C\'est la table de reference a garder sous les yeux pendant le cablage.'},
+      {t: 'chans', groups: outputGroups}
+    ]});
+  }
+
+  // 5. Nomenclature
   sections.push({title: 'Nomenclature (BOM)', blocks: [
     {t: 'table', head: ['Qte', 'Composant', 'Reference conseillee', 'Role'],
      rows: bom.map(b => [String(b.qty), b.item, b.ref, b.role])},
@@ -6902,8 +7705,9 @@ function buildWiringModel() {
       i2cSec.blocks.push({t: 'h', text: 'MCP23017 ' + wHex(addr) + ' - ' + list.length + '/16 voies utilisees'});
       i2cSec.blocks.push({t: 'p', text: 'Cavaliers d\'adresse : ' + wJumpers(addr, hw.mcpBaseAddress, 3) +
         ' (0 = relie a GND, 1 = relie a 3.3 V). RESET a relier a 3.3 V.'});
-      i2cSec.blocks.push({t: 'table', head: ['Broche', 'Actionneur', 'Type', 'Charge pilotee'],
-        rows: list.map(a => [wMcpPinLabel(a.hwPin), wActName(a) + ' (#' + a.id + ')', a.behaviorName || '',
+      i2cSec.blocks.push({t: 'table', head: ['Broche', 'Actionneur', 'Geste', 'Instrument', 'Action MIDI', 'Charge pilotee'],
+        rows: list.map(a => [wMcpPinLabel(a.hwPin), wActName(a) + ' (#' + a.id + ')', wGesture(a),
+          wRoleInstruments(roles[a.id]) || 'non assigne', wRoleActions(roles[a.id]) || '-',
           (p.driver === 'uln2803' ? 'Entree du ULN2803A' : 'Gate du MOSFET via 100 Ohm')])});
     });
     pcaAddrs.forEach(addr => {
@@ -6912,8 +7716,9 @@ function buildWiringModel() {
       i2cSec.blocks.push({t: 'p', text: 'Cavaliers d\'adresse : ' + wJumpers(addr, hw.pcaBaseAddress, 6) +
         '. VCC = 3.3 V (logique), V+ = rail de puissance des servos, OE relie a GND. ' +
         'Condensateur de reservoir a souder sur le bornier V+ du module.'});
-      i2cSec.blocks.push({t: 'table', head: ['Canal', 'Actionneur', 'Type', 'Connecteur'],
-        rows: list.map(a => [String(a.hwPin), wActName(a) + ' (#' + a.id + ')', a.behaviorName || '',
+      i2cSec.blocks.push({t: 'table', head: ['Canal', 'Actionneur', 'Geste', 'Instrument', 'Action MIDI', 'Connecteur'],
+        rows: list.map(a => [String(a.hwPin), wActName(a) + ' (#' + a.id + ')', wGesture(a),
+          wRoleInstruments(roles[a.id]) || 'non assigne', wRoleActions(roles[a.id]) || '-',
           a.type === 0 ? 'Connecteur servo 3 points (S / V+ / GND)' : 'Sortie PWM vers l\'entree du driver moteur'])});
     });
     i2cSec.blocks.push({t: 'list', items: [
@@ -7002,14 +7807,43 @@ function buildWiringModel() {
   if (acts.length) {
     const detSec = {title: 'Cablage detaille par actionneur', blocks: []};
     acts.forEach(a => {
-      detSec.blocks.push({t: 'h', text: wActName(a) + ' - #' + a.id + ' - ' + (a.typeName || '') +
-        ' / ' + (a.behaviorName || '') + (a.enabled ? '' : ' [DESACTIVE]')});
+      const r = roles[a.id];
+      detSec.blocks.push({t: 'h', anchor: 'wact-' + a.id, text: wActName(a) + ' - #' + a.id + ' - ' +
+        wTypeLabel(a) + ' / ' + wGesture(a) + (a.enabled ? '' : ' [DESACTIVE]')});
+      detSec.blocks.push({t: 'p', text: 'Sortie : ' + wSignalSource(a) +
+        ' - Instrument : ' + (wRoleInstruments(r) || 'aucun (actionneur non assigne)') +
+        ' - Action : ' + (wRoleActions(r) || 'aucune action MIDI declaree')});
       detSec.blocks.push({t: 'list', items: wActuatorSteps(a, p, hw)});
     });
     sections.push(detSec);
   }
 
-  // 8. Securite
+  // 8. Mise en service progressive
+  sections.push({title: 'Mise en service - montez en puissance par etapes', blocks: [
+    {t: 'p', text: 'Ne branchez jamais tout d\'un coup. Cochez chaque etape : la liste est conservee dans ce navigateur.'},
+    {t: 'todo', items: [
+      {title: 'Logique seule', text: 'ESP32 alimente par USB, alimentations de puissance DEBRANCHEES. ' +
+        'L\'interface web repond et la LED de statut clignote.'},
+      {title: 'Masse commune', text: 'GND de l\'ESP32, GND de chaque module et GND de chaque alimentation relies ' +
+        'en etoile sur une meme barre de masse, avant toute mise sous tension de puissance.'},
+      {title: 'Scan I2C', text: usesI2c
+        ? ('Reglages -> Scan I2C : les adresses ' + boards.map(b => wHex(b.addr)).join(', ') +
+           ' doivent toutes repondre. Une adresse absente = cavaliers faux ou pull-ups manquants.')
+        : 'Aucun module I2C dans cette configuration : etape sans objet.'},
+      {title: 'Etat de repos', text: 'Sorties de puissance encore coupees : verifiez qu\'aucun solenoide n\'est colle ' +
+        'et qu\'aucun servo ne force. Les pull-down de gate 10 kOhm garantissent cet etat pendant le boot.'},
+      {title: 'Un seul actionneur', text: 'Cablez un seul actionneur, alimentation de puissance limitee en courant si ' +
+        'possible, puis declenchez-le avec le bouton Test de l\'onglet Actionneurs. Controlez la course mecanique.'},
+      {title: 'Thermique', text: 'Apres quelques minutes de jeu, touchez les MOSFET, les bobines et les servos : ' +
+        'tiedes est normal, brulant ne l\'est pas. Coupez et revoyez le dimensionnement le cas echeant.'},
+      {title: 'Rail complet', text: 'Ajoutez les actionneurs restants, verifiez les fusibles (' +
+        rails.map(r => r.name + ' ' + r.fuse + ' A').join(', ') + ') et la tension du rail en charge (chute < 5 %).'},
+      {title: 'Arret d\'urgence', text: 'Verifiez que couper le rail de puissance arrete tout instantanement, et que ' +
+        'le bouton PANIC de la page Reglages coupe bien les sorties (mais pas l\'alimentation).'}
+    ]}
+  ]});
+
+  // 9. Securite
   sections.push({title: 'Rappels de securite', blocks: [{t: 'list', items: [
     'Cablez et verifiez hors tension, alimentation debranchee.',
     'Mettez sous tension la logique (ESP32 et modules) avant la puissance, et coupez la puissance en premier.',
@@ -7286,12 +8120,69 @@ function renderWiring() {
   '<p class="hint" style="text-align:right;">Genere le ' + escapeHtml(model.generatedAt) + '</p>';
 }
 
+const W_CHK_ICONS = {err: '&#10007;', warn: '&#9888;', ok: '&#10003;', info: '&#8505;'};
+
 function wiringBlockHtml(b) {
-  if (b.t === 'h')    return '<div class="wsub">' + escapeHtml(b.text) + '</div>';
+  if (b.t === 'h')    return '<div class="wsub"' + (b.anchor ? ' id="' + b.anchor + '"' : '') + '>' + escapeHtml(b.text) + '</div>';
   if (b.t === 'p')    return '<p class="wtext">' + escapeHtml(b.text) + '</p>';
   if (b.t === 'note') return '<div class="wnote ' + b.level + '">' + escapeHtml(b.text) + '</div>';
   if (b.t === 'pre')  return '<div class="wschem">' + escapeHtml(b.text) + '</div>';
   if (b.t === 'list') return '<ul class="wlist">' + b.items.map(i => '<li>' + escapeHtml(i) + '</li>').join('') + '</ul>';
+  // Le SVG est construit par wBuildDiagram() a partir de valeurs numeriques et de
+  // textes deja passes par escapeHtml() : il est insere tel quel.
+  if (b.t === 'diag') return '<div class="wdiag-wrap" role="img" aria-label="' + escapeHtml(b.alt) + '">' + b.svg + '</div>';
+  if (b.t === 'legend') {
+    return '<div class="wlegend">' + b.items.map(i =>
+      '<span><i class="' + (i.wire ? 'wire' : '') + '" style="background:' + escapeHtml(i.c) + '"></i>' +
+      escapeHtml(i.l) + '</span>').join('') + '</div>';
+  }
+  if (b.t === 'tiles') {
+    return '<div class="wtiles">' + b.items.map(t =>
+      '<div class="wtile' + (t.tone ? ' ' + t.tone : '') + '">' +
+      '<div class="k">' + escapeHtml(t.k) + '</div>' +
+      '<div class="v">' + escapeHtml(t.v) + (t.u ? '<small>' + escapeHtml(t.u) + '</small>' : '') + '</div>' +
+      '<div class="s">' + escapeHtml(t.s) + '</div></div>').join('') + '</div>';
+  }
+  if (b.t === 'checks') {
+    if (!b.items.length) return '<p class="wtext">Rien a signaler.</p>';
+    return b.items.map(c =>
+      '<div class="wchk ' + c.level + '"><span class="ico">' + (W_CHK_ICONS[c.level] || '') + '</span>' +
+      '<span>' + escapeHtml(c.text) +
+      (c.fix ? '<span class="fix">' + escapeHtml(c.fix) + '</span>' : '') + '</span></div>').join('');
+  }
+  if (b.t === 'chans') {
+    return b.groups.map(g => {
+      const free = g.cells.filter(c => c.free);
+      const used = g.cells.filter(c => !c.free);
+      return '<div class="wboard"><h4><span>' + escapeHtml(g.title) + '</span>' +
+      '<span class="addr">' + escapeHtml(g.addr) + '</span></h4>' +
+      '<div class="bsub">' + escapeHtml(g.sub) + '</div>' +
+      '<div class="wchans">' + used.map(c => {
+        const col = c.conflict ? 'var(--accent)' : (c.enabled ? 'var(--w-' + c.color + ')' : 'var(--fg2)');
+        return '<div class="wchan" id="wchan-' + c.id + '" style="border-left-color:' + col + ';" ' +
+          'onclick="wFocusAct(' + c.id + ')" title="' + escapeHtml(c.wiring) + '">' +
+          '<div class="ch"><span>' + escapeHtml(c.label) + '</span><span class="tag">' + escapeHtml(c.type) + '</span></div>' +
+          '<div class="nm">' + escapeHtml(c.name) + (c.enabled ? '' : ' [off]') + '</div>' +
+          '<div class="li">' + escapeHtml(c.gesture) + ' &middot; ' + escapeHtml(c.instrument) + '</div>' +
+          '<div class="li">' + escapeHtml(c.action) + '</div>' +
+          (c.conflict ? '<div class="li" style="color:var(--accent);">conflit : plusieurs actionneurs sur cette voie</div>' : '') +
+          '</div>';
+      }).join('') + '</div>' +
+      (free.length ? '<div class="bsub" style="margin-top:8px;">Voies libres (' + free.length + ') : ' +
+        escapeHtml(free.map(c => c.label).join(', ')) + '</div>' : '') +
+      '</div>';
+    }).join('');
+  }
+  if (b.t === 'todo') {
+    const done = wLoadChecklist();
+    return '<ul class="wtodo">' + b.items.map((it, i) => {
+      const key = 'c' + i;
+      const ok = !!done[key];
+      return '<li class="' + (ok ? 'done' : '') + '"><input type="checkbox" id="wtodo_' + key + '"' + (ok ? ' checked' : '') +
+        ' onchange="wToggleTodo(this,\'' + key + '\')"><label class="tt" for="wtodo_' + key + '">' +
+        '<b>' + escapeHtml(it.title) + '</b><span>' + escapeHtml(it.text) + '</span></label></li>';
+    }).join('') + '</ul>';
+  }
   if (b.t === 'table') {
     return '<div class="wt-wrap"><table class="wt"><thead><tr>' +
       b.head.map(h => '<th>' + escapeHtml(h) + '</th>').join('') + '</tr></thead><tbody>' +
@@ -7313,6 +8204,33 @@ function wiringToMarkdown(model) {
       else if (b.t === 'note') out.push('> ' + b.text, '');
       else if (b.t === 'pre') out.push('```text', b.text.replace(/\n$/, ''), '```', '');
       else if (b.t === 'list') { b.items.forEach(i => out.push('- ' + i)); out.push(''); }
+      else if (b.t === 'diag') out.push('> ' + b.alt + ' (schema interactif : onglet Cablage de l\'interface, ' +
+        'ou export .svg)', '');
+      else if (b.t === 'legend') out.push('Legende : ' + b.items.map(i => i.l).join(' - '), '');
+      else if (b.t === 'tiles') {
+        out.push('| Indicateur | Valeur | Detail |', '|---|---|---|');
+        b.items.forEach(t => out.push('| ' + esc(t.k) + ' | ' + esc(t.v + (t.u ? ' ' + t.u : '')) + ' | ' + esc(t.s) + ' |'));
+        out.push('');
+      }
+      else if (b.t === 'checks') {
+        const mark = {err: '[ERREUR]', warn: '[ATTENTION]', ok: '[OK]', info: '[INFO]'};
+        b.items.forEach(c => out.push('- ' + (mark[c.level] || '') + ' ' + c.text + (c.fix ? ' — ' + c.fix : '')));
+        out.push('');
+      }
+      else if (b.t === 'chans') {
+        b.groups.forEach(g => {
+          out.push('### ' + g.title + ' — ' + g.addr, '', g.sub, '');
+          out.push('| Voie | Actionneur | Type / geste | Instrument | Action MIDI | A brancher |');
+          out.push('|---|---|---|---|---|---|');
+          g.cells.filter(c => !c.free).forEach(c => out.push('| ' + [c.label,
+            c.name + (c.enabled ? '' : ' [desactive]'), c.type + ' / ' + c.gesture,
+            c.instrument || '-', c.action || '-', c.wiring || '-'].map(esc).join(' | ') + ' |'));
+          out.push('');
+          const free = g.cells.filter(c => c.free);
+          if (free.length) out.push('Voies libres (' + free.length + ') : ' + free.map(c => c.label).join(', '), '');
+        });
+      }
+      else if (b.t === 'todo') { b.items.forEach(i => out.push('- [ ] **' + i.title + '** — ' + i.text)); out.push(''); }
       else if (b.t === 'table') {
         out.push('| ' + b.head.map(esc).join(' | ') + ' |');
         out.push('|' + b.head.map(() => '---').join('|') + '|');
@@ -7324,18 +8242,44 @@ function wiringToMarkdown(model) {
   return out.join('\n');
 }
 
-function downloadWiringMarkdown() {
-  const md = wiringToMarkdown(buildWiringModel());
-  const blob = new Blob([md], {type: 'text/markdown;charset=utf-8'});
+function wDownloadBlob(content, mime, filename) {
+  const blob = new Blob([content], {type: mime});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'drums-engine-cablage.md';
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function downloadWiringMarkdown() {
+  wDownloadBlob(wiringToMarkdown(buildWiringModel()), 'text/markdown;charset=utf-8', 'drums-engine-cablage.md');
   toast('Fichier .md telecharge', 'success');
+}
+
+// Le schema est autonome (couleurs litterales, aucune dependance CSS) : il
+// s'ouvre tel quel dans un navigateur ou un editeur vectoriel.
+function downloadWiringSvg() {
+  const svg = document.getElementById('wDiagramSvg');
+  if (!svg) { toast('Aucun schema a exporter', 'warn'); return; }
+  wDownloadBlob('<?xml version="1.0" encoding="UTF-8"?>\n' + svg.outerHTML,
+    'image/svg+xml;charset=utf-8', 'drums-engine-schema.svg');
+  toast('Schema .svg telecharge', 'success');
+}
+
+// --- Checklist de mise en service (memorisee dans ce navigateur) ---
+const WIRING_TODO_KEY = 'wiringChecklist';
+function wLoadChecklist() {
+  try { return JSON.parse(localStorage.getItem(WIRING_TODO_KEY) || '{}') || {}; } catch (e) { return {}; }
+}
+function wToggleTodo(input, key) {
+  const done = wLoadChecklist();
+  if (input.checked) done[key] = 1; else delete done[key];
+  localStorage.setItem(WIRING_TODO_KEY, JSON.stringify(done));
+  const li = input.closest('li');
+  if (li) li.classList.toggle('done', input.checked);
 }
 
 // Theme toggle

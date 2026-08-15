@@ -8,21 +8,55 @@ tout est deduit des actionneurs, des fins de course et des strips LED declares.
 
 | Section | Contenu |
 |---|---|
-| Synthese | Compte des solenoides / servos / moteurs / modules, detection des conflits de broches et des broches sensibles (strapping, flash SPI) |
+| Vue d'ensemble | Tuiles de synthese (actionneurs, modules, GPIO, courant simultane, pire cas, etat des verifications) puis **schema synoptique SVG** : ESP32 et ses broches, blocs d'alimentation, modules I2C avec leurs 16 voies, sorties directes, entrees, strips LED, et les rails de cablage (SDA, SCL, 3.3 V, V+, GND) |
+| Verifications avant cablage | Liste d'erreurs / avertissements / informations, chacune avec la correction a appliquer |
+| Synthese | Compte des solenoides / servos / moteurs / modules |
+| Affectation des sorties | Une fiche par voie physique : voie, actionneur, type et geste, **instrument** pilote (avec sa note MIDI) et **action MIDI** declenchee, plus ce qu'il faut brancher sur la voie ; les voies libres sont listees en fin de module |
 | Nomenclature (BOM) | Liste des composants a acheter avec quantites : MOSFET, diodes de roue libre, resistances de gate et de pull-down, condensateurs de reservoir et de decouplage, fusibles, adaptateur de niveau LED, pull-ups I2C |
 | Affectation des GPIO ESP32 | Table broche par broche : fonction, sens, cablage attendu — y compris les broches reservees par le firmware (I2C, LED de statut, micro I2S) |
 | Modules I2C | Un tableau par MCP23017 / PCA9685 reellement utilise : position des cavaliers d'adresse, canaux occupes, alimentation logique et de puissance |
 | Alimentations | Un rail par famille d'actionneurs : courant simultane, pire cas, alimentation conseillee, calibre de fusible, condensateur de reservoir, section de fil |
 | Schemas de principe | Schemas ASCII par type d'etage : solenoide sur MOSFET / ULN2803 / module, servo sur PCA9685, moteur simple, moteur sur pont en H, fin de course, capteur optique, strip LED |
-| Cablage detaille | Pour chaque actionneur, la marche a suivre fil par fil, avec ses parametres de configuration (angles, durees d'impulsion, plage de PWM, temps mort) |
+| Cablage detaille | Pour chaque actionneur, l'instrument et l'action associes, puis la marche a suivre fil par fil, avec ses parametres de configuration (angles, durees d'impulsion, plage de PWM, temps mort) |
+| Mise en service | Checklist en huit etapes, de la logique seule au rail complet, cochable et conservee dans le navigateur (`localStorage`, cle `wiringChecklist`) |
 | Rappels de securite | Ordre de mise sous tension, verifications thermiques, limites du firmware |
 
-Deux exports sont disponibles :
+Trois exports sont disponibles :
 
 - **Imprimer** — feuille imprimable (l'en-tete, les onglets et les controles
   sont masques a l'impression).
 - **Exporter .md** — telecharge `drums-engine-cablage.md`, le meme dossier au
   format Markdown, a joindre au projet ou a imprimer plus tard.
+- **Exporter .svg** — telecharge `drums-engine-schema.svg`, le schema
+  synoptique seul. Les couleurs y sont ecrites en dur : le fichier s'ouvre tel
+  quel dans un navigateur ou un editeur vectoriel.
+
+## Le schema synoptique
+
+Le schema est redessine a chaque affichage a partir de la configuration ; il
+n'y a rien a positionner a la main.
+
+- Chaque module I2C est dessine avec ses **16 voies numerotees**, coloriees par
+  type d'actionneur (servo, solenoide, moteur, capteur optique), grisees quand
+  l'actionneur est desactive, rouges en cas de conflit, en pointilles quand la
+  voie est libre.
+- **Survoler une voie** affiche l'actionneur, son type et son geste,
+  l'instrument pilote et l'action MIDI declenchee. **Cliquer** ouvre la fiche de
+  cablage detaillee de cet actionneur plus bas dans la page.
+- Les traits horizontaux sous chaque bloc sont les **rails** a tirer : un fil
+  par rail, partage entre tous les modules du bloc (SDA, SCL, 3.3 V, V+, GND).
+  Les couloirs verticaux entre l'ESP32 et les blocs ne se croisent jamais : un
+  couloir par signal.
+
+## Instrument et action portes par chaque sortie
+
+Le firmware repartit l'information sur trois objets : l'actionneur connait sa
+broche, l'instrument connait ses actionneurs, et l'action MIDI (`noteOnActions`,
+`noteOffActions`, `ccBindings`) connait la commande envoyee. La page recolle les
+trois une seule fois (`wBuildRoles()`), puis reutilise le resultat dans le
+schema, les fiches de sorties et les tableaux des modules I2C. Une sortie sans
+instrument, ou liee a un instrument mais sans action MIDI, est signalee dans les
+verifications : elle serait cablee sans jamais etre declenchee.
 
 ## Parametres electriques
 
@@ -61,18 +95,30 @@ utilises.
 
 ## Detection d'erreurs
 
-La page signale, avant tout cablage :
+La section **Verifications avant cablage** signale, chacune avec sa correction :
 
-- **Conflit de broches** — deux fonctions sur le meme GPIO (erreur bloquante).
-- **Broches de la flash SPI** (GPIO 6 a 11) — la carte ne demarrerait pas.
-- **Broches de strapping** (GPIO 0, 2, 5, 12, 15) — leur niveau au demarrage
-  change le mode de boot ; le pull-down de gate devient indispensable.
+| Niveau | Controle |
+|---|---|
+| Erreur | Deux fonctions sur le meme GPIO |
+| Erreur | Deux actionneurs sur la meme voie d'un MCP23017 / PCA9685 |
+| Erreur | Adresse I2C hors de la plage du composant (0x20-0x27 / 0x40-0x7F) |
+| Erreur | Plus de modules d'une famille que `MCP_MAX_MODULES` / `PCA_MAX_MODULES` |
+| Erreur | Broches de la flash SPI (GPIO 6 a 11) : la carte ne demarrerait pas |
+| Erreur | GPIO 34-39 utilises en sortie (entrees seules) |
+| Erreur | Instrument pointant vers un actionneur inexistant |
+| Erreur | ULN2803A choisi avec un courant declare superieur a 500 mA par voie |
+| Attention | Entree sur GPIO 34-39 : pas de pull-up interne, resistance externe obligatoire |
+| Attention | Broches de strapping (GPIO 0, 2, 5, 12, 15) : leur niveau au demarrage change le mode de boot |
+| Attention | Actionneur cable mais relie a aucun instrument (jamais declenche) |
+| Attention | Actionneur relie a un instrument mais sans action MIDI |
+| Info | Actionneurs desactives, rappel des pull-ups I2C |
 
 ## Source des donnees
 
 | Donnee | Origine |
 |---|---|
 | Actionneurs, bus, adresses, broches, fins de course | `GET /api/actuators` |
+| Instruments, notes MIDI, actions note on / note off / CC | `GET /api/instruments` |
 | Strips LED (GPIO data, nombre de LEDs, luminosite max) | `GET /api/led/strips` |
 | Broches systeme (I2C, LED de statut, bouton BOOT, micro I2S), adresses de base I2C, limites de securite | `GET /api/capabilities` → objet `hardware` |
 | Presence du micro INMP441 | `GET /api/mic/status` |
@@ -104,6 +150,16 @@ Toute la generation vit dans `engine/data/index.html` (section
 sous forme de sections/blocs (`buildWiringModel()`), puis rendu soit en HTML
 (`wiringBlockHtml()`), soit en Markdown (`wiringToMarkdown()`) : ajouter une
 section la rend disponible dans les deux sorties sans duplication.
+
+Types de blocs disponibles : `h`, `p`, `note`, `pre`, `list`, `table`, `diag`
+(schema SVG), `tiles`, `legend`, `checks`, `chans` (fiches de sorties), `todo`
+(checklist). Un nouveau type doit etre gere dans les deux fonctions de rendu.
+
+Le schema est produit par `wBuildDiagram()`, qui recoit un modele deja calcule
+(modules, sorties directes, entrees, strips, lignes de l'ESP32 et des
+alimentations) et ne fait que du placement. Les couleurs viennent de
+`wPalette()`, resolues en valeurs litterales selon le theme clair ou sombre :
+c'est ce qui permet a l'export `.svg` d'etre autonome.
 
 L'interface est servie depuis la flash du programme et non depuis LittleFS :
 apres toute modification de `engine/data/index.html`, regenerez l'en-tete

@@ -28,6 +28,13 @@
 #define RTP_MIDI_PORT     5004
 #define MIDI_SESSION_NAME "MidiPercussion"
 
+// --- Board pins driven by the engine itself ---
+// Declared here (rather than next to their driver) so that the reserved-pin
+// table in actuator/actuator_validation.cpp — which the config validator and
+// the "Cablage" page both consume — has a single source of truth.
+#define STATUS_LED_PIN    2        // LED integree ESP32 DevKit
+#define BOOT_BUTTON_PIN   0        // Bouton BOOT ESP32 (strapping pin)
+
 // --- I2C Hardware ---
 #define I2C_SDA           21
 #define I2C_SCL           22

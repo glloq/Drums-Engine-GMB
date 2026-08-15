@@ -40,6 +40,7 @@
 #include "core/error_log.h"
 #include "core/status_led.h"
 #include "core/panic_state.h"
+#include "core/reconfig_barrier.h"
 
 // HAL
 #include "hal/i2c_scanner.h"
@@ -125,6 +126,11 @@ SemaphoreHandle_t g_i2cMutex = nullptr;
 // Global emergency-stop latch (declared extern in core/panic_state.h)
 std::atomic<bool> g_panicActive{false};
 
+// Global reconfiguration barrier (declared extern in core/reconfig_barrier.h).
+// Parks the RT core while Core 0 rewrites the actuator registry / pipeline
+// lookup tables.
+ReconfigBarrier g_reconfig;
+
 // ============================================================================
 // Engine Core (statique, zero allocation dynamique)
 // ============================================================================
@@ -134,10 +140,14 @@ Scheduler scheduler(&actuatorManager);
 EngineState engineState;
 EventProcessor eventProcessor(&scheduler, &engineState);
 
-// Factory pour creer les actionneurs depuis les configs
+// Factory pour creer les actionneurs depuis les configs.
+// On passe la TAILLE des tableaux de drivers, pas le nombre de modules
+// detectes : l'indexation se fait par (adresse - adresse de base) et la
+// presence reelle est decidee par isReady() sur le slot. La factory n'a donc
+// plus besoin d'etre reconstruite apres le scan I2C.
 ActuatorFactory actuatorFactory(&actuatorManager,
-                                 mcpDrivers, 0,   // mcpCount mis a jour apres init
-                                 pcaDrivers, 0,
+                                 mcpDrivers, MCP_MAX_MODULES,
+                                 pcaDrivers, PCA_MAX_MODULES,
                                  &gpioDriver, &ledcDriver);
 
 // LED Engine
@@ -198,8 +208,19 @@ void rtCoreTask(void* param) {
   DBGLN("[RTOS] RT Core task started (Core 1)");
   uint32_t lastWatchdogCheck = 0;
   uint32_t lastEndStopCheck = 0;
+  g_reconfig.setRtActive(true);
 
   for (;;) {
+    // Point de synchronisation avec Core 0 : si une reconfiguration est en
+    // cours (rebuildAll / compilePipelines), on desamorce le materiel et on se
+    // gare le temps que les tables partagees soient reecrites.
+    if (g_reconfig.requested()) {
+      scheduler.cancelAll();          // les commandes en attente referencent
+                                      // des actionneurs sur le point de partir
+      actuatorManager.stopAll();      // rien ne doit rester sous tension
+      g_reconfig.park();
+    }
+
     // Recevoir MIDI
     midiEngine.update();
 
@@ -298,11 +319,11 @@ void initHardware() {
 
   DBGF("[HW] Found %d MCP23017 + %d PCA9685\n", mcpCount, pcaCount);
 
-  // Mettre a jour la factory avec les compteurs reels
-  actuatorFactory = ActuatorFactory(&actuatorManager,
-                                     mcpDrivers, mcpCount,
-                                     pcaDrivers, pcaCount,
-                                     &gpioDriver, &ledcDriver);
+  // La factory n'est PAS reconstruite ici : elle adresse les drivers par slot
+  // et interroge isReady(), donc le scan ci-dessus suffit. L'ancienne
+  // reaffectation (actuatorFactory = ActuatorFactory(...)) rendait de plus
+  // inaccessible tout module situe apres un trou d'adresse, et copiait au
+  // passage les pools statiques complets via un temporaire de pile.
 }
 
 // ============================================================================
@@ -363,6 +384,13 @@ void loadConfiguration() {
 // Compiler les pipelines depuis les instruments
 // ============================================================================
 void compilePipelines() {
+  // La table de lookup est lue en continu par EventProcessor sur Core 1 :
+  // on met le RT en pause pendant sa reecriture (voir core/reconfig_barrier.h).
+  ReconfigLock lock;
+  if (!lock.ok()) {
+    ErrorLog::warn("Reconfig: RT core did not park before pipeline compile");
+  }
+
   PipelineLookup& lookup = eventProcessor.getLookup();
 
   // Reinitialiser

@@ -130,12 +130,31 @@ void WebServerManager::_handleUpdateActuator(AsyncWebServerRequest* req, uint8_t
     return;  // live config untouched
   }
 
+  // The create path rejects a config that fights over a physical pin/channel;
+  // the update path used to skip that check entirely, so editing an actuator
+  // could silently move it onto a GPIO another actuator already drives.
+  // `id` is excluded so a config never conflicts with its own previous state.
+  uint8_t conflictId = 0;
+  if (_actFactory->hasResourceConflict(candidate, id, conflictId)) {
+    char msg[96];
+    snprintf(msg, sizeof(msg),
+             "Hardware resource conflict with actuator id %u (shared GPIO, MCP pin or PCA channel)",
+             (unsigned)conflictId);
+    _sendError(req, 409, msg);
+    return;  // live config untouched
+  }
+
+  const ActuatorConfig previous = *cfg;   // for rollback if persistence fails
   *cfg = candidate;  // commit only after validation passes
 
   // Reconstruire les actionneurs physiques
   _actFactory->rebuildAll();
   if (!_storage->saveActuators(*_actFactory)) {   // review #8
-    _sendError(req, 500, "Actuator updated in RAM but persistence failed");
+    // Roll RAM back so it matches what is actually on flash — otherwise the
+    // engine runs a config that a reboot would silently discard.
+    *cfg = previous;
+    _actFactory->rebuildAll();
+    _sendError(req, 500, "Failed to persist actuator (change rolled back)");
     return;
   }
 

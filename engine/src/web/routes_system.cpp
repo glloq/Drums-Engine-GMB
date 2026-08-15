@@ -1,4 +1,5 @@
 #include "web_server.h"
+#include "../actuator/actuator_validation.h"
 #include "../hal/i2c_scanner.h"
 #include "../core/error_log.h"
 #include "../core/panic_state.h"
@@ -173,6 +174,21 @@ void WebServerManager::_handleGetCapabilities(AsyncWebServerRequest* req) {
   hw["solenoidMaxOnMs"] = SOLENOID_MAX_ON_US / 1000;
   hw["motorMaxContinuousMs"] = MOTOR_MAX_CONTINUOUS_US / 1000;
   hw["ledMaxStrips"] = LED_MAX_STRIPS;
+
+  // Pins the engine reserves for itself. Same table the config validator uses,
+  // so the wiring page and the backend can never disagree about which GPIO is
+  // free. `exclusive` entries are rejected outright when configuring an
+  // actuator; the others belong to optional peripherals and are advisory.
+  JsonArray reserved = hw["reservedPins"].to<JsonArray>();
+  uint8_t reservedCount = 0;
+  const PinReservation* reservations = esp32PinReservations(reservedCount);
+  for (uint8_t i = 0; i < reservedCount; i++) {
+    JsonObject r = reserved.add<JsonObject>();
+    r["pin"] = reservations[i].pin;
+    r["function"] = reservations[i].function;
+    r["label"] = reservations[i].label;
+    r["exclusive"] = reservations[i].exclusive;
+  }
 
   // Velocity curves
   JsonArray curves = doc["velocityCurves"].to<JsonArray>();

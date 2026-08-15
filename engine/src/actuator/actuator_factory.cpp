@@ -1,65 +1,14 @@
 #include "actuator_factory.h"
 #include "actuator_validation.h"
-
-// ----------------------------------------------------------------------------
-// Hardware resource conflict detection (review #13)
-// ----------------------------------------------------------------------------
-// Collect the physical ESP32 GPIOs a config occupies (output pin on a GPIO bus,
-// end stops, optical sensor pin, motor direction pin).
-static void collectGpios(const ActuatorConfig& c, uint8_t* out, uint8_t& n) {
-  n = 0;
-  auto add = [&](uint8_t p) {
-    if (p == 0xFF || p > 39 || n >= 8) return;
-    for (uint8_t i = 0; i < n; i++) if (out[i] == p) return;  // dedup
-    out[n++] = p;
-  };
-  if (c.bus == HardwareBus::GPIO_DIRECT || c.bus == HardwareBus::LEDC_PWM) add(c.hwPin);
-  add(c.endStopPin1);
-  add(c.endStopPin2);
-  if (c.type == ActuatorType::MOTOR_OPTICAL) add(c.hwAddress);  // sensor pin (GPIO)
-  if (c.type == ActuatorType::PWM_MOTOR &&
-      (c.behavior == ActuatorBehavior::MOTOR_SWEEP ||
-       c.behavior == ActuatorBehavior::MOTOR_ALTERNATE) &&
-      c.bus == HardwareBus::LEDC_PWM &&
-      c.hwAddress > 0 && c.hwAddress < 40) {
-    add(c.hwAddress);  // direction pin (GPIO)
-  }
-}
-
-// I2C-expander resource (bus + address + channel/pin). Returns false for
-// GPIO/LEDC buses.
-static bool expanderResource(const ActuatorConfig& c, uint8_t& addr, uint8_t& chan) {
-  if (c.bus == HardwareBus::MCP23017 || c.bus == HardwareBus::PCA9685) {
-    addr = c.hwAddress;
-    chan = c.hwPin;
-    return true;
-  }
-  return false;
-}
-
-// True if configs `a` and `b` fight over any physical resource.
-static bool configsConflict(const ActuatorConfig& a, const ActuatorConfig& b) {
-  uint8_t ag[8], bg[8], an, bn;
-  collectGpios(a, ag, an);
-  collectGpios(b, bg, bn);
-  for (uint8_t i = 0; i < an; i++)
-    for (uint8_t j = 0; j < bn; j++)
-      if (ag[i] == bg[j]) return true;  // shared physical GPIO
-
-  uint8_t aAddr, aChan, bAddr, bChan;
-  if (expanderResource(a, aAddr, aChan) && expanderResource(b, bAddr, bChan)) {
-    if (a.bus == b.bus && aAddr == bAddr && aChan == bChan) return true;
-  }
-  return false;
-}
+#include "../core/reconfig_barrier.h"
 
 ActuatorFactory::ActuatorFactory(ActuatorManager* manager,
-                                  MCP23017Driver* mcpDrivers, uint8_t mcpCount,
-                                  PCA9685Driver* pcaDrivers, uint8_t pcaCount,
+                                  MCP23017Driver* mcpDrivers, uint8_t mcpSlots,
+                                  PCA9685Driver* pcaDrivers, uint8_t pcaSlots,
                                   GpioDriver* gpioDriver, LedcDriver* ledcDriver)
   : _manager(manager),
-    _mcpDrivers(mcpDrivers), _mcpCount(mcpCount),
-    _pcaDrivers(pcaDrivers), _pcaCount(pcaCount),
+    _mcpDrivers(mcpDrivers), _mcpSlots(mcpSlots),
+    _pcaDrivers(pcaDrivers), _pcaSlots(pcaSlots),
     _gpioDriver(gpioDriver), _ledcDriver(ledcDriver),
     _solenoidIdx(0), _servoIdx(0), _motorIdx(0),
     _configCount(0), _createdCount(0) {
@@ -205,17 +154,29 @@ int ActuatorFactory::addConfig(const ActuatorConfig& config) {
 
   // review #13: reject a config that would share a physical pin/channel with an
   // already-registered one (two outputs on the same GPIO, MCP pin or PCA channel).
-  for (uint8_t i = 0; i < _configCount; i++) {
-    if (configsConflict(cfg, _configPool[i])) {
-      DBGF("[Factory] Rejected actuator '%s': hardware resource conflict with id %d\n",
-           cfg.name, _configPool[i].id);
-      return -1;
-    }
+  uint8_t conflictId = 0;
+  if (hasResourceConflict(cfg, 0xFF, conflictId)) {
+    DBGF("[Factory] Rejected actuator '%s': hardware resource conflict with id %d\n",
+         cfg.name, conflictId);
+    return -1;
   }
 
   _configPool[_configCount] = cfg;
   _configCount++;
   return _configCount - 1;
+}
+
+bool ActuatorFactory::hasResourceConflict(const ActuatorConfig& candidate,
+                                          uint8_t excludeId,
+                                          uint8_t& conflictId) const {
+  for (uint8_t i = 0; i < _configCount; i++) {
+    if (_configPool[i].id == excludeId) continue;  // the config being edited
+    if (actuatorConfigsConflict(candidate, _configPool[i])) {
+      conflictId = _configPool[i].id;
+      return true;
+    }
+  }
+  return false;
 }
 
 bool ActuatorFactory::removeConfig(uint8_t id) {
@@ -239,6 +200,16 @@ ActuatorConfig* ActuatorFactory::findConfig(uint8_t id) {
 }
 
 uint8_t ActuatorFactory::rebuildAll() {
+  // clearAll() vide le registre et createAll() reconstruit les objets dans les
+  // pools statiques — deux operations que le Scheduler lit en continu depuis
+  // Core 1. On met donc le coeur temps reel en pause pendant la reconstruction
+  // (voir core/reconfig_barrier.h) ; sans cela, un dispatch concurrent pouvait
+  // atteindre un Actuator en cours de reaffectation.
+  ReconfigLock lock;
+  if (!lock.ok()) {
+    DBGLN("[Factory] WARNING: RT core did not park before rebuild");
+  }
+
   // Nettoyer les enregistrements existants dans le manager
   _manager->clearAll();
 
@@ -257,7 +228,11 @@ HalDriver* ActuatorFactory::_getDriver(HardwareBus bus, uint8_t hwAddress) {
       if (!_mcpDrivers) return nullptr;
       if (hwAddress < MCP_BASE_ADDRESS) return nullptr;  // C4 fix: prevent underflow
       uint8_t idx = hwAddress - MCP_BASE_ADDRESS;
-      if (idx < _mcpCount && _mcpDrivers[idx].isReady()) {
+      // Bound by the array size, then ask the slot itself whether the module
+      // answered at boot. Bounding by "number of modules found" instead would
+      // hide every module behind a gap in the address range (0x20 absent +
+      // 0x21 present => count 1 => index 1 rejected).
+      if (idx < _mcpSlots && _mcpDrivers[idx].isReady()) {
         return &_mcpDrivers[idx];
       }
       return nullptr;
@@ -283,7 +258,8 @@ PCA9685Driver* ActuatorFactory::_getPcaDriver(uint8_t hwAddress) {
   if (!_pcaDrivers) return nullptr;
   if (hwAddress < PCA_BASE_ADDRESS) return nullptr;  // C4 fix: prevent underflow
   uint8_t idx = hwAddress - PCA_BASE_ADDRESS;
-  if (idx < _pcaCount && _pcaDrivers[idx].isReady()) {
+  // Bounded by array size, not by module count — see _getDriver() above.
+  if (idx < _pcaSlots && _pcaDrivers[idx].isReady()) {
     return &_pcaDrivers[idx];
   }
   return nullptr;

@@ -159,6 +159,23 @@ private:
   // Helpers
   void _sendJson(AsyncWebServerRequest* req, int code, const JsonDocument& doc);
   void _sendError(AsyncWebServerRequest* req, int code, const char* msg);
+
+  // ---- Chunked request-body reassembly --------------------------------------
+  // ESPAsyncWebServer delivers a request body in as many callbacks as it takes
+  // TCP segments to arrive, passing (index, total). Handling only `index == 0`
+  // — as every route here used to — truncated any payload above ~1.4 kB to its
+  // first segment, so a large instrument or pipeline POST failed to parse (or,
+  // worse, parsed a prefix). This buffers the fragments in the request's own
+  // temp storage (freed by the server when the request is destroyed) and
+  // returns true exactly once, on the final chunk, with the complete body.
+  //
+  // Returns false on every intermediate chunk, and also when the body exceeds
+  // MAX_REQUEST_BODY or cannot be allocated — in which case it has already
+  // answered the request with an error.
+  static const size_t MAX_REQUEST_BODY = 16384;
+  bool _collectBody(AsyncWebServerRequest* req, uint8_t* data, size_t len,
+                    size_t index, size_t total,
+                    uint8_t*& body, size_t& bodyLen);
   bool _panicActiveReject(AsyncWebServerRequest* req);  // P0 #3
   uint8_t _extractId(AsyncWebServerRequest* req, const char* param);
   void _wsBroadcast(const char* type, const JsonObject& data);

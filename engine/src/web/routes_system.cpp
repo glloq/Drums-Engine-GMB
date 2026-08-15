@@ -2,6 +2,7 @@
 #include "../hal/i2c_scanner.h"
 #include "../core/error_log.h"
 #include "../core/panic_state.h"
+#include "../core/status_led.h"
 #include <LittleFS.h>
 
 // --- System ---
@@ -149,6 +150,29 @@ void WebServerManager::_handleGetCapabilities(AsyncWebServerRequest* req) {
   doc["maxActuators"] = MAX_ACTUATORS;
   doc["maxInstruments"] = MAX_INSTRUMENTS;
   doc["maxActuatorsPerInstrument"] = MAX_ACTUATORS_PER_INST;
+
+  // --- Hardware map (consumed by the "Cablage" page to generate the wiring
+  // report). Everything here is a compile-time constant of the firmware, so the
+  // UI never has to hardcode a pin number that could drift from config.h.
+  JsonObject hw = doc["hardware"].to<JsonObject>();
+  hw["board"] = "ESP32 (WROOM-32)";
+  hw["i2cSda"] = I2C_SDA;
+  hw["i2cScl"] = I2C_SCL;
+  hw["i2cFreq"] = I2C_FREQ;
+  hw["mcpBaseAddress"] = MCP_BASE_ADDRESS;
+  hw["mcpMaxModules"] = MCP_MAX_MODULES;
+  hw["pcaBaseAddress"] = PCA_BASE_ADDRESS;
+  hw["pcaMaxModules"] = PCA_MAX_MODULES;
+  hw["pcaFrequency"] = PCA_FREQUENCY;
+  hw["statusLedPin"] = STATUS_LED_PIN;
+  hw["bootButtonPin"] = BOOT_BUTTON_PIN;
+  hw["micSck"] = MIC_I2S_SCK;
+  hw["micWs"] = MIC_I2S_WS;
+  hw["micSd"] = MIC_I2S_SD;
+  hw["maxConcurrentActive"] = MAX_CONCURRENT_ACTIVE;
+  hw["solenoidMaxOnMs"] = SOLENOID_MAX_ON_US / 1000;
+  hw["motorMaxContinuousMs"] = MOTOR_MAX_CONTINUOUS_US / 1000;
+  hw["ledMaxStrips"] = LED_MAX_STRIPS;
 
   // Velocity curves
   JsonArray curves = doc["velocityCurves"].to<JsonArray>();

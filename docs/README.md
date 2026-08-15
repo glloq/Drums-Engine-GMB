@@ -10,7 +10,8 @@ Ce dossier regroupe la documentation utile et maintenue du projet.
 5. [`roadmap.md`](roadmap.md) — plan d'evolution (Phases 1-7).
 6. [`frontend-backend-linkage.md`](frontend-backend-linkage.md) — controle des liaisons UI/API.
 7. [`deployment-guide.md`](deployment-guide.md) — guide de deploiement complet (flash, WiFi, securite, MIDI).
-8. [`production-readiness.md`](production-readiness.md) — audit production et historique des sprints.
+8. [`wiring-page.md`](wiring-page.md) — page "Cablage" : dossier de branchements electriques genere depuis la configuration.
+9. [`production-readiness.md`](production-readiness.md) — audit production et historique des sprints.
 
 ## Regles de maintenance
 - Toute nouvelle doc doit etre ajoutee ici (pas a la racine).

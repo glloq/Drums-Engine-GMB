@@ -16,6 +16,12 @@ pio run -t upload       # Flasher firmware
 pio run -t uploadfs     # Uploader UI web (LittleFS)
 ```
 
+L'interface web servie par le firmware est embarquee en PROGMEM. Apres toute
+modification de `engine/data/index.html`, regenerez l'en-tete embarque :
+```bash
+python3 tools/gen_index_gz.py
+```
+
 ### Arduino IDE 2.x
 1. Ouvrir `engine/engine.ino`
 2. Installer les libs requises (voir [`docs/deployment-guide.md`](docs/deployment-guide.md))
@@ -54,6 +60,7 @@ Protections concurrence : spinlocks dual-core, mutex I2C, ISR atomique, ecriture
 - API web: [`docs/web-api.md`](docs/web-api.md)
 - Scheduler temps reel: [`docs/realtime-scheduler.md`](docs/realtime-scheduler.md)
 - Guide de deploiement: [`docs/deployment-guide.md`](docs/deployment-guide.md)
+- Page Cablage (branchements generes): [`docs/wiring-page.md`](docs/wiring-page.md)
 - Audit production: [`docs/production-readiness.md`](docs/production-readiness.md)
 - Roadmap: [`docs/roadmap.md`](docs/roadmap.md)
 

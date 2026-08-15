@@ -234,6 +234,38 @@ input[type=checkbox] { width: auto; }
 .act-calib-quick { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
 .act-calib-info { font-size: 0.78em; color: var(--fg2); margin-top: 6px; }
 
+/* Wiring / Cablage (generated page) */
+.wt { width: 100%; border-collapse: collapse; font-size: 0.8em; }
+.wt th, .wt td { text-align: left; padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.08); vertical-align: top; }
+.wt th { color: var(--fg2); font-weight: 600; font-size: 0.92em; text-transform: uppercase; letter-spacing: 0.03em; white-space: nowrap; }
+.wt tbody tr:hover { background: rgba(255,255,255,0.03); }
+.wt tbody tr:last-child td { border-bottom: none; }
+[data-theme="light"] .wt th, [data-theme="light"] .wt td { border-bottom-color: rgba(0,0,0,0.08); }
+[data-theme="light"] .wt tbody tr:hover { background: rgba(0,0,0,0.03); }
+.wt-wrap { overflow-x: auto; margin: 8px 0 4px; }
+.wschem { font-family: ui-monospace, 'Courier New', monospace; font-size: 0.72em; line-height: 1.45; background: var(--bg); border-radius: var(--radius); padding: 10px 12px; overflow-x: auto; white-space: pre; margin: 8px 0; color: var(--fg2); }
+.wnote { padding: 8px 10px; border-radius: 4px; font-size: 0.82em; margin-bottom: 6px; line-height: 1.5; }
+.wnote.info { background: rgba(83,52,131,0.18); border-left: 3px solid var(--accent2); }
+.wnote.ok { background: rgba(76,175,80,0.12); border-left: 3px solid var(--success); }
+.wnote.warn { background: rgba(255,152,0,0.12); border-left: 3px solid var(--warn); }
+.wnote.err { background: rgba(233,69,96,0.14); border-left: 3px solid var(--accent); }
+.wsub { font-size: 0.92em; font-weight: 600; margin: 14px 0 2px; color: var(--fg); }
+.wsub:first-child { margin-top: 0; }
+.wlist { font-size: 0.82em; color: var(--fg2); line-height: 1.7; margin: 6px 0 6px 18px; }
+.wlist code { background: rgba(255,255,255,0.07); padding: 1px 5px; border-radius: 3px; font-size: 0.95em; }
+[data-theme="light"] .wlist code { background: rgba(0,0,0,0.07); }
+.wtext { font-size: 0.84em; color: var(--fg2); line-height: 1.6; margin: 6px 0; }
+@media print {
+  body.print-wiring .header, body.print-wiring .tabs, body.print-wiring .toast,
+  body.print-wiring .modal-overlay, body.print-wiring .no-print { display: none !important; }
+  body.print-wiring .panel { display: none !important; }
+  body.print-wiring #tab-wiring { display: block !important; }
+  body.print-wiring { background: #fff; color: #000; }
+  body.print-wiring .card { box-shadow: none; border: 1px solid #bbb; background: #fff; page-break-inside: avoid; }
+  body.print-wiring .wschem, body.print-wiring .wnote { background: #f5f5f5; color: #000; }
+  body.print-wiring .wt th, body.print-wiring .wt td { border-bottom-color: #ccc; }
+}
+
 /* Login screen */
 .login-overlay { position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center; }
 .login-box { background:var(--bg2);border-radius:12px;padding:32px 28px;max-width:360px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.5);text-align:center; }
@@ -327,6 +359,7 @@ input[type=checkbox] { width: auto; }
   <div class="tab active" data-tab="actuators"><span class="tab-step">1</span> Actionneurs <span id="tabBadgeAct" class="tab-badge"></span></div>
   <div class="tab" data-tab="instruments"><span class="tab-step">2</span> Instruments <span id="tabBadgeInstr" class="tab-badge"></span></div>
   <div class="tab" data-tab="leds" id="tabLeds" style="display:none;">LEDs</div>
+  <div class="tab" data-tab="wiring">Cablage</div>
   <div class="tab" data-tab="mappings">Traitement MIDI</div>
   <div class="tab" data-tab="piano">Piano</div>
   <div class="tab" data-tab="calibration" id="tabCalibration" style="display:none;">Latence</div>
@@ -419,6 +452,36 @@ input[type=checkbox] { width: auto; }
       </h3>
       <div id="ledThemeList"></div>
     </div>
+  </div>
+
+  <!-- ====== WIRING / CABLAGE TAB ====== -->
+  <div class="panel" id="tab-wiring">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+      <h2>Branchements electriques</h2>
+      <div class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-sm btn-secondary" onclick="refreshWiring()">Actualiser</button>
+        <button class="btn btn-sm btn-secondary" onclick="downloadWiringMarkdown()">Exporter .md</button>
+        <button class="btn btn-sm btn-primary" onclick="printWiring()">Imprimer</button>
+      </div>
+    </div>
+
+    <div class="help-box no-print" style="margin-bottom:16px;">
+      Page <strong>generee automatiquement</strong> a partir des actionneurs, des fins de course et des strips LED
+      configures : affectation des GPIO de l'ESP32, modules MCP23017 / PCA9685, etage de puissance (MOSFET, diodes de
+      roue libre, condensateurs de reservoir, fusibles) et dimensionnement des alimentations.
+      Les valeurs de courant et de tension ne sont pas connues du firmware : ajustez-les ci-dessous pour votre materiel.
+      <strong>Verifiez toujours les datasheets de vos composants avant de cabler.</strong>
+    </div>
+
+    <div class="card no-print">
+      <h3>Parametres electriques
+        <button class="btn btn-sm btn-secondary" onclick="toggleWiringParams()" id="btnWiringParams">Modifier</button>
+      </h3>
+      <p class="hint" id="wiringParamsSummary" style="margin-top:0;"></p>
+      <div id="wiringParamsBox" style="display:none;"></div>
+    </div>
+
+    <div id="wiringReport"></div>
   </div>
 
   <!-- ====== PIPELINE EDITOR TAB ====== -->
@@ -1777,6 +1840,7 @@ async function initApp() {
   try {
     const micData = await api('mic/status');
     if (micData && micData.connected) {
+      micConnected = true;   // also declares the I2S pins on the wiring page
       document.getElementById('tabCalibration').style.display = '';
     }
   } catch(e) {}
@@ -5146,6 +5210,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     sessionStorage.setItem('lastTab', tab.dataset.tab);
     if (tab.dataset.tab === 'mappings') refreshMappings();
     if (tab.dataset.tab === 'leds') loadLedData();
+    if (tab.dataset.tab === 'wiring') renderWiring();
     if (tab.dataset.tab === 'piano') renderPianoPads();
     if (tab.dataset.tab === 'calibration') { loadCalibrationData(); } else { stopMicLevelPolling(); }
     // Stop piano live polling when leaving piano tab
@@ -6411,6 +6476,866 @@ async function measureLatencyBurst() {
     'success'
   );
   toast('Latence moyenne: ' + avg.toFixed(2) + ' ms (' + results.length + '/' + count + ')', 'success');
+}
+
+// ====================================================================
+// Cablage / Branchements electriques
+// --------------------------------------------------------------------
+// Page entierement generee cote client a partir de:
+//   - `actuators`   (bus, adresse I2C, broche, fins de course, pin direction)
+//   - `ledStrips`   (GPIO data, nombre de LEDs, luminosite max)
+//   - `capabilities.hardware` (constantes de config.h: I2C, micro, LED statut)
+// Le firmware ne connait ni les tensions ni les courants du materiel reel:
+// ils viennent des parametres utilisateur (localStorage).
+// ====================================================================
+const WIRING_LS_KEY = 'wiringParams';
+
+const WIRING_FIELDS = [
+  {k:'solV',       label:'Rail solenoides (V)',            def:12,  min:3,    max:60,  step:0.5},
+  {k:'solA',       label:'Courant crete / solenoide (A)',  def:1.5, min:0.05, max:20,  step:0.05},
+  {k:'servoV',     label:'Rail servos (V)',                def:6,   min:3,    max:12,  step:0.1},
+  {k:'servoA',     label:'Courant crete / servo (A)',      def:1,   min:0.05, max:10,  step:0.05},
+  {k:'servoIdleA', label:'Courant repos / servo (A)',      def:0.1, min:0,    max:5,   step:0.01},
+  {k:'motorV',     label:'Rail moteurs (V)',               def:12,  min:3,    max:60,  step:0.5},
+  {k:'motorA',     label:'Courant crete / moteur (A)',     def:1,   min:0.05, max:20,  step:0.05},
+  {k:'ledV',       label:'Rail LED (V)',                   def:5,   min:3,    max:24,  step:0.1},
+  {k:'ledmA',      label:'Courant / LED blanc plein (mA)', def:60,  min:5,    max:120, step:1},
+  {k:'margin',     label:'Marge de securite (%)',          def:30,  min:0,    max:200, step:5},
+  {k:'maxSim',     label:'Actionneurs simultanes',         def:8,   min:1,    max:32,  step:1}
+];
+const WIRING_DRIVERS = {
+  mosfet:  'MOSFET N logique (discret)',
+  uln2803: 'ULN2803A (Darlington, 500 mA / voie)',
+  module:  'Module MOSFET / relais pre-cable'
+};
+const WIRING_DEFAULT_HW = {
+  board: 'ESP32 (WROOM-32)', i2cSda: 21, i2cScl: 22, i2cFreq: 400000,
+  mcpBaseAddress: 32, mcpMaxModules: 4, pcaBaseAddress: 64, pcaMaxModules: 4, pcaFrequency: 50,
+  statusLedPin: 2, bootButtonPin: 0, micSck: 26, micWs: 25, micSd: 33,
+  maxConcurrentActive: 8, solenoidMaxOnMs: 500, motorMaxContinuousMs: 5000, ledMaxStrips: 4
+};
+// Broches ESP32 particulieres (cf. actuator_validation.cpp cote firmware)
+const ESP32_STRAP_PINS = [0, 2, 5, 12, 15];
+const ESP32_FLASH_PINS = [6, 7, 8, 9, 10, 11];
+
+let micConnected = false;
+
+function wiringHw() {
+  return Object.assign({}, WIRING_DEFAULT_HW, (capabilities && capabilities.hardware) || {});
+}
+
+function loadWiringParams() {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(WIRING_LS_KEY) || '{}') || {}; } catch(e) { saved = {}; }
+  const hw = wiringHw();
+  const p = {};
+  WIRING_FIELDS.forEach(f => {
+    const def = (f.k === 'maxSim') ? (hw.maxConcurrentActive || f.def) : f.def;
+    const v = parseFloat(saved[f.k]);
+    p[f.k] = (isFinite(v) && v >= f.min && v <= f.max) ? v : def;
+  });
+  p.driver = WIRING_DRIVERS[saved.driver] ? saved.driver : 'mosfet';
+  return p;
+}
+
+function toggleWiringParams() {
+  const box = document.getElementById('wiringParamsBox');
+  const open = box.style.display === 'none';
+  box.style.display = open ? 'block' : 'none';
+  document.getElementById('btnWiringParams').textContent = open ? 'Masquer' : 'Modifier';
+  if (open) renderWiringParamsForm();
+}
+
+function renderWiringParamsForm() {
+  const p = loadWiringParams();
+  document.getElementById('wiringParamsBox').innerHTML =
+    '<div class="editor-grid">' +
+    WIRING_FIELDS.map(f =>
+      '<div class="form-group"><label>' + escapeHtml(f.label) + '</label>' +
+      '<input type="number" class="small-input" id="wp_' + f.k + '" value="' + p[f.k] +
+      '" min="' + f.min + '" max="' + f.max + '" step="' + f.step + '"></div>'
+    ).join('') +
+    '<div class="form-group"><label>Etage de puissance solenoides</label>' +
+    '<select class="small-select" id="wp_driver">' +
+    Object.keys(WIRING_DRIVERS).map(k =>
+      '<option value="' + k + '"' + (k === p.driver ? ' selected' : '') + '>' + escapeHtml(WIRING_DRIVERS[k]) + '</option>'
+    ).join('') +
+    '</select></div></div>' +
+    '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">' +
+    '<button class="btn btn-sm btn-primary" onclick="saveWiringParams()">Appliquer</button>' +
+    '<button class="btn btn-sm btn-secondary" onclick="resetWiringParams()">Valeurs par defaut</button>' +
+    '</div>';
+}
+
+function saveWiringParams() {
+  const out = {};
+  WIRING_FIELDS.forEach(f => {
+    const el = document.getElementById('wp_' + f.k);
+    let v = parseFloat(el ? el.value : NaN);
+    if (!isFinite(v)) v = f.def;
+    v = Math.min(f.max, Math.max(f.min, v));
+    out[f.k] = v;
+    if (el) el.value = v;
+  });
+  const sel = document.getElementById('wp_driver');
+  out.driver = (sel && WIRING_DRIVERS[sel.value]) ? sel.value : 'mosfet';
+  localStorage.setItem(WIRING_LS_KEY, JSON.stringify(out));
+  renderWiring();
+  toast('Parametres appliques', 'success');
+}
+
+function resetWiringParams() {
+  localStorage.removeItem(WIRING_LS_KEY);
+  renderWiringParamsForm();
+  renderWiring();
+  toast('Parametres remis par defaut');
+}
+
+async function refreshWiring() {
+  await Promise.all([loadActuators(), loadLedData()]);
+  renderWiring();
+  toast('Cablage regenere', 'success');
+}
+
+function printWiring() {
+  document.body.classList.add('print-wiring');
+  const clear = () => document.body.classList.remove('print-wiring');
+  window.addEventListener('afterprint', clear, {once: true});
+  setTimeout(clear, 3000);
+  window.print();
+}
+
+// --- Choix de composants (regles simples, a recouper avec les datasheets) ---
+function wFuseFor(amps) {
+  const series = [0.5, 1, 1.5, 2, 2.5, 3.15, 4, 5, 6.3, 7.5, 10, 15, 20, 25, 30, 40];
+  const target = amps * 1.5;
+  for (let i = 0; i < series.length; i++) if (series[i] >= target) return series[i];
+  return Math.ceil(target);
+}
+function wCapFor(amps) {
+  const series = [470, 1000, 2200, 3300, 4700, 6800, 10000, 15000, 22000];
+  const target = amps * 1000;  // regle du pouce: ~1000 uF par ampere pulse
+  for (let i = 0; i < series.length; i++) if (series[i] >= target) return series[i];
+  return 22000;
+}
+// Tension de service du condensateur : serie standard, au moins 1.5x le rail
+function wCapVolts(railV) {
+  const series = [6.3, 10, 16, 25, 35, 50, 63, 100];
+  const target = railV * 1.5;
+  for (let i = 0; i < series.length; i++) if (series[i] >= target) return series[i];
+  return 100;
+}
+function wDiodeFor(amps) {
+  if (amps <= 1)  return 'UF4007 (1 A ultrarapide)';
+  if (amps <= 3)  return 'UF5408 / 1N5408 (3 A)';
+  if (amps <= 5)  return 'SB560 (Schottky 5 A)';
+  return 'MBR20100CT (Schottky 20 A)';
+}
+function wMosfetFor(amps) {
+  if (amps <= 3)  return 'IRLZ44N ou IRLB8721 (N-MOS logique, Vgs(th) < 2.5 V)';
+  if (amps <= 10) return 'IRLZ44N + dissipateur, ou IRLB3034';
+  return 'IRLB3034 / IRF1404 + dissipateur (driver de gate conseille)';
+}
+function wWireSection(amps) {
+  if (amps <= 1)   return '0.35 mm2 (AWG 22)';
+  if (amps <= 2)   return '0.5 mm2 (AWG 20)';
+  if (amps <= 3.5) return '0.75 mm2 (AWG 18)';
+  if (amps <= 6)   return '1.0 mm2 (AWG 17)';
+  if (amps <= 10)  return '1.5 mm2 (AWG 15)';
+  if (amps <= 16)  return '2.5 mm2 (AWG 13)';
+  return '4.0 mm2 (AWG 11)';
+}
+function wHex(n) { return '0x' + Number(n).toString(16).toUpperCase().padStart(2, '0'); }
+function wA(x) { return (Math.round(x * 100) / 100).toFixed(2) + ' A'; }
+function wV(x) { return (Math.round(x * 10) / 10).toFixed(1) + ' V'; }
+function wMcpPinLabel(pin) { return pin < 8 ? ('GPA' + pin) : ('GPB' + (pin - 8)); }
+function wJumpers(addr, base, bits) {
+  const n = Number(addr) - Number(base);
+  if (n < 0) return 'adresse hors plage';
+  const out = [];
+  for (let i = bits - 1; i >= 0; i--) out.push('A' + i + '=' + ((n >> i) & 1));
+  return out.join(' ');
+}
+function wActName(a) { return (a.name && a.name.length) ? a.name : ('Actionneur #' + a.id); }
+// Pont en H = moteur PWM avec broche de direction (MOTOR_SWEEP a 2 butees, MOTOR_ALTERNATE).
+// Un MOTOR_SWEEP a une seule butee et sans hwAddress tourne dans un seul sens: simple MOSFET.
+function wIsHBridge(a) {
+  return a.type === 2 && (a.behavior === 12 || a.behavior === 13) && a.hwAddress > 0 && a.hwAddress < 40;
+}
+
+// Source du signal logique d'un actionneur (texte court, reutilise partout)
+function wSignalSource(a) {
+  if (a.bus === 0) return 'MCP23017 ' + wHex(a.hwAddress) + ' broche ' + wMcpPinLabel(a.hwPin);
+  if (a.bus === 1) return 'PCA9685 ' + wHex(a.hwAddress) + ' canal ' + a.hwPin;
+  if (a.bus === 2) return 'ESP32 GPIO ' + a.hwPin;
+  if (a.bus === 3) return 'ESP32 GPIO ' + a.hwPin + ' (LEDC PWM)';
+  return 'bus inconnu';
+}
+
+// --------------------------------------------------------------------
+// Construction du modele (structure de sections/blocs, rendue ensuite
+// en HTML ou en Markdown sans dupliquer la logique).
+// --------------------------------------------------------------------
+function buildWiringModel() {
+  const p = loadWiringParams();
+  const hw = wiringHw();
+  const acts = (actuators || []).slice().sort((a, b) => a.id - b.id);
+  const strips = (ledStrips || []).filter(s => s.enabled && s.ledCount > 0);
+
+  const solenoids = acts.filter(a => a.type === 1);
+  const servos    = acts.filter(a => a.type === 0);
+  const motors    = acts.filter(a => a.type === 2 || a.type === 3);
+
+  // --- Modules I2C effectivement utilises ---
+  const mcpMap = {}, pcaMap = {};
+  acts.forEach(a => {
+    if (a.bus === 0) (mcpMap[a.hwAddress] = mcpMap[a.hwAddress] || []).push(a);
+    else if (a.bus === 1) (pcaMap[a.hwAddress] = pcaMap[a.hwAddress] || []).push(a);
+  });
+  const mcpAddrs = Object.keys(mcpMap).map(Number).sort((a, b) => a - b);
+  const pcaAddrs = Object.keys(pcaMap).map(Number).sort((a, b) => a - b);
+  const usesI2c = mcpAddrs.length + pcaAddrs.length > 0;
+
+  // --- Affectation des GPIO ESP32 ---
+  const pins = [];
+  const addPin = (pin, role, dir, detail, system) => {
+    if (pin === undefined || pin === null || pin === 255) return;
+    const n = Number(pin);
+    if (!isFinite(n)) return;
+    pins.push({pin: n, role: role, dir: dir, detail: detail, system: !!system});
+  };
+  if (usesI2c) {
+    addPin(hw.i2cSda, 'Bus I2C - SDA', 'I/O', 'Vers SDA de tous les modules, pull-up 4.7 kOhm vers 3.3 V (un seul jeu sur le bus)', true);
+    addPin(hw.i2cScl, 'Bus I2C - SCL', 'I/O', 'Vers SCL de tous les modules, pull-up 4.7 kOhm vers 3.3 V (un seul jeu sur le bus)', true);
+  }
+  addPin(hw.statusLedPin, 'LED de statut', 'OUT', 'LED integree de la carte DevKit', true);
+  addPin(hw.bootButtonPin, 'Bouton BOOT', 'IN', 'Bouton de la carte : ne pas cabler de charge dessus', true);
+  if (micConnected) {
+    addPin(hw.micSck, 'Micro INMP441 - SCK', 'OUT', 'Horloge I2S (BCLK)', true);
+    addPin(hw.micWs, 'Micro INMP441 - WS', 'OUT', 'Word select I2S (LRCLK)', true);
+    addPin(hw.micSd, 'Micro INMP441 - SD', 'IN', 'Donnees I2S (DOUT du micro)', true);
+  }
+  acts.forEach(a => {
+    const nm = wActName(a) + ' (#' + a.id + ')';
+    if (a.bus === 2) addPin(a.hwPin, 'Commande ' + nm, 'OUT', 'Sortie logique 3.3 V vers l\'etage de puissance');
+    if (a.bus === 3) addPin(a.hwPin, 'PWM ' + nm, 'OUT (LEDC)', 'PWM materiel vers l\'entree PWM du driver');
+    if (a.type === 3) addPin(a.hwAddress, 'Capteur optique ' + nm, 'IN', 'INPUT_PULLUP interne, sortie du capteur en collecteur ouvert');
+    if (wIsHBridge(a)) addPin(a.hwAddress, 'Direction ' + nm, 'OUT', 'Entree DIR / IN2 du pont en H');
+    addPin(a.endStopPin1, 'Fin de course 1 ' + nm, 'IN', 'Contact vers GND, INPUT_PULLUP interne (actif a l\'etat bas)');
+    addPin(a.endStopPin2, 'Fin de course 2 ' + nm, 'IN', 'Contact vers GND, INPUT_PULLUP interne (actif a l\'etat bas)');
+  });
+  strips.forEach(s => addPin(s.gpioPin, 'Data strip LED #' + s.id, 'OUT (RMT)',
+    s.ledCount + ' LEDs - adaptateur de niveau 3.3 -> 5 V puis resistance serie 330-470 Ohm'));
+  pins.sort((a, b) => a.pin - b.pin || (a.role < b.role ? -1 : 1));
+
+  // Conflits et broches sensibles
+  const byPin = {};
+  pins.forEach(e => (byPin[e.pin] = byPin[e.pin] || []).push(e));
+  const conflicts = Object.keys(byPin).map(Number).filter(pin => byPin[pin].length > 1).sort((a, b) => a - b);
+  const strapUsed = pins.filter(e => !e.system && ESP32_STRAP_PINS.indexOf(e.pin) >= 0);
+  const flashUsed = pins.filter(e => ESP32_FLASH_PINS.indexOf(e.pin) >= 0);
+
+  // --- Rails d'alimentation ---
+  const nSim = Math.max(1, Math.round(p.maxSim));
+  const rails = [];
+  const addRail = (name, volts, count, peakA, idleA, pulsed) => {
+    if (count <= 0) return null;
+    const idleTotal = count * idleA;
+    const delta = Math.max(0, peakA - idleA);
+    const simCount = Math.min(count, nSim);
+    const simA = idleTotal + simCount * delta;
+    const worstA = count * peakA;
+    const psuA = simA * (1 + p.margin / 100);
+    const r = {
+      name: name, volts: volts, count: count, simCount: simCount,
+      simA: simA, worstA: worstA, psuA: psuA,
+      fuse: wFuseFor(simA), cap: pulsed ? wCapFor(simCount * delta) : 0,
+      wire: wWireSection(simA), pulsed: pulsed
+    };
+    rails.push(r);
+    return r;
+  };
+  const railSol   = addRail('Solenoides', p.solV, solenoids.length, p.solA, 0, true);
+  const railServo = addRail('Servos', p.servoV, servos.length, p.servoA, p.servoIdleA, true);
+  const railMotor = addRail('Moteurs', p.motorV, motors.length, p.motorA, 0, true);
+  let ledFullA = 0, ledLimitedA = 0, ledTotalLeds = 0;
+  strips.forEach(s => {
+    const n = s.ledCount || 0;
+    const br = (s.maxBrightness === undefined ? 255 : s.maxBrightness);
+    ledTotalLeds += n;
+    ledFullA += n * p.ledmA / 1000;
+    ledLimitedA += n * p.ledmA / 1000 * (br / 255);
+  });
+  let railLed = null;
+  if (strips.length) {
+    railLed = {
+      name: 'Strips LED', volts: p.ledV, count: ledTotalLeds, simCount: ledTotalLeds,
+      simA: ledLimitedA, worstA: ledFullA, psuA: ledLimitedA * (1 + p.margin / 100),
+      fuse: wFuseFor(ledLimitedA), cap: 1000 * strips.length,
+      wire: wWireSection(ledLimitedA), pulsed: false
+    };
+    rails.push(railLed);
+  }
+  const logicA = 0.5 + (mcpAddrs.length + pcaAddrs.length) * 0.02;
+  rails.push({
+    name: 'Logique (ESP32 + modules)', volts: 5, count: 1 + mcpAddrs.length + pcaAddrs.length,
+    simCount: 1, simA: logicA, worstA: logicA, psuA: logicA * (1 + p.margin / 100),
+    fuse: wFuseFor(logicA), cap: 470, wire: wWireSection(logicA), pulsed: false
+  });
+
+  // --- Nomenclature ---
+  const bom = [];
+  const addBom = (qty, item, ref, role) => { if (qty > 0) bom.push({qty: qty, item: item, ref: ref, role: role}); };
+  addBom(1, 'Carte ESP32', hw.board, 'Controleur (WiFi, rtpMIDI, ordonnanceur temps reel)');
+  addBom(mcpAddrs.length, 'Expandeur GPIO I2C', 'MCP23017', '16 sorties logiques par module pour les solenoides');
+  addBom(pcaAddrs.length, 'Controleur PWM I2C', 'PCA9685 (' + hw.pcaFrequency + ' Hz)', '16 voies PWM pour servos / moteurs');
+  if (usesI2c) {
+    addBom(2, 'Resistance 4.7 kOhm', '1/4 W', 'Pull-up du bus I2C (SDA et SCL) - un seul jeu pour tout le bus');
+    addBom(mcpAddrs.length + pcaAddrs.length, 'Condensateur 100 nF', 'ceramique X7R', 'Decouplage d\'alimentation au plus pres de chaque module I2C');
+  }
+  const solDirect = solenoids.length;
+  if (p.driver === 'mosfet' && solDirect) {
+    addBom(solDirect, 'MOSFET canal N', wMosfetFor(p.solA), 'Commutation de chaque solenoide');
+    addBom(solDirect, 'Resistance 100 Ohm', '1/4 W', 'Resistance de gate (limitation du courant de commutation)');
+    addBom(solDirect, 'Resistance 10 kOhm', '1/4 W', 'Pull-down de gate : solenoide au repos tant que l\'ESP32 boote');
+  } else if (p.driver === 'uln2803' && solDirect) {
+    addBom(Math.ceil(solDirect / 8), 'Reseau Darlington', 'ULN2803A', '8 voies par boitier, 500 mA max par voie, diodes de clamp integrees (broche COM)');
+  } else if (solDirect) {
+    addBom(solDirect, 'Module de puissance pre-cable', 'module MOSFET ou relais', 'Etage de puissance par solenoide (verifier la tension de commande 3.3 V)');
+  }
+  if (solDirect && p.driver !== 'uln2803') {
+    addBom(solDirect, 'Diode de roue libre', wDiodeFor(p.solA), 'En inverse sur chaque bobine : absorbe la surtension a la coupure');
+  }
+  const hbridges = motors.filter(wIsHBridge).length;
+  const simpleMotors = motors.length - hbridges;
+  addBom(hbridges, 'Pont en H', 'DRV8871 / BTS7960 / L298N', 'Moteurs a inversion de sens (balayage, alternance)');
+  addBom(simpleMotors, 'MOSFET canal N', wMosfetFor(p.motorA), 'Moteurs a sens unique');
+  addBom(simpleMotors, 'Diode de roue libre', wDiodeFor(p.motorA), 'En inverse sur chaque moteur');
+  addBom(motors.length, 'Condensateur 100 nF', 'ceramique 100 V', 'Aux bornes du moteur : reduit les parasites de commutation des balais');
+  const opticals = acts.filter(a => a.type === 3).length;
+  addBom(opticals, 'Capteur optique', 'fourche TCST2103 / module IR', 'Comptage des fronts pour les moteurs a suivi optique');
+  const endstops = acts.reduce((n, a) => n + (a.endStopPin1 !== 255 ? 1 : 0) + (a.endStopPin2 !== 255 ? 1 : 0), 0);
+  addBom(endstops, 'Interrupteur de fin de course', 'micro-switch levier', 'Contact entre le GPIO et GND (pull-up interne de l\'ESP32)');
+  addBom(endstops, 'Condensateur 100 nF', 'ceramique', 'Anti-rebond materiel entre le GPIO et GND');
+  rails.forEach(r => { if (r.cap > 0) addBom(1, 'Condensateur ' + r.cap + ' uF', wCapVolts(r.volts) + ' V, faible ESR', 'Reservoir du rail ' + r.name); });
+  rails.forEach(r => addBom(1, 'Fusible ' + r.fuse + ' A + porte-fusible', 'temporise', 'Protection du rail ' + r.name + ' (' + wV(r.volts) + ')'));
+  addBom(strips.length ? 1 : 0, 'Adaptateur de niveau', 'SN74HCT125N', 'Data LED 3.3 V -> 5 V (fiabilise le signal WS2812B)');
+  addBom(strips.length, 'Resistance 330-470 Ohm', '1/4 W', 'En serie sur la ligne data de chaque strip LED');
+  addBom(1, 'Barre de masse / bornier', 'bornier a vis', 'Masse commune ESP32 + alimentations (obligatoire)');
+
+  // --------------------------------------------------------------
+  // Sections
+  // --------------------------------------------------------------
+  const sections = [];
+
+  // 1. Synthese
+  const synth = {title: 'Synthese', blocks: []};
+  if (!acts.length && !strips.length) {
+    synth.blocks.push({t: 'note', level: 'warn', text: 'Aucun actionneur ni strip LED configure : commencez par l\'onglet Actionneurs, la page de cablage se remplira toute seule.'});
+  }
+  synth.blocks.push({t: 'table', head: ['Element', 'Quantite', 'Detail'], rows: [
+    ['Solenoides', String(solenoids.length), solenoids.length ? WIRING_DRIVERS[p.driver] : '-'],
+    ['Servos', String(servos.length), servos.length ? 'PCA9685, ' + hw.pcaFrequency + ' Hz' : '-'],
+    ['Moteurs', String(motors.length), motors.length ? (hbridges + ' avec pont en H, ' + simpleMotors + ' a sens unique') : '-'],
+    ['Modules MCP23017', String(mcpAddrs.length), mcpAddrs.length ? mcpAddrs.map(wHex).join(', ') : '-'],
+    ['Modules PCA9685', String(pcaAddrs.length), pcaAddrs.length ? pcaAddrs.map(wHex).join(', ') : '-'],
+    ['GPIO ESP32 utilises', String(Object.keys(byPin).length), 'dont ' + pins.filter(e => e.system).length + ' reserves par le firmware'],
+    ['Fins de course', String(endstops), endstops ? 'entrees a pull-up interne' : '-'],
+    ['Strips LED', String(strips.length), strips.length ? (ledTotalLeds + ' LEDs au total') : '-']
+  ]});
+  if (conflicts.length) {
+    synth.blocks.push({t: 'note', level: 'err', text: 'Conflit de broches : ' + conflicts.map(pin =>
+      'GPIO ' + pin + ' (' + byPin[pin].map(e => e.role).join(' + ') + ')').join(' ; ') +
+      '. Corrigez la configuration avant de cabler.'});
+  } else if (acts.length || strips.length) {
+    synth.blocks.push({t: 'note', level: 'ok', text: 'Aucun conflit de broches detecte.'});
+  }
+  if (solenoids.length && p.driver === 'uln2803' && p.solA > 0.5) {
+    synth.blocks.push({t: 'note', level: 'err', text: 'Le ULN2803A est limite a 500 mA par voie (et moins si plusieurs ' +
+      'voies conduisent en meme temps), or le courant declare par solenoide est de ' + wA(p.solA) + '. ' +
+      'Passez a des MOSFET canal N, ou verifiez le courant reel de vos bobines.'});
+  }
+  if (flashUsed.length) {
+    synth.blocks.push({t: 'note', level: 'err', text: 'Broches reservees a la flash SPI utilisees (GPIO 6-11) : ' +
+      flashUsed.map(e => 'GPIO ' + e.pin + ' / ' + e.role).join(' ; ') + '. La carte ne demarrera pas.'});
+  }
+  if (strapUsed.length) {
+    synth.blocks.push({t: 'note', level: 'warn', text: 'Broches de strapping utilisees (' +
+      strapUsed.map(e => 'GPIO ' + e.pin).join(', ') + ') : leur etat est lu au demarrage. Le pull-down de gate 10 kOhm ' +
+      'est indispensable, et rien ne doit tirer GPIO 12 au niveau haut pendant le boot.'});
+  }
+  sections.push(synth);
+
+  // 2. Nomenclature
+  sections.push({title: 'Nomenclature (BOM)', blocks: [
+    {t: 'table', head: ['Qte', 'Composant', 'Reference conseillee', 'Role'],
+     rows: bom.map(b => [String(b.qty), b.item, b.ref, b.role])},
+    {t: 'note', level: 'info', text: 'Les references sont des suggestions courantes : validez tension, courant et ' +
+      'dissipation avec la datasheet de vos propres actionneurs.'}
+  ]});
+
+  // 3. GPIO ESP32
+  const gpioSec = {title: 'Affectation des GPIO ESP32', blocks: []};
+  if (!pins.length) {
+    gpioSec.blocks.push({t: 'p', text: 'Aucun GPIO de l\'ESP32 n\'est utilise directement.'});
+  } else {
+    gpioSec.blocks.push({t: 'table', head: ['GPIO', 'Fonction', 'Sens', 'Cablage'],
+      rows: pins.map(e => [String(e.pin), e.role, e.dir, e.detail])});
+  }
+  gpioSec.blocks.push({t: 'list', items: [
+    'GPIO 6 a 11 : reserves a la flash SPI, jamais utilisables.',
+    'GPIO 34 a 39 : entrees seules, sans pull-up interne ni sortie possible.',
+    'GPIO 0, 2, 5, 12, 15 : broches de strapping, leur niveau au demarrage change le mode de boot.',
+    'GPIO 1 et 3 : liaison serie de debug (115200 bauds), a eviter si vous voulez garder les traces.',
+    'Toutes les masses (ESP32, modules I2C, alimentations de puissance) doivent etre reliees entre elles.'
+  ]});
+  sections.push(gpioSec);
+
+  // 4. Modules I2C
+  if (usesI2c) {
+    const i2cSec = {title: 'Modules I2C', blocks: []};
+    i2cSec.blocks.push({t: 'p', text: 'Bus I2C sur SDA = GPIO ' + hw.i2cSda + ', SCL = GPIO ' + hw.i2cScl +
+      ', a ' + Math.round(hw.i2cFreq / 1000) + ' kHz. Alimentez la partie logique des modules en 3.3 V pour rester ' +
+      'compatible avec l\'ESP32 sans adaptateur de niveau.'});
+    mcpAddrs.forEach(addr => {
+      const list = mcpMap[addr].slice().sort((a, b) => a.hwPin - b.hwPin);
+      i2cSec.blocks.push({t: 'h', text: 'MCP23017 ' + wHex(addr) + ' - ' + list.length + '/16 voies utilisees'});
+      i2cSec.blocks.push({t: 'p', text: 'Cavaliers d\'adresse : ' + wJumpers(addr, hw.mcpBaseAddress, 3) +
+        ' (0 = relie a GND, 1 = relie a 3.3 V). RESET a relier a 3.3 V.'});
+      i2cSec.blocks.push({t: 'table', head: ['Broche', 'Actionneur', 'Type', 'Charge pilotee'],
+        rows: list.map(a => [wMcpPinLabel(a.hwPin), wActName(a) + ' (#' + a.id + ')', a.behaviorName || '',
+          (p.driver === 'uln2803' ? 'Entree du ULN2803A' : 'Gate du MOSFET via 100 Ohm')])});
+    });
+    pcaAddrs.forEach(addr => {
+      const list = pcaMap[addr].slice().sort((a, b) => a.hwPin - b.hwPin);
+      i2cSec.blocks.push({t: 'h', text: 'PCA9685 ' + wHex(addr) + ' - ' + list.length + '/16 canaux utilises'});
+      i2cSec.blocks.push({t: 'p', text: 'Cavaliers d\'adresse : ' + wJumpers(addr, hw.pcaBaseAddress, 6) +
+        '. VCC = 3.3 V (logique), V+ = rail de puissance des servos, OE relie a GND. ' +
+        'Condensateur de reservoir a souder sur le bornier V+ du module.'});
+      i2cSec.blocks.push({t: 'table', head: ['Canal', 'Actionneur', 'Type', 'Connecteur'],
+        rows: list.map(a => [String(a.hwPin), wActName(a) + ' (#' + a.id + ')', a.behaviorName || '',
+          a.type === 0 ? 'Connecteur servo 3 points (S / V+ / GND)' : 'Sortie PWM vers l\'entree du driver moteur'])});
+    });
+    i2cSec.blocks.push({t: 'list', items: [
+      'Un seul jeu de resistances de pull-up (4.7 kOhm) sur tout le bus : retirez celles des modules supplementaires.',
+      'Chaque module recoit un condensateur de 100 nF entre VCC et GND, au plus pres du boitier.',
+      'Deux modules ne peuvent pas partager la meme adresse : verifiez les cavaliers avant la mise sous tension.',
+      'Le scan I2C de la page Reglages permet de verifier que chaque adresse repond.'
+    ]});
+    sections.push(i2cSec);
+  }
+
+  // 5. Alimentations
+  const pwrSec = {title: 'Alimentations, fusibles et condensateurs', blocks: []};
+  pwrSec.blocks.push({t: 'table',
+    head: ['Rail', 'Tension', 'Charges', 'Courant simultane', 'Pire cas', 'Alim conseillee', 'Fusible', 'Reservoir', 'Section de fil'],
+    rows: rails.map(r => [r.name, wV(r.volts), String(r.count),
+      wA(r.simA) + (r.pulsed ? (' (' + r.simCount + (r.simCount > 1 ? ' actifs)' : ' actif)')) : ''),
+      wA(r.worstA), wA(r.psuA), r.fuse + ' A',
+      r.cap ? (r.cap + ' uF / ' + wCapVolts(r.volts) + ' V') : '-', r.wire])});
+  pwrSec.blocks.push({t: 'p', text: 'Le firmware limite a ' + hw.maxConcurrentActive + ' le nombre d\'actionneurs ' +
+    'actifs simultanement. La colonne "courant simultane" applique cette limite a chaque rail (hypothese conservatrice : ' +
+    'chaque rail est dimensionne comme s\'il portait a lui seul les ' + nSim + ' actionneurs actifs). ' +
+    '"Alim conseillee" ajoute la marge de ' + p.margin + ' %.'});
+  if (railSol && railMotor && Math.abs(p.solV - p.motorV) < 0.05) {
+    pwrSec.blocks.push({t: 'note', level: 'info', text: 'Les solenoides et les moteurs partagent la meme tension (' +
+      wV(p.solV) + ') : une alimentation unique de ' + wA(railSol.psuA + railMotor.psuA) + ' minimum convient, ' +
+      'mais gardez un fusible et un condensateur de reservoir par branche.'});
+  }
+  if (railLed) {
+    pwrSec.blocks.push({t: 'note', level: 'info', text: 'LEDs : ' + ledTotalLeds + ' pixels consomment ' +
+      wA(ledFullA) + ' en blanc plein. La limite de luminosite configuree ramene cela a ' + wA(ledLimitedA) + '. ' +
+      'Injectez le 5 V aux deux extremites au-dela de 2 metres de ruban.'});
+  }
+  pwrSec.blocks.push({t: 'list', items: [
+    'Ne jamais alimenter les actionneurs depuis le 5 V USB de l\'ESP32 : le regulateur de la carte ne tient pas ces courants.',
+    'Le condensateur de reservoir se place au plus pres de l\'etage de puissance, pas au niveau de l\'alimentation.',
+    'Le fusible se place sur le fil positif, entre l\'alimentation et le condensateur.',
+    'Masse commune obligatoire : reliez le GND de l\'ESP32 au GND de chaque alimentation, en etoile sur une barre de masse.',
+    'Cablez les retours de puissance en fils courts et epais, separes des fils de signal.',
+    'Securite thermique du firmware : ' + hw.solenoidMaxOnMs + ' ms d\'activation maximum par solenoide, ' +
+      Math.round(hw.motorMaxContinuousMs / 1000) + ' s en continu par moteur.'
+  ]});
+  sections.push(pwrSec);
+
+  // 6. Schemas de principe
+  const schemSec = {title: 'Schemas de principe', blocks: []};
+  if (solenoids.length && p.driver === 'mosfet') {
+    schemSec.blocks.push({t: 'h', text: 'Solenoide sur MOSFET canal N'});
+    schemSec.blocks.push({t: 'pre', text: wSchemSolenoidMosfet(p, railSol)});
+  }
+  if (solenoids.length && p.driver === 'uln2803') {
+    schemSec.blocks.push({t: 'h', text: 'Solenoides sur ULN2803A'});
+    schemSec.blocks.push({t: 'pre', text: wSchemUln(p, railSol)});
+  }
+  if (solenoids.length && p.driver === 'module') {
+    schemSec.blocks.push({t: 'h', text: 'Solenoide sur module de puissance pre-cable'});
+    schemSec.blocks.push({t: 'pre', text: wSchemModule(p, railSol)});
+  }
+  if (servos.length) {
+    schemSec.blocks.push({t: 'h', text: 'Servos sur PCA9685'});
+    schemSec.blocks.push({t: 'pre', text: wSchemServo(p, railServo, hw)});
+  }
+  if (hbridges) {
+    schemSec.blocks.push({t: 'h', text: 'Moteur a inversion de sens (pont en H)'});
+    schemSec.blocks.push({t: 'pre', text: wSchemHBridge(p, railMotor)});
+  }
+  if (simpleMotors > 0) {
+    schemSec.blocks.push({t: 'h', text: 'Moteur a sens unique (MOSFET)'});
+    schemSec.blocks.push({t: 'pre', text: wSchemMotor(p, railMotor)});
+  }
+  if (endstops) {
+    schemSec.blocks.push({t: 'h', text: 'Fin de course'});
+    schemSec.blocks.push({t: 'pre', text: wSchemEndstop()});
+  }
+  if (opticals) {
+    schemSec.blocks.push({t: 'h', text: 'Capteur optique'});
+    schemSec.blocks.push({t: 'pre', text: wSchemOptical()});
+  }
+  if (strips.length) {
+    schemSec.blocks.push({t: 'h', text: 'Strip LED WS2812B'});
+    schemSec.blocks.push({t: 'pre', text: wSchemLed(p, railLed)});
+  }
+  if (schemSec.blocks.length) sections.push(schemSec);
+
+  // 7. Cablage detaille par actionneur
+  if (acts.length) {
+    const detSec = {title: 'Cablage detaille par actionneur', blocks: []};
+    acts.forEach(a => {
+      detSec.blocks.push({t: 'h', text: wActName(a) + ' - #' + a.id + ' - ' + (a.typeName || '') +
+        ' / ' + (a.behaviorName || '') + (a.enabled ? '' : ' [DESACTIVE]')});
+      detSec.blocks.push({t: 'list', items: wActuatorSteps(a, p, hw)});
+    });
+    sections.push(detSec);
+  }
+
+  // 8. Securite
+  sections.push({title: 'Rappels de securite', blocks: [{t: 'list', items: [
+    'Cablez et verifiez hors tension, alimentation debranchee.',
+    'Mettez sous tension la logique (ESP32 et modules) avant la puissance, et coupez la puissance en premier.',
+    'Testez chaque actionneur individuellement (bouton Test de l\'onglet Actionneurs) avant de jouer un morceau complet.',
+    'Sans diode de roue libre, la surtension de coupure d\'une bobine detruit le MOSFET des les premieres frappes.',
+    'Sans pull-down de gate, un solenoide peut rester colle pendant le demarrage de l\'ESP32.',
+    'Verifiez la temperature des solenoides et des MOSFET apres quelques minutes de jeu continu.',
+    'Au-dela de 24 V ou de quelques amperes, prevoyez un interrupteur d\'arret d\'urgence sur le rail de puissance.',
+    'L\'arret d\'urgence logiciel (bouton PANIC de la page Reglages) coupe les sorties mais pas l\'alimentation.'
+  ]}]});
+
+  return {sections: sections, params: p, hw: hw, generatedAt: new Date().toLocaleString()};
+}
+
+// --- Schemas ASCII ---
+// Le rail de puissance est dessine par wPowerBus(): le libelle du fusible est
+// complete a largeur fixe, donc les barres verticales restent alignees quelles
+// que soient les valeurs calculees (5 A, 3.15 A, 10 A...).
+function wPowerBus(volts, fuse, branches) {
+  const IND = '   ';
+  const tok = ('FUSIBLE ' + fuse + ' A').padEnd(14);
+  const head = IND + '+--[ ' + tok + ' ]--+';
+  const col = ' '.repeat(head.length - 1);
+  const lines = [IND + 'RAIL +' + wV(volts) + '  (borne + de l\'alimentation)', IND + '|', head];
+  branches.forEach(b => { lines.push(col + '|'); lines.push(col + '+--> ' + b); });
+  lines.push('');
+  lines.push(IND + 'RAIL -' + wV(volts) + '  (borne - de l\'alimentation) --> GND COMMUN');
+  return lines.join('\n');
+}
+function wSchemSolenoidMosfet(p, rail) {
+  const fuse = rail ? rail.fuse : 5, cap = rail ? rail.cap : 2200;
+  return 'ETAGE DE PUISSANCE - SOLENOIDE SUR MOSFET CANAL N\n\n' +
+    wPowerBus(p.solV, fuse, [
+      'C reservoir ' + cap + ' uF / ' + wCapVolts(p.solV) + ' V --> GND (au plus pres du MOSFET)',
+      'borne (+) de la bobine du solenoide',
+      'cathode (bague) de la diode de roue libre'
+    ]) + '\n\n' +
+    '   BOBINE\n' +
+    '     borne (+) --> rail +' + wV(p.solV) + ' et cathode de la diode\n' +
+    '     borne (-) --> anode de la diode ' + wDiodeFor(p.solA) + ' et DRAIN du MOSFET\n' +
+    '\n' +
+    '   COMMANDE\n' +
+    '     ' + (p.driver === 'mosfet' ? 'MCP23017 GPAx / GPIO ESP32' : 'MCP23017 GPAx') + ' --[ 100 Ohm ]--> GATE du MOSFET\n' +
+    '     GATE --[ 10 kOhm ]--> GND        (pull-down : repos garanti au boot)\n' +
+    '     MOSFET : ' + wMosfetFor(p.solA) + '\n' +
+    '\n' +
+    '   RETOUR\n' +
+    '     SOURCE du MOSFET --> GND COMMUN, fil de ' + wWireSection(p.solA) + '\n';
+}
+function wSchemUln(p, rail) {
+  const fuse = rail ? rail.fuse : 5, cap = rail ? rail.cap : 2200;
+  return 'ETAGE DE PUISSANCE - ULN2803A (8 voies, 500 mA max par voie)\n\n' +
+    wPowerBus(p.solV, fuse, [
+      'C reservoir ' + cap + ' uF / ' + wCapVolts(p.solV) + ' V --> GND',
+      'broche COM (pin 10) du ULN2803A',
+      'borne (+) de chaque solenoide'
+    ]) + '\n\n' +
+    '   COMMANDE\n' +
+    '     MCP23017 GPAx --> entree INx (pin 1 a 8)\n' +
+    '     sortie OUTx (pin 18 a 11) --> borne (-) du solenoide\n' +
+    '     GND (pin 9) --> GND COMMUN\n' +
+    '\n' +
+    '   La broche COM DOIT etre reliee au rail +' + wV(p.solV) + ' : c\'est elle qui ferme\n' +
+    '   le circuit des diodes de roue libre integrees au boitier.\n' +
+    '   Aucune diode externe n\'est necessaire, mais le courant par voie est\n' +
+    '   limite a 500 mA (et moins si plusieurs voies conduisent en meme temps).\n';
+}
+function wSchemModule(p, rail) {
+  const fuse = rail ? rail.fuse : 5, cap = rail ? rail.cap : 2200;
+  return 'ETAGE DE PUISSANCE - MODULE PRE-CABLE (MOSFET ou relais)\n\n' +
+    wPowerBus(p.solV, fuse, [
+      'C reservoir ' + cap + ' uF / ' + wCapVolts(p.solV) + ' V --> GND',
+      'borne V+ du module de puissance',
+      'borne (+) du solenoide'
+    ]) + '\n\n' +
+    '   COMMANDE\n' +
+    '     SIG <-- MCP23017 GPAx ou GPIO ESP32 (verifier la compatibilite 3.3 V)\n' +
+    '     VCC <-- 3.3 V\n' +
+    '     GND <-- GND COMMUN\n' +
+    '\n' +
+    '   PUISSANCE\n' +
+    '     OUT --> borne (-) du solenoide\n' +
+    '\n' +
+    '   Ajoutez la diode ' + wDiodeFor(p.solA) + ' en inverse sur la bobine si le\n' +
+    '   module n\'en integre pas : c\'est le cas de la plupart des modules MOSFET.\n';
+}
+function wSchemServo(p, rail, hw) {
+  const fuse = rail ? rail.fuse : 5, cap = rail ? rail.cap : 2200;
+  return 'SERVOS SUR PCA9685 - LOGIQUE ET PUISSANCE SEPAREES\n\n' +
+    '   LOGIQUE (cote ESP32)\n' +
+    '     GPIO ' + hw.i2cSda + ' (SDA) --> SDA du module\n' +
+    '     GPIO ' + hw.i2cScl + ' (SCL) --> SCL du module\n' +
+    '     3.3 V         --> VCC du module\n' +
+    '     GND           --> GND du module\n' +
+    '     OE            --> GND (sorties actives en permanence)\n' +
+    '\n' +
+    wPowerBus(p.servoV, fuse, [
+      'C reservoir ' + cap + ' uF / ' + wCapVolts(p.servoV) + ' V --> GND (sur le bornier V+)',
+      'bornier V+ du PCA9685'
+    ]) + '\n\n' +
+    '   SERVOS\n' +
+    '     connecteur 3 points par canal :\n' +
+    '       signal (jaune ou blanc) / V+ (rouge) / GND (marron ou noir)\n' +
+    '\n' +
+    '   Le 3.3 V de l\'ESP32 alimente uniquement la logique du module :\n' +
+    '   ne jamais y brancher la puissance des servos.\n';
+}
+function wSchemMotor(p, rail) {
+  const fuse = rail ? rail.fuse : 5, cap = rail ? rail.cap : 2200;
+  return 'MOTEUR A SENS UNIQUE - VITESSE PAR PWM\n\n' +
+    wPowerBus(p.motorV, fuse, [
+      'C reservoir ' + cap + ' uF / ' + wCapVolts(p.motorV) + ' V --> GND',
+      'borne (+) du moteur',
+      'cathode (bague) de la diode de roue libre'
+    ]) + '\n\n' +
+    '   MOTEUR\n' +
+    '     borne (-) --> anode de la diode ' + wDiodeFor(p.motorA) + ' et DRAIN du MOSFET\n' +
+    '     100 nF ceramique directement aux bornes du moteur (antiparasitage)\n' +
+    '\n' +
+    '   COMMANDE\n' +
+    '     GPIO ESP32 (LEDC PWM ou sortie directe) --[ 100 Ohm ]--> GATE du MOSFET\n' +
+    '     GATE --[ 10 kOhm ]--> GND\n' +
+    '     MOSFET : ' + wMosfetFor(p.motorA) + '\n' +
+    '\n' +
+    '   RETOUR\n' +
+    '     SOURCE du MOSFET --> GND COMMUN, fil de ' + wWireSection(p.motorA) + '\n';
+}
+function wSchemHBridge(p, rail) {
+  const fuse = rail ? rail.fuse : 5, cap = rail ? rail.cap : 2200;
+  return 'MOTEUR A INVERSION DE SENS - PONT EN H (DRV8871 / BTS7960 / L298N)\n\n' +
+    wPowerBus(p.motorV, fuse, [
+      'C reservoir ' + cap + ' uF / ' + wCapVolts(p.motorV) + ' V --> GND',
+      'entree VM (alimentation moteur) du pont en H'
+    ]) + '\n\n' +
+    '   COMMANDE\n' +
+    '     GPIO LEDC (hwPin)   --> entree PWM / IN1  (vitesse)\n' +
+    '     GPIO direction      --> entree DIR / IN2  (sens de rotation)\n' +
+    '     GND du pont         --> GND COMMUN\n' +
+    '\n' +
+    '   MOTEUR\n' +
+    '     OUT1 et OUT2 --> les deux bornes du moteur\n' +
+    '     100 nF ceramique aux bornes du moteur\n' +
+    '\n' +
+    '   Les diodes de roue libre sont integrees au pont en H :\n' +
+    '   aucune diode externe n\'est necessaire.\n';
+}
+function wSchemEndstop() {
+  return 'FIN DE COURSE - CONTACT VERS LA MASSE, PULL-UP INTERNE\n\n' +
+    '   3.3 V\n' +
+    '     |\n' +
+    '   [ pull-up interne ~45 kOhm de l\'ESP32 ]\n' +
+    '     |\n' +
+    '   GPIO ---+---[ 100 Ohm ]---+--- COM du micro-switch\n' +
+    '           |                 |\n' +
+    '      [ 100 nF ]        contact NO du micro-switch\n' +
+    '           |                 |\n' +
+    '          GND               GND\n' +
+    '\n' +
+    '   Au repos le GPIO lit 1, butee atteinte il lit 0 (actif a l\'etat bas).\n' +
+    '   Le condensateur de 100 nF sert d\'anti-rebond materiel.\n' +
+    '   Utilisez du fil blinde si la liaison depasse 50 cm.\n';
+}
+function wSchemOptical() {
+  return 'CAPTEUR OPTIQUE - FOURCHE OU REFLECTIF, SORTIE COLLECTEUR OUVERT\n\n' +
+    '   3.3 V --> VCC du capteur\n' +
+    '   GND   --> GND du capteur\n' +
+    '   OUT   --> GPIO capteur (INPUT_PULLUP interne, fronts comptes par interruption)\n' +
+    '\n' +
+    '   Alimentez le capteur en 3.3 V : sous 5 V sa sortie depasse la tension\n' +
+    '   maximale admise par les entrees de l\'ESP32.\n' +
+    '   Un condensateur de 10 nF entre OUT et GND filtre les parasites sans\n' +
+    '   masquer les fronts utiles.\n';
+}
+function wSchemLed(p, rail) {
+  const fuse = rail ? rail.fuse : 5;
+  return 'STRIP LED WS2812B\n\n' +
+    wPowerBus(p.ledV, fuse, [
+      'C reservoir 1000 uF / ' + wCapVolts(p.ledV) + ' V --> GND (avant la premiere LED)',
+      'entree 5 V du strip',
+      'alimentation du SN74HCT125 (adaptateur de niveau)'
+    ]) + '\n\n' +
+    '   DONNEES\n' +
+    '     GPIO data --> entree A du SN74HCT125\n' +
+    '     sortie Y  --[ 330-470 Ohm ]--> DIN du strip (resistance au plus pres de DIN)\n' +
+    '\n' +
+    '   Au-dela de 2 metres de ruban, reinjectez le 5 V a l\'autre extremite\n' +
+    '   pour eviter la chute de tension et la derive des couleurs.\n';
+}
+
+// --- Etapes de cablage d'un actionneur ---
+function wActuatorSteps(a, p, hw) {
+  const steps = [];
+  const src = wSignalSource(a);
+  if (a.type === 0) {                       // SERVO
+    steps.push('Signal : ' + src + ', fil de commande du connecteur servo.');
+    steps.push('Puissance : V+ du PCA9685 sur le rail ' + wV(p.servoV) + ' (fusible et condensateur de reservoir sur ce bornier).');
+    steps.push('Masse du servo reliee au GND du PCA9685, lui-meme relie au GND de l\'ESP32.');
+    steps.push('Debattement configure : ' + a.paramMin + ' a ' + a.paramMax + ' degres, position de repos ' + a.paramDefault + ' degres.');
+    steps.push('Aucune diode de roue libre : l\'electronique du servo s\'en charge.');
+    steps.push('Reglez les butees mecaniques avant le premier test pour ne pas forcer sur le pignon.');
+  } else if (a.type === 1) {                // SOLENOIDE
+    if (p.driver === 'uln2803') {
+      steps.push('Signal : ' + src + ' vers une entree IN du ULN2803A.');
+      steps.push('Sortie OUT correspondante vers la borne - du solenoide, borne + sur le rail ' + wV(p.solV) + '.');
+      steps.push('Broche COM du ULN2803A reliee au rail ' + wV(p.solV) + ' : elle ferme le circuit des diodes internes.');
+      steps.push('Verifiez que le courant du solenoide reste sous 500 mA, limite du ULN2803A.');
+    } else if (p.driver === 'module') {
+      steps.push('Signal : ' + src + ' vers l\'entree SIG du module de puissance.');
+      steps.push('Puissance : V+ du module sur le rail ' + wV(p.solV) + ' (via son fusible), sortie du module vers la borne - du solenoide.');
+      steps.push('Ajoutez la diode ' + wDiodeFor(p.solA) + ' sur la bobine si le module n\'en integre pas.');
+    } else {
+      steps.push('Signal : ' + src + ' -> resistance de gate 100 Ohm -> gate du ' + wMosfetFor(p.solA) + '.');
+      steps.push('Pull-down 10 kOhm entre la gate et GND : garantit le solenoide au repos pendant le boot.');
+      steps.push('Puissance : rail ' + wV(p.solV) + ' vers la borne + du solenoide, borne - vers le drain du MOSFET.');
+      steps.push('Diode de roue libre ' + wDiodeFor(p.solA) + ' en inverse sur la bobine, cathode (bague) cote +' + wV(p.solV) + '.');
+      steps.push('Source du MOSFET vers le GND commun, en fil de section ' + wWireSection(p.solA) + ' minimum.');
+    }
+    if (a.behavior === 0) {
+      steps.push('Frappe : impulsion de ' + a.paramMin + ' a ' + a.paramMax + ' ms selon la velocite, temps mort de ' +
+        Math.round(a.cooldownUs * 0.1) + ' ms entre deux frappes.');
+    } else if (a.behavior === 1) {
+      steps.push('Maintien : PWM d\'appel ' + a.paramMin + '/255 puis maintien ' + a.paramMax + '/255 apres ' + a.paramDefault + ' ms.');
+      steps.push('Duree d\'activation maximale : ' + Math.round(a.cooldownUs * 0.1) + ' ms (protection thermique de la bobine).');
+    } else if (a.behavior === 9) {
+      steps.push('Etouffoir : bobine au repos = contact applique. Prevoyez que la coupure d\'alimentation laisse l\'instrument etouffe.');
+    }
+    steps.push('Securite firmware : ' + hw.solenoidMaxOnMs + ' ms d\'activation continue maximum.');
+  } else {                                   // MOTEURS
+    if (wIsHBridge(a)) {
+      steps.push('Vitesse : ' + src + ' vers l\'entree PWM / IN1 du pont en H.');
+      steps.push('Sens : ESP32 GPIO ' + a.hwAddress + ' vers l\'entree DIR / IN2 du pont en H.');
+      steps.push('Puissance : VM du pont sur le rail ' + wV(p.motorV) + ' (fusible et condensateur de reservoir), OUT1 et OUT2 sur le moteur.');
+      steps.push('Pas de diode externe : le pont en H integre ses diodes de roue libre.');
+    } else if (a.type === 3) {
+      steps.push('Commande : ESP32 GPIO ' + a.hwPin + ' -> resistance de gate 100 Ohm -> gate du ' + wMosfetFor(p.motorA) + '.');
+      steps.push('Capteur optique sur GPIO ' + a.hwAddress + ' (alimente en 3.3 V, sortie en collecteur ouvert, pull-up interne).');
+      steps.push('Puissance : rail ' + wV(p.motorV) + ' vers le moteur, retour par le drain du MOSFET.');
+      steps.push('Diode de roue libre ' + wDiodeFor(p.motorA) + ' en inverse sur le moteur.');
+      steps.push('Comptage configure : ' + a.paramMin + ' a ' + a.paramMax + ' fronts, vitesse d\'entrainement ' + a.paramDefault + ' %.');
+    } else {
+      steps.push('Commande : ' + src + ' -> resistance de gate 100 Ohm -> gate du ' + wMosfetFor(p.motorA) + '.');
+      steps.push('Pull-down 10 kOhm entre la gate et GND.');
+      steps.push('Puissance : rail ' + wV(p.motorV) + ' vers la borne + du moteur, borne - vers le drain du MOSFET.');
+      steps.push('Diode de roue libre ' + wDiodeFor(p.motorA) + ' en inverse sur le moteur.');
+    }
+    steps.push('Condensateur 100 nF ceramique directement aux bornes du moteur (antiparasitage).');
+    if (a.type === 2) steps.push('Plage de PWM configuree : ' + a.paramMin + ' a ' + a.paramMax + ' %.');
+    if (a.inverted) steps.push('Sortie declaree inversee dans la configuration : la commande active correspond a l\'etat bas.');
+    steps.push('Securite firmware : ' + Math.round(hw.motorMaxContinuousMs / 1000) + ' s de fonctionnement continu maximum.');
+  }
+  if (a.endStopPin1 !== 255 && a.endStopPin1 !== undefined)
+    steps.push('Fin de course 1 : contact entre GPIO ' + a.endStopPin1 + ' et GND (pull-up interne, actif a l\'etat bas), 100 nF d\'anti-rebond.');
+  if (a.endStopPin2 !== 255 && a.endStopPin2 !== undefined)
+    steps.push('Fin de course 2 : contact entre GPIO ' + a.endStopPin2 + ' et GND (pull-up interne, actif a l\'etat bas), 100 nF d\'anti-rebond.');
+  if (!a.enabled) steps.push('Actionneur desactive dans la configuration : il ne sera pas pilote tant qu\'il n\'est pas reactive.');
+  return steps;
+}
+
+// --------------------------------------------------------------------
+// Rendu HTML / Markdown
+// --------------------------------------------------------------------
+function renderWiring() {
+  const model = buildWiringModel();
+  const p = model.params;
+  const sum = document.getElementById('wiringParamsSummary');
+  if (sum) {
+    sum.textContent = 'Solenoides ' + wV(p.solV) + ' / ' + wA(p.solA) + ' - servos ' + wV(p.servoV) + ' / ' + wA(p.servoA) +
+      ' - moteurs ' + wV(p.motorV) + ' / ' + wA(p.motorA) + ' - LED ' + p.ledmA + ' mA - marge ' + p.margin + ' % - ' +
+      WIRING_DRIVERS[p.driver];
+  }
+  document.getElementById('wiringReport').innerHTML = model.sections.map(s =>
+    '<div class="card"><h3>' + escapeHtml(s.title) + '</h3>' + s.blocks.map(wiringBlockHtml).join('') + '</div>'
+  ).join('') +
+  '<p class="hint" style="text-align:right;">Genere le ' + escapeHtml(model.generatedAt) + '</p>';
+}
+
+function wiringBlockHtml(b) {
+  if (b.t === 'h')    return '<div class="wsub">' + escapeHtml(b.text) + '</div>';
+  if (b.t === 'p')    return '<p class="wtext">' + escapeHtml(b.text) + '</p>';
+  if (b.t === 'note') return '<div class="wnote ' + b.level + '">' + escapeHtml(b.text) + '</div>';
+  if (b.t === 'pre')  return '<div class="wschem">' + escapeHtml(b.text) + '</div>';
+  if (b.t === 'list') return '<ul class="wlist">' + b.items.map(i => '<li>' + escapeHtml(i) + '</li>').join('') + '</ul>';
+  if (b.t === 'table') {
+    return '<div class="wt-wrap"><table class="wt"><thead><tr>' +
+      b.head.map(h => '<th>' + escapeHtml(h) + '</th>').join('') + '</tr></thead><tbody>' +
+      b.rows.map(r => '<tr>' + r.map(c => '<td>' + escapeHtml(c) + '</td>').join('') + '</tr>').join('') +
+      '</tbody></table></div>';
+  }
+  return '';
+}
+
+function wiringToMarkdown(model) {
+  const esc = s => String(s).replace(/\|/g, '\\|');
+  const out = ['# Branchements electriques - Drums Engine', '',
+    'Genere le ' + model.generatedAt + ' depuis la configuration du controleur.', ''];
+  model.sections.forEach(s => {
+    out.push('## ' + s.title, '');
+    s.blocks.forEach(b => {
+      if (b.t === 'h') out.push('### ' + b.text, '');
+      else if (b.t === 'p') out.push(b.text, '');
+      else if (b.t === 'note') out.push('> ' + b.text, '');
+      else if (b.t === 'pre') out.push('```text', b.text.replace(/\n$/, ''), '```', '');
+      else if (b.t === 'list') { b.items.forEach(i => out.push('- ' + i)); out.push(''); }
+      else if (b.t === 'table') {
+        out.push('| ' + b.head.map(esc).join(' | ') + ' |');
+        out.push('|' + b.head.map(() => '---').join('|') + '|');
+        b.rows.forEach(r => out.push('| ' + r.map(esc).join(' | ') + ' |'));
+        out.push('');
+      }
+    });
+  });
+  return out.join('\n');
+}
+
+function downloadWiringMarkdown() {
+  const md = wiringToMarkdown(buildWiringModel());
+  const blob = new Blob([md], {type: 'text/markdown;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'drums-engine-cablage.md';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast('Fichier .md telecharge', 'success');
 }
 
 // Theme toggle

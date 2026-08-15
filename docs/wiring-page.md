@@ -12,11 +12,12 @@ tout est deduit des actionneurs, des fins de course et des strips LED declares.
 | Verifications avant cablage | Liste d'erreurs / avertissements / informations, chacune avec la correction a appliquer |
 | Synthese | Compte des solenoides / servos / moteurs / modules |
 | Affectation des sorties | Une fiche par voie physique : voie, actionneur, type et geste, **instrument** pilote (avec sa note MIDI) et **action MIDI** declenchee, plus ce qu'il faut brancher sur la voie ; les voies libres sont listees en fin de module |
-| Nomenclature (BOM) | Liste des composants a acheter avec quantites : MOSFET, diodes de roue libre, resistances de gate et de pull-down, condensateurs de reservoir et de decouplage, fusibles, adaptateur de niveau LED, pull-ups I2C |
+| Nomenclature (BOM) | Liste des composants a acheter avec quantites : MOSFET, diodes de roue libre, resistances de gate et de pull-down, condensateurs de reservoir et de decouplage, fusibles, organe d'arret d'urgence, adaptateur de niveau LED, pull-ups I2C |
+| Composants de protection | Un tableau par composant : valeur calculee, **ou le placer**, ce qu'il fait, et **ce qui casse s'il manque** (diode de roue libre, reservoir, decouplage, antiparasite, anti-rebond, pull-up, pull-down, resistance de gate, fusible, arret d'urgence, adaptateur de niveau, barre de masse) |
 | Affectation des GPIO ESP32 | Table broche par broche : fonction, sens, cablage attendu — y compris les broches reservees par le firmware (I2C, LED de statut, micro I2S) |
 | Modules I2C | Un tableau par MCP23017 / PCA9685 reellement utilise : position des cavaliers d'adresse, canaux occupes, alimentation logique et de puissance |
 | Alimentations | Un rail par famille d'actionneurs : courant simultane, pire cas, alimentation conseillee, calibre de fusible, condensateur de reservoir, section de fil |
-| Schemas de principe | Schemas ASCII par type d'etage : solenoide sur MOSFET / ULN2803 / module, servo sur PCA9685, moteur simple, moteur sur pont en H, fin de course, capteur optique, strip LED |
+| Schemas de principe | Schemas **dessines** par type d'etage, avec les symboles reels (fusible, arret d'urgence, condensateur, diode, MOSFET, bobine, masse) et les valeurs calculees : chaine d'alimentation, solenoide sur MOSFET / ULN2803A / module / relais, servo sur PCA9685, moteur simple, moteur sur pont en H, fin de course, capteur optique, strip LED, pull-up I2C. L'export Markdown contient les memes schemas en ASCII |
 | Cablage detaille | Pour chaque actionneur, l'instrument et l'action associes, puis la marche a suivre fil par fil, avec ses parametres de configuration (angles, durees d'impulsion, plage de PWM, temps mort) |
 | Mise en service | Checklist en huit etapes, de la logique seule au rail complet, cochable et conservee dans le navigateur (`localStorage`, cle `wiringChecklist`) |
 | Rappels de securite | Ordre de mise sous tension, verifications thermiques, limites du firmware |
@@ -47,6 +48,9 @@ n'y a rien a positionner a la main.
   par rail, partage entre tous les modules du bloc (SDA, SCL, 3.3 V, V+, GND).
   Les couloirs verticaux entre l'ESP32 et les blocs ne se croisent jamais : un
   couloir par signal.
+- Les **organes de protection** sont dessines sur le rail qui les porte :
+  fusible (avec son calibre), arret d'urgence, condensateur de reservoir vers
+  la masse, et resistances de pull-up du bus I2C.
 
 ## Instrument et action portes par chaque sortie
 
@@ -73,7 +77,8 @@ conserves dans le `localStorage` du navigateur (cle `wiringParams`) :
 | Rail LED (V) / courant par LED (mA) | 5 V / 60 mA | Consommation des strips, limitee par `maxBrightness` de chaque strip |
 | Marge de securite (%) | 30 % | Marge ajoutee au courant simultane pour la colonne "alim conseillee" |
 | Actionneurs simultanes | `MAX_CONCURRENT_ACTIVE` | Nombre d'actionneurs actifs en meme temps retenu pour le dimensionnement |
-| Etage de puissance solenoides | MOSFET | MOSFET discret, ULN2803A, ou module pre-cable — change la BOM, les schemas et les etapes de cablage |
+| Etage de puissance solenoides | MOSFET | MOSFET discret, ULN2803A, module pre-cable ou relais — change la BOM, les schemas et les etapes de cablage |
+| Arret d'urgence | Interrupteur coup-de-poing | Aucun, interrupteur coup-de-poing sur le rail, ou contacteur sur boucle ARU — apparait sur chaque rail du schema, dans la BOM et dans la checklist |
 
 ## Regles de calcul
 
@@ -111,6 +116,8 @@ La section **Verifications avant cablage** signale, chacune avec sa correction :
 | Attention | Broches de strapping (GPIO 0, 2, 5, 12, 15) : leur niveau au demarrage change le mode de boot |
 | Attention | Actionneur cable mais relie a aucun instrument (jamais declenche) |
 | Attention | Actionneur relie a un instrument mais sans action MIDI |
+| Attention | Aucun arret d'urgence materiel declare alors que la machine porte des actionneurs de puissance |
+| Attention | Etage a relais choisi pour des solenoides configures en frappe (collage lent, contacts qui s'usent) |
 | Info | Actionneurs desactives, rappel des pull-ups I2C |
 
 ## Source des donnees
@@ -152,8 +159,16 @@ sous forme de sections/blocs (`buildWiringModel()`), puis rendu soit en HTML
 section la rend disponible dans les deux sorties sans duplication.
 
 Types de blocs disponibles : `h`, `p`, `note`, `pre`, `list`, `table`, `diag`
-(schema SVG), `tiles`, `legend`, `checks`, `chans` (fiches de sorties), `todo`
+(schema synoptique SVG), `schem` (schema de principe : SVG en HTML, ASCII en
+Markdown), `tiles`, `legend`, `checks`, `chans` (fiches de sorties), `todo`
 (checklist). Un nouveau type doit etre gere dans les deux fonctions de rendu.
+
+Les schemas de principe sont composes a partir d'une bibliotheque de symboles
+(`wSymbols()` : fusible, arret d'urgence, condensateur, diode, resistance,
+MOSFET, bobine, moteur, contact, masse). Les valeurs affichees viennent des
+memes fonctions de calcul que la nomenclature (`wFuseFor()`, `wCapFor()`,
+`wDiodeFor()`, `wMosfetFor()`), donc un schema ne peut pas diverger du reste
+de la page.
 
 Le schema est produit par `wBuildDiagram()`, qui recoit un modele deja calcule
 (modules, sorties directes, entrees, strips, lignes de l'ESP32 et des

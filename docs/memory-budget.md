@@ -16,9 +16,19 @@ abandonner.
 | Constante | Avant | Apres | Raison |
 |---|---:|---:|---|
 | `MAX_INSTRUMENTS` | 16 | 64 | Kit GM complet + un second canal de percussions accordees |
-| `MAX_PIPELINES` | 32 | 128 | Un pipeline par articulation, marge pour plusieurs canaux |
+| `MAX_PIPELINES` | 32 | 64 | Un pipeline par instrument — jamais plus, voir ci-dessous |
 | `MAX_ACTUATORS` | 32 | 64 | Plusieurs actionneurs par articulation (frappe + etouffoir) |
-| `MAX_CC_ROUTES` | 64 | 128 | Suit le nombre d'instruments |
+| `MAX_CC_ROUTES` | 64 | 96 | Suit le nombre d'instruments |
+
+### `MAX_PIPELINES` est egal a `MAX_INSTRUMENTS`, et ce n'est pas un compromis
+
+Les deux chemins de compilation (`main.cpp compilePipelines()` et
+`PipelineCompiler::compileAll()`) emettent **au plus un pipeline par instrument
+active**. Un slot de pipeline au-dela de `MAX_INSTRUMENTS` ne peut donc jamais
+etre rempli : c'est 198 octets de `.bss` mort par slot. Une premiere version de
+ce lot avait mis `MAX_PIPELINES` a 128 et depassait la DRAM au link de 7 ko —
+soit a peu de chose pres les 64 slots inatteignables. Deux `static_assert` dans
+`core/types.h` maintiennent desormais l'egalite dans les deux sens.
 
 ## Cout mesure
 
@@ -29,25 +39,44 @@ Le chiffre qui fait foi reste la sortie de `pio run -e esp32 --target size` en C
 
 | Objet global | Avant | Apres | Delta |
 |---|---:|---:|---:|
-| `EventProcessor` (dont `PipelineLookup`) | 7 728 | 32 816 | +25 088 |
+| `EventProcessor` (dont `PipelineLookup`) | 7 728 | 16 016 | +8 288 |
 | `InstrumentManager` | 3 480 | 15 384 | +11 904 |
 | `ActuatorFactory` | 10 816 | 11 840 | +1 024 |
-| `ActuatorManager` | 304 | 1 136 | +832 |
-| `GlobalState` | 416 | 896 | +480 |
-| **Total** | **22 744** | **62 072** | **+39 328** |
+| `ActuatorManager` | 304 | 688 | +384 |
+| `GlobalState` | 416 | 576 | +160 |
+| **Total** | **22 744** | **44 504** | **+21 760** |
 
-Soit environ **+38 ko de `.bss`** sur une piece qui dispose de ~320 ko de DRAM.
+Soit environ **+21 ko de `.bss`**.
+
+### La marge disponible etait de ~31 ko, pas de "320 ko"
+
+L'ESP32 annonce 320 ko de DRAM, mais l'essentiel est deja pris par la pile WiFi,
+FreeRTOS et le serveur web asynchrone. Ce qui compte est la marge restante dans
+`dram0_0_seg`, et ce qui en reste apres `.bss` devient le tas.
+
+Une premiere version de ce lot (`MAX_PIPELINES` 128, table d'anti-flood CC
+indexee par `(canal, CC)`) pesait +38 ko et le link a echoue avec
+`region dram0_0_seg overflowed by 7008 bytes`. La marge reelle etait donc
+d'environ **31 ko**. La version retenue en consomme ~21 ko et laisse ~10 ko.
+
+**N'estimez pas cette marge : mesurez-la.** `pio run -e esp32 --target size`,
+execute par la CI, est la seule reponse qui fasse foi.
 
 ### D'ou vient la depense
 
+- **Instruments** : `64 x 208` = ~13 ko, le poste principal.
+- **Pipelines compiles** : `64 x 198` = ~12,4 ko. Un `CompiledPipeline` embarque
+  ses blocs, ses actions NoteOn/NoteOff et ses liaisons CC — dont une copie de ce
+  que `InstrumentConfig` contient deja. Cette duplication (~9 ko) est le
+  candidat evident si une future hausse manque de place.
 - **Tables (canal, note)** : 2 ko chacune (`16 x 128`), une pour les pipelines et
   une pour les instruments. C'est le prix du correctif de routage : le canal MIDI
   est desormais une vraie cle et non une verification apres coup. Voir
   `core/midi_routing.h`.
-- **Pipelines compiles** : `128 x 198` = ~25 ko, le poste principal. Un
-  `CompiledPipeline` embarque ses blocs, ses actions NoteOn/NoteOff et ses
-  liaisons CC.
-- **Instruments** : `64 x 208` = ~13 ko.
+- **Anti-flood CC** : 256 octets, et non les 4 ko qu'aurait coute une table
+  `(canal, CC)`. `_processCcEvent()` ne pose l'horodatage qu'apres avoir constate
+  qu'une route ecoute sur le canal de l'evenement, ce qui supprime la famine
+  inter-canaux sans table a deux dimensions.
 
 ### Ce qui a paye une partie de la note
 
@@ -71,10 +100,16 @@ systeme les ressources detenues par l'objet (l'emplacement d'ISR optique d'un
 
 ## Si vous devez relever encore les limites
 
-1. `MAX_PIPELINES` est le poste le plus cher : ~198 octets par unite.
-2. Les gardes sont dans `core/types.h` (`static_assert`) : les index de pipeline
+1. `MAX_INSTRUMENTS` coute deux fois : 208 octets d'`InstrumentConfig` **et**
+   198 octets de `CompiledPipeline`, soit ~406 octets par unite. C'est le poste
+   qui decide.
+2. Le gisement le plus evident, si la place manque, est la duplication entre
+   `InstrumentConfig` et `CompiledPipeline` : les actions NoteOn/NoteOff et les
+   liaisons CC sont stockees deux fois (~9 ko a 64 instruments).
+3. Les gardes sont dans `core/types.h` (`static_assert`) : les index de pipeline
    sont stockes en `uint8_t` avec `0xFF` comme marqueur « aucun », et les index
-   d'instrument en `int8_t`. Depasser 127 instruments ou 255 pipelines demande
-   d'elargir ces types, pas seulement la constante.
-3. Verifiez la marge reelle avec `pio run -e esp32 --target size` : le tas doit
-   rester confortable pour le serveur web asynchrone et la pile WiFi.
+   d'instrument en `int8_t`. Depasser 127 instruments demande d'elargir ces
+   types, pas seulement la constante.
+4. Mesurez avec `pio run -e esp32 --target size` avant de conclure : le link
+   echoue net quand `dram0_0_seg` deborde, et le tas doit rester confortable
+   pour le serveur web asynchrone et la pile WiFi.

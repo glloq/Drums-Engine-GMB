@@ -28,8 +28,15 @@ bool ActuatorManager::registerActuator(uint8_t id, Actuator* actuator) {
   _actuators[_count] = actuator;
   _idMap[_count] = id;
   _count++;
-  if (actuator->needsService() && _servicableCount < MAX_ACTUATORS) {
-    _servicable[_servicableCount++] = actuator;
+  if (actuator->needsService()) {
+    if (_servicableCount < MAX_SERVICABLE) {
+      _servicable[_servicableCount++] = actuator;
+    } else {
+      // Refuser en silence laisserait un stepper enregistre mais jamais
+      // avance : il accepterait les commandes sans jamais bouger.
+      DBGF("[ActMgr] '%s' needs continuous service but all %d slots are taken — "
+           "it will not move\n", actuator->getConfig().name, MAX_SERVICABLE);
+    }
   }
 
   DBGF("[ActMgr] Registered actuator '%s' (id=%d, total=%d)\n",
@@ -142,9 +149,11 @@ void ActuatorManager::resetRefusedStats() {
 }
 
 void ActuatorManager::serviceAll(uint32_t nowUs) {
+  if (_servicableCount == 0) return;   // cas courant: aucun stepper configure
+
   // Snapshot sous le spinlock (pointeurs seulement), service en dehors :
   // service() fait des E/S GPIO, meme regle que checkWatchdog/checkEndStops.
-  Actuator* list[MAX_ACTUATORS];
+  Actuator* list[MAX_SERVICABLE];
   uint8_t n;
 
   portENTER_CRITICAL(&_actMgrMux);

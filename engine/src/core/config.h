@@ -53,22 +53,27 @@
 // to choose which articulations to drop. The limits below carry a full GM kit
 // on one board, plus room for a second channel of tuned/hand percussion.
 //
-// RAM cost of the raise (see docs/memory-budget.md for the full table):
-//   PipelineLookup   6.4 kB -> 28.6 kB   (128 pipelines + 16x128 channel map)
-//   InstrumentManager 3.5 kB -> 15.6 kB  (64 instruments + 16x128 channel map)
-//   ActuatorFactory  20.2 kB -> 12.4 kB  (union pool, see actuator_factory.h)
-// Net ~ +27 kB of .bss on a 320 kB part. The union actuator pool pays for a
-// large part of the raise on its own: the factory used to hold MAX_ACTUATORS
-// instances of EVERY actuator class side by side.
+// These limits are NOT free: every one of them sizes a statically allocated
+// table. The ESP32's dram0_0_seg had about 31 kB of headroom before this raise,
+// and whatever is left over after .bss becomes the heap the async web server
+// and the WiFi stack draw from. docs/memory-budget.md itemises the cost and
+// explains how to size a further raise; `pio run -e esp32 --target size` (run by
+// CI) is the number that decides, not an estimate.
+//
+// MAX_PIPELINES is deliberately EQUAL to MAX_INSTRUMENTS. Both compilation
+// paths (main.cpp compilePipelines() and PipelineCompiler::compileAll()) emit at
+// most one pipeline per enabled instrument, so any pipeline slot beyond
+// MAX_INSTRUMENTS can never be filled — it is 198 bytes of dead .bss each. The
+// static_assert in core/types.h keeps the two in step.
 #define MAX_ACTUATORS        64
 #define MAX_INSTRUMENTS      64
 #define MAX_ACTUATORS_PER_INST 8
-#define MAX_PIPELINES        128
+#define MAX_PIPELINES        MAX_INSTRUMENTS
 #define MAX_BLOCKS_PER_PIPELINE 8
 #define MAX_GLOBAL_VARS      128
 #define MAX_ACTIONS_PER_EVENT 4
 #define MAX_CC_BINDINGS       4
-#define MAX_CC_ROUTES         128
+#define MAX_CC_ROUTES         96
 #define MAX_LOOPS            8
 #define MAX_LOOP_EVENTS      256
 

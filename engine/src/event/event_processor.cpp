@@ -223,25 +223,47 @@ void EventProcessor::_processCcEvent(const MidiEvent& ev) {
     _state->setVariable(ev.data1, ev.data2);
   }
 
-  // Anti-flood: max 1 dispatch batch per (channel, CC) every 5ms. The key has to
-  // include the channel: keyed on the CC number alone, a fader sweep on channel
-  // 1 would throttle the hi-hat pedal on channel 10.
-  // Timestamps are truncated to milliseconds (uint16) to keep the table at 4 kB;
-  // uint16 subtraction wraps correctly for the 5 ms window.
-  uint16_t nowMs = (uint16_t)(ev.timestamp / 1000);
-  uint16_t& lastMs = _lastCcDispatchMs[ev.channel - 1][ev.data1];
-  if (lastMs != 0 && (uint16_t)(nowMs - lastMs) < 5) {
-    _ccStats.throttled++;
-    return;
-  }
-  lastMs = (nowMs == 0) ? 1 : nowMs;   // 0 is the "never dispatched" sentinel
-
   uint8_t first = _lookup.cc_to_first[ev.data1];
   uint8_t count = _lookup.cc_to_count[ev.data1];
   if (first == 0xFF || count == 0) {
     _ccStats.unrouted++;
     return;
   }
+
+  // Does any route actually listen to this CC on THIS channel? Answering first
+  // is what keeps the anti-flood table one-dimensional: an unrouted flood on
+  // channel 1 no longer stamps the timestamp that channel 10 depends on, so it
+  // cannot starve the hi-hat pedal. The route list for one CC is short, so the
+  // scan costs far less than the 4 kB a (channel, CC) table would.
+  bool hasMatch = false;
+  for (uint8_t i = 0; i < count; i++) {
+    uint8_t routeIdx = first + i;
+    if (routeIdx >= _lookup.cc_route_count) break;
+    const CCRoutingEntry& r = _lookup.cc_routes[routeIdx];
+    if (r.actuator_id == 0xFF) continue;
+    if (r.channel != 0 && r.channel != ev.channel) continue;
+    hasMatch = true;
+    break;
+  }
+  if (!hasMatch) {
+    _ccStats.unrouted++;
+    return;
+  }
+
+  // Anti-flood: max 1 dispatch batch per CC every 5ms. Timestamps are truncated
+  // to milliseconds (uint16); uint16 subtraction wraps correctly over the 5 ms
+  // window, and 0 is the "never dispatched" sentinel (costing one extra
+  // dispatch every ~65 s at worst).
+  // Residual: two channels that BOTH route the same CC number still share the
+  // window. Both are genuinely routed, and the throttle exists to protect the
+  // command queue, so sharing it is the intended behaviour rather than a gap.
+  uint16_t nowMs = (uint16_t)(ev.timestamp / 1000);
+  uint16_t& lastMs = _lastCcDispatchMs[ev.data1];
+  if (lastMs != 0 && (uint16_t)(nowMs - lastMs) < 5) {
+    _ccStats.throttled++;
+    return;
+  }
+  lastMs = (nowMs == 0) ? 1 : nowMs;
 
   _ccStats.routed_batches++;
   for (uint8_t i = 0; i < count; i++) {

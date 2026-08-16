@@ -123,7 +123,11 @@ private:
   // Sous-ensemble des actionneurs qui demandent un service continu. Garde a
   // part pour que la boucle temps reel n'ait pas a parcourir tout le registre
   // a 1 kHz quand aucun stepper n'est configure (le cas courant).
-  Actuator* _servicable[MAX_ACTUATORS];
+  // Dimensionne pour 8 et non MAX_ACTUATORS : chaque stepper mobilise 2 a 3
+  // GPIO, il n'y a pas la place d'en cabler 64 sur un ESP32, et cette table est
+  // en .bss dont la marge est comptee (voir docs/memory-budget.md).
+  static constexpr uint8_t MAX_SERVICABLE = 8;
+  Actuator* _servicable[MAX_SERVICABLE];
   uint8_t _servicableCount = 0;
 
   int8_t _findIndex(uint8_t id) const;

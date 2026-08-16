@@ -69,8 +69,12 @@ private:
   Scheduler* _scheduler;
   EngineState* _state;
   PipelineLookup _lookup;
-  // Anti-flood timestamps per (channel, CC), in truncated milliseconds.
-  uint16_t _lastCcDispatchMs[MIDI_CHANNEL_COUNT][128];
+  // Anti-flood timestamps per CC number, in truncated milliseconds.
+  // Deliberately NOT indexed by channel: _processCcEvent() only stamps this
+  // once it knows a route matches the event's channel, which removes the
+  // cross-channel starvation a flat per-CC table would otherwise cause — for
+  // 256 bytes instead of the 4 kB a 16x128 table costs.
+  uint16_t _lastCcDispatchMs[128];
   // Counter per PIPELINE: 0=inactive, N=N stacked instances active.
   // Keyed by pipeline (not by note) so that the same note number on two MIDI
   // channels tracks its NoteOn/NoteOff independently.

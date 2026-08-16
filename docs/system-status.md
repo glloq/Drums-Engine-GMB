@@ -88,9 +88,10 @@ Le moteur supporte un modele instrument oriente actions multi-etapes (NoteOn/Not
 - Verification reponse API avant fermeture des modals
 
 ### Capacite
-- 64 instruments, 128 pipelines, 64 actionneurs, 128 routes CC — un kit General
-  MIDI complet (notes 35..81) tient desormais sur une carte. Cout RAM detaille
-  dans [`memory-budget.md`](memory-budget.md).
+- 64 instruments, 64 pipelines, 64 actionneurs, 96 routes CC — un kit General
+  MIDI complet (notes 35..81) tient desormais sur une carte. Cout ~21 ko de
+  `.bss` sur ~31 ko de marge DRAM ; detail et methode de mesure dans
+  [`memory-budget.md`](memory-budget.md).
 
 ### Tests
 - Script `tests/test_api.sh`: 31 tests curl (CRUD, auth, validation, cleanup)

@@ -425,6 +425,12 @@ struct PipelineLookup {
 // Index de pipeline maximum representable dans la table de lookup : 0xFF est le
 // marqueur "aucun pipeline", donc un index ne peut pas l'atteindre.
 static_assert(MAX_PIPELINES <= 255, "MAX_PIPELINES must stay below the 0xFF sentinel");
+// One pipeline per enabled instrument, never more: a larger MAX_PIPELINES only
+// buys unreachable slots at ~198 bytes of .bss each.
+static_assert(MAX_PIPELINES >= MAX_INSTRUMENTS,
+              "every instrument must be able to get a pipeline");
+static_assert(MAX_PIPELINES <= MAX_INSTRUMENTS,
+              "pipeline slots beyond MAX_INSTRUMENTS can never be filled");
 static_assert(MAX_INSTRUMENTS <= 127, "InstrumentManager note map stores indices as int8_t");
 static_assert(MAX_CC_ROUTES < 255, "cc_to_first stores route indices with 0xFF as sentinel");
 

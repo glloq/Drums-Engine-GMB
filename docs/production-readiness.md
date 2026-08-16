@@ -116,11 +116,15 @@
   OMNI deplie, canal explicite prioritaire), couvert par
   `test/test_midi_routing`. Les routes CC portent aussi leur canal, et
   l'anti-flood CC est reclé sur `(canal, CC)`.
-- **Capacite — FAIT.** `MAX_INSTRUMENTS` 16 → 64, `MAX_PIPELINES` 32 → 128,
-  `MAX_ACTUATORS` 32 → 64, `MAX_CC_ROUTES` 64 → 128. Un kit General MIDI complet
-  (notes 35..81) ne pouvait pas etre represente avec 16 instruments. Cout ~38 ko
-  de `.bss`, detaille dans `docs/memory-budget.md` ; le pool d'actionneurs, passe
-  a un stockage type-efface, absorbe une grande partie de la hausse.
+- **Capacite — FAIT.** `MAX_INSTRUMENTS` 16 → 64, `MAX_PIPELINES` 32 → 64,
+  `MAX_ACTUATORS` 32 → 64, `MAX_CC_ROUTES` 64 → 96. Un kit General MIDI complet
+  (notes 35..81) ne pouvait pas etre represente avec 16 instruments. Cout ~21 ko
+  de `.bss` sur ~31 ko de marge DRAM disponible, detaille dans
+  `docs/memory-budget.md` ; le pool d'actionneurs, passe a un stockage
+  type-efface, absorbe une grande partie de la hausse.
+  `MAX_PIPELINES` est desormais lie a `MAX_INSTRUMENTS` par `static_assert` : les
+  deux compilateurs de pipeline en emettent au plus un par instrument, donc tout
+  slot au-dela etait du `.bss` inatteignable.
 - **`STEPPER` — FAIT.** Cinquieme type d'actionneur (STEP/DIR/ENABLE en GPIO
   direct), avec prise d'origine sur butee, rampe d'acceleration et deceleration
   d'approche. Les pas sont emis par rafales bornees depuis la boucle RT.

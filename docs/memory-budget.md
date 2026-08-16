@@ -59,7 +59,9 @@ indexee par `(canal, CC)`) pesait +38 ko et le link a echoue avec
 `region dram0_0_seg overflowed by 7008 bytes`. La marge reelle etait donc
 d'environ **31 ko**.
 
-Valeurs mesurees en CI sur la version retenue :
+Valeurs mesurees en CI au commit qui a introduit ces limites (releve a refaire
+apres tout changement : le lot suivant, qui a ajoute `maxActiveMs` et les tables
+de descripteurs, a coute ~0,8 ko de plus cote hote et le link est reste vert) :
 
 ```
    text     data     bss      dec      hex

@@ -5,6 +5,7 @@
 #include "../core/config.h"
 #include "../actuator/actuator_manager.h"
 #include "command_queue.h"
+#include "command_sink.h"
 
 // ============================================================================
 // Scheduler temps reel - Dispatch des commandes horodatees
@@ -20,7 +21,7 @@
 // Ramping servo = N micro-steps pre-generes.
 // ============================================================================
 
-class Scheduler {
+class Scheduler : public CommandSink {
 public:
   Scheduler(ActuatorManager* actuatorMgr);
 
@@ -28,14 +29,14 @@ public:
   void begin();
 
   // Ajouter une commande dans la queue
-  bool scheduleCommand(const ActuatorCommand& cmd);
+  bool scheduleCommand(const ActuatorCommand& cmd) override;
 
   // Creer une impulsion: ON maintenant, OFF apres duree
   bool schedulePulse(uint8_t actuatorId, uint16_t value, uint32_t durationUs);
 
   // Creer une impulsion differee
   bool schedulePulseAt(uint8_t actuatorId, uint16_t value,
-                       uint32_t durationUs, uint32_t executeAt);
+                       uint32_t durationUs, uint32_t executeAt) override;
 
 
   // Planifier une sequence d'actions (multi-output) de facon TRANSACTIONNELLE :
@@ -46,7 +47,7 @@ public:
   bool scheduleActionSteps(const ActionStep* steps, uint8_t stepCount,
                            uint8_t velocity, uint32_t timestamp,
                            const uint16_t* globalVars,
-                           uint8_t activeGroup = 0);
+                           uint8_t activeGroup = 0) override;
 
   // Appeler dans loop() - traite les commandes pretes
   void update();

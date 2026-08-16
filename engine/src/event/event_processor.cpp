@@ -5,7 +5,7 @@
 // Spinlock for _noteActive[] shared between Core 0 (LoopEngine) and Core 1 (MIDI RT)
 static portMUX_TYPE _noteActiveMux = portMUX_INITIALIZER_UNLOCKED;
 
-EventProcessor::EventProcessor(Scheduler* scheduler, EngineState* state)
+EventProcessor::EventProcessor(CommandSink* scheduler, EngineState* state)
   : _scheduler(scheduler), _state(state) {
   memset(_lastCcDispatchMs, 0, sizeof(_lastCcDispatchMs));
   memset(_noteActive, 0, sizeof(_noteActive));
@@ -73,7 +73,8 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
         // Ne remettre le compteur a zero que si la release a bien ete mise en
         // file : sinon on oublierait une note toujours active.
         if (_scheduler->scheduleActionSteps(pipeline.note_off_actions, pipeline.note_off_count,
-                                            ev.data2, ev.timestamp, _state->raw().variables)) {
+                                            ev.data2, ev.timestamp,
+                                            _state->raw().variables, 0)) {
           portENTER_CRITICAL(&_noteActiveMux);
           _noteActive[pipelineIdx] = 0;  // Reset counter before re-triggering
           portEXIT_CRITICAL(&_noteActiveMux);
@@ -169,7 +170,7 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
       if (pipeline.note_off_count > 0) {
         scheduled = _scheduler->scheduleActionSteps(
             pipeline.note_off_actions, pipeline.note_off_count,
-            ev.data2, ev.timestamp, _state->raw().variables);
+            ev.data2, ev.timestamp, _state->raw().variables, 0);
       } else if (pipeline.output_actuator_id != 0xFF) {
         ActuatorCommand cmd;
         cmd.actuator_id = pipeline.output_actuator_id;

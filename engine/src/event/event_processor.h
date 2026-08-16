@@ -4,7 +4,8 @@
 #include "../core/types.h"
 #include "../core/config.h"
 #include "../core/global_state.h"
-#include "../scheduler/scheduler.h"
+#include "../scheduler/command_sink.h"
+#include <freertos/portmacro.h>
 #include "../led/led_event_queue.h"
 
 // ============================================================================
@@ -41,7 +42,7 @@ public:
     // commandes. Ils n'ont rien joue du tout : ni note active, ni round-robin.
     uint32_t rejected_batches = 0;
   };
-  EventProcessor(Scheduler* scheduler, EngineState* state);
+  EventProcessor(CommandSink* scheduler, EngineState* state);
 
   // Traiter un evenement MIDI
   void processMidiEvent(const MidiEvent& ev);
@@ -69,7 +70,7 @@ public:
 
 private:
   LedEventQueue* _ledQueue = nullptr;
-  Scheduler* _scheduler;
+  CommandSink* _scheduler;
   EngineState* _state;
   PipelineLookup _lookup;
   // Anti-flood timestamps per CC number, in truncated milliseconds.

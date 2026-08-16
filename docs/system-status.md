@@ -103,9 +103,20 @@ Le moteur supporte un modele instrument oriente actions multi-etapes (NoteOn/Not
 
 ### Tests
 - Script `tests/test_api.sh`: 31 tests curl (CRUD, auth, validation, cleanup)
-- Tests natifs Unity: queue scheduler (dont lots atomiques), validation
-  actionneur/instrument, coherence descripteurs/validateur, modeles de
-  percussion, routage `(canal, note)`, budget electrique
+- Tests natifs Unity: **EventProcessor** (routage canal, retrigger, refus de
+  lot, round-robin, panic, CC), queue scheduler (dont lots atomiques),
+  validation actionneur/instrument, coherence descripteurs/validateur, modeles
+  de percussion, routage `(canal, note)`, budget electrique
+- L'EventProcessor parle a un `CommandSink` (interface a 3 methodes) et non plus
+  a un `Scheduler` concret : la couche qui decide CE QUI FRAPPE est donc
+  observable sans pile materielle
+
+## Ce que les tests ne couvrent toujours pas
+- **Aucune validation materielle** : latence reelle, jitter, brownout, EMI des
+  solenoides, I2C sous charge, pertes de pas. La CI prouve que ca compile et que
+  la logique testee passe ; elle ne dit rien du comportement electromecanique.
+- `LoopEngine`, transactions `Storage`, dynamique du stepper : pas de test
+  direct.
 
 ## Limites restantes
 - Les templates avances restent generiques (pas de calibration hardware automatique).

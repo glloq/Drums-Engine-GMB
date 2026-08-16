@@ -8,6 +8,7 @@
 #include "../core/config.h"
 #include "../core/types.h"
 #include "../instrument/instrument_manager.h"
+#include "../instrument/percussion_template.h"
 #include "../actuator/actuator_manager.h"
 #include "../actuator/actuator_factory.h"
 #include "../loop/loop_engine.h"

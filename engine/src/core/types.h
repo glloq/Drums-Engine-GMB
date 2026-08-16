@@ -195,7 +195,17 @@ struct ActuatorConfig {
   uint16_t paramMax;       // Valeur max
   uint16_t paramDefault;   // Valeur repos
 
-  uint16_t cooldownUs;     // Temps minimum entre activations (us/100)
+  // Temps minimum entre deux activations, en us/100 (anti-rebond).
+  // Ce champ ne sert plus QU'A CA. Il portait aussi, pour SOLENOID_HOLD, la
+  // duree d'activation maximale multipliee par 10 — surcharge qui plafonnait
+  // silencieusement cette duree a 6,553 s (65535 x 100 us) alors que l'UI
+  // acceptait 60 s : au-dela, la valeur repliait en uint16 et la bobine coupait
+  // apres une duree arbitraire et plus courte que demandee.
+  uint16_t cooldownUs;
+  // Duree d'activation maximale en MILLISECONDES (0 = valeur de securite par
+  // defaut du comportement). Champ dedie et 32 bits : plus de repliement, et
+  // l'unite est enfin celle que l'utilisateur saisit.
+  uint32_t maxActiveMs;
   uint32_t lastActivation; // Timestamp derniere activation
 
   bool enabled;
@@ -230,7 +240,7 @@ struct ActuatorConfig {
   //
   // SOLENOID_STRIKE:   paramMin=durMin(ms), paramMax=durMax(ms), cooldownUs=cooldown/100
   // SOLENOID_HOLD:     paramMin=pwmActivation(0-255), paramMax=pwmHold(0-255),
-  //                    paramDefault=transitionMs, cooldownUs=maxActiveTime*10
+  //                    paramDefault=transitionMs, maxActiveMs=duree max (ms)
   //                    REQUIRES bus=LEDC_PWM (real PWM) and paramMax < paramMin.
   // SERVO_*:           paramMin=angleMin, paramMax=angleMax, paramDefault=angleDefault
   //                    (degrees, 0..180)
@@ -254,7 +264,7 @@ struct ActuatorConfig {
     : id(0), type(ActuatorType::SOLENOID), behavior(ActuatorBehavior::SOLENOID_STRIKE),
       bus(HardwareBus::MCP23017), hwAddress(0x20), hwPin(0),
       paramMin(8), paramMax(30), paramDefault(15),
-      cooldownUs(200), lastActivation(0),
+      cooldownUs(200), maxActiveMs(0), lastActivation(0),
       enabled(true), inverted(false),
       endStopPin1(0xFF), endStopPin2(0xFF),
       currentMa(0), priority((uint8_t)ActuatorPriority::PRIO_NORMAL),

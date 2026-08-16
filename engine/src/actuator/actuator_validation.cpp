@@ -1,4 +1,5 @@
 #include "actuator_validation.h"
+#include "actuator_descriptor.h"
 #include "../core/config.h"
 
 // ----------------------------------------------------------------------------
@@ -161,6 +162,27 @@ bool validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg) {
     return false;
   }
 
+  // --- Type / comportement / bus : decides par la table de descripteurs ---
+  // Ces trois regles vivaient dans des chaines de if par type, dupliquees dans
+  // GET /api/capabilities qui avait fini par en diverger sur les cinq types.
+  // Elles sont maintenant lues depuis actuator_descriptor.cpp, que l'API sert
+  // aussi — la divergence n'est plus representable.
+  {
+    const BehaviorDescriptor* bd = actuatorBehaviorDescriptor(cfg.behavior);
+    if (!bd) {
+      errMsg = "Invalid actuator behavior";
+      return false;
+    }
+    if (bd->type != cfg.type) {
+      errMsg = "Behavior does not belong to this actuator type";
+      return false;
+    }
+    if ((bd->busMask & busBit(cfg.bus)) == 0) {
+      errMsg = bd->busErrMsg;
+      return false;
+    }
+  }
+
   // --- End-stop pins must be input-capable GPIOs or 0xFF (disabled) ---
   // Input-only pins (34..39) are fine for a limit switch; flash pins are not.
   if (cfg.endStopPin1 != 0xFF && !esp32GpioCanInput(cfg.endStopPin1)) {
@@ -252,10 +274,6 @@ bool validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg) {
   }
 
   if (cfg.type == ActuatorType::SERVO) {
-    if (cfg.bus != HardwareBus::PCA9685) {
-      errMsg = "Servo currently requires PCA9685 bus";
-      return false;
-    }
     if (cfg.hwPin > 15) {
       errMsg = "Servo channel must be in [0..15]";
       return false;
@@ -267,46 +285,13 @@ bool validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg) {
       errMsg = "Servo angles (paramMin/paramMax/paramDefault) must be in [0..180] degrees";
       return false;
     }
-    // M7 fix: Validate behavior matches servo type
-    if (cfg.behavior != ActuatorBehavior::SERVO_POSITION &&
-        cfg.behavior != ActuatorBehavior::SERVO_STRIKE &&
-        cfg.behavior != ActuatorBehavior::COMB_BRUSH &&
-        cfg.behavior != ActuatorBehavior::PITCH_BEND &&
-        cfg.behavior != ActuatorBehavior::HIHAT_CONTROLLER &&
-        cfg.behavior != ActuatorBehavior::SERVO_MUTE) {
-      errMsg = "Servo behavior must be SERVO_POSITION, SERVO_STRIKE, COMB_BRUSH, PITCH_BEND, HIHAT_CONTROLLER or SERVO_MUTE";
-      return false;
-    }
   }
 
   if (cfg.type == ActuatorType::SOLENOID) {
-    if (cfg.bus != HardwareBus::MCP23017 &&
-        cfg.bus != HardwareBus::GPIO_DIRECT &&
-        cfg.bus != HardwareBus::LEDC_PWM) {
-      errMsg = "Solenoid supports MCP23017, GPIO_DIRECT or LEDC_PWM";
-      return false;
-    }
-    // M7 fix: Validate behavior matches solenoid type
-    if (cfg.behavior != ActuatorBehavior::SOLENOID_STRIKE &&
-        cfg.behavior != ActuatorBehavior::SOLENOID_HOLD &&
-        cfg.behavior != ActuatorBehavior::SOLENOID_MUTE) {
-      errMsg = "Solenoid behavior must be SOLENOID_STRIKE, SOLENOID_HOLD or SOLENOID_MUTE";
-      return false;
-    }
-    // SAFETY: SOLENOID_HOLD drops the coil to a reduced holding current after
-    // the initial strike (paramMin = strike PWM, paramMax = hold PWM). That is
-    // only meaningful on a bus with real hardware PWM.
-    //
-    // MCP23017 and GPIO_DIRECT are digital-only: their pwmWrite() is
-    // all-or-nothing, so BOTH levels came out as 100 % duty and a coil sized
-    // for a brief strike followed by a reduced hold was left at full current —
-    // a thermal hazard, not merely a wrong sound.
-    if (cfg.behavior == ActuatorBehavior::SOLENOID_HOLD &&
-        cfg.bus != HardwareBus::LEDC_PWM) {
-      errMsg = "SOLENOID_HOLD requires the LEDC_PWM bus: MCP23017/GPIO_DIRECT have no "
-               "hardware PWM, so the hold level would stay at full current (overheating risk)";
-      return false;
-    }
+    // NB: SOLENOID_HOLD's LEDC_PWM requirement is enforced by the descriptor
+    // table (a digital-only bus would hold the coil at full current — a thermal
+    // hazard, not merely a wrong sound). What remains here is the parameter
+    // check the table cannot express.
     // The hold level must actually be a reduction, otherwise the behaviour is
     // a permanently energised coil under a misleading name.
     if (cfg.behavior == ActuatorBehavior::SOLENOID_HOLD) {
@@ -322,23 +307,6 @@ bool validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg) {
   }
 
   if (cfg.type == ActuatorType::PWM_MOTOR) {
-    // PCA9685 is deliberately excluded: the whole board is clocked at
-    // PCA_FREQUENCY (50 Hz) for servos, which is far too slow to drive a motor
-    // through a MOSFET/H-bridge — it produces audible torque ripple and
-    // dissipation in the switch. Motors go through LEDC (5 kHz).
-    if (cfg.bus != HardwareBus::LEDC_PWM) {
-      errMsg = "PWM motor requires LEDC_PWM (PCA9685 runs at 50 Hz for servos, "
-               "which is unsuitable for motor drive)";
-      return false;
-    }
-    // Valider le behavior pour PWM_MOTOR
-    if (cfg.behavior != ActuatorBehavior::MOTOR_TIMED &&
-        cfg.behavior != ActuatorBehavior::MOTOR_SPEED &&
-        cfg.behavior != ActuatorBehavior::MOTOR_SWEEP &&
-        cfg.behavior != ActuatorBehavior::MOTOR_ALTERNATE) {
-      errMsg = "PWM motor behavior must be MOTOR_TIMED, MOTOR_SPEED, MOTOR_SWEEP or MOTOR_ALTERNATE";
-      return false;
-    }
     // paramMin/paramMax are percentages of full speed (core/types.h). Values
     // above 100 used to be accepted and silently produced a different duty on
     // each bus; now the unit is enforced at the boundary.
@@ -370,10 +338,6 @@ bool validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg) {
         errMsg = "MOTOR_ALTERNATE requires at least one endStopPin";
         return false;
       }
-      if (cfg.bus != HardwareBus::LEDC_PWM) {
-        errMsg = "MOTOR_ALTERNATE requires LEDC_PWM bus (direction pin via hwAddress)";
-        return false;
-      }
       if (cfg.hwAddress == 0 || cfg.hwAddress >= 40) {
         errMsg = "MOTOR_ALTERNATE requires hwAddress as direction GPIO pin (1-39)";
         return false;
@@ -386,19 +350,8 @@ bool validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg) {
   }
 
   if (cfg.type == ActuatorType::MOTOR_OPTICAL) {
-    // The optical sensor is read straight from the GPIO (pinMode +
-    // attachInterrupt in MotorActuator), not through the HAL driver, so the
-    // DRIVE pin is free to use LEDC. GPIO_DIRECT stays allowed for bang-bang
-    // wiring, but then paramDefault (driveSpeed) has no effect: that bus has
-    // no hardware PWM and any non-zero value means full power.
-    if (cfg.bus != HardwareBus::GPIO_DIRECT && cfg.bus != HardwareBus::LEDC_PWM) {
-      errMsg = "Motor optical requires GPIO_DIRECT or LEDC_PWM (LEDC_PWM for real speed control)";
-      return false;
-    }
-    if (cfg.behavior != ActuatorBehavior::MOTOR_OPTICAL_TRACK) {
-      errMsg = "Motor optical requires behavior MOTOR_OPTICAL_TRACK";
-      return false;
-    }
+    // NB: on GPIO_DIRECT, paramDefault (driveSpeed) has no effect — that bus
+    // has no hardware PWM, so any non-zero value means full power.
     // Sensor pin (hwAddress) is read as an input; drive pin (hwPin) is an output.
     if (!esp32GpioCanInput(cfg.hwAddress)) {    // review #13
       errMsg = "Motor optical sensor pin (hwAddress) must be an input-capable ESP32 GPIO";
@@ -415,21 +368,6 @@ bool validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg) {
   }
 
   if (cfg.type == ActuatorType::STEPPER) {
-    // STEP/DIR/ENABLE sont des sorties logiques pilotees directement par le
-    // firmware. Ni MCP23017 (trop lent, un aller-retour I2C par pas) ni PCA9685
-    // (50 Hz) ne peuvent produire un train d'impulsions ; LEDC n'aide pas non
-    // plus puisque le nombre de pas doit etre compte.
-    if (cfg.bus != HardwareBus::GPIO_DIRECT) {
-      errMsg = "Stepper requires the GPIO_DIRECT bus (STEP/DIR are timed logic outputs; "
-               "I2C expanders and LEDC cannot emit a counted step train)";
-      return false;
-    }
-    if (cfg.behavior != ActuatorBehavior::STEPPER_POSITION &&
-        cfg.behavior != ActuatorBehavior::STEPPER_STRIKE &&
-        cfg.behavior != ActuatorBehavior::STEPPER_ROTATE) {
-      errMsg = "Stepper behavior must be STEPPER_POSITION, STEPPER_STRIKE or STEPPER_ROTATE";
-      return false;
-    }
     if (!esp32GpioCanOutput(cfg.hwPin)) {
       errMsg = "Stepper STEP pin (hwPin) must be an output-capable ESP32 GPIO";
       return false;

@@ -2,12 +2,13 @@
 #include <math.h>
 
 Scheduler::Scheduler(ActuatorManager* actuatorMgr)
-  : _actuatorMgr(actuatorMgr), _dispatchCount(0),
+  : _actuatorMgr(actuatorMgr), _dispatchCount(0), _rejectedBatchCount(0),
     _lastJitterUs(0), _maxJitterUs(0) {}
 
 void Scheduler::begin() {
   _queue.clear();
   _dispatchCount = 0;
+  _rejectedBatchCount = 0;
   resetJitterStats();
   DBGLN("[Scheduler] Started (time-sorted queue, spinlock-protected, timestamps us)");
 }
@@ -66,7 +67,18 @@ bool Scheduler::scheduleActionSteps(const ActionStep* steps, uint8_t stepCount,
     }
   };
 
-  bool allScheduled = true;
+  // Le lot est construit ENTIEREMENT avant d'etre pousse : les actions d'une
+  // percussion forment un tout. Les inserer une par une laissait une file
+  // presque pleine accepter la frappe puis refuser l'etouffoir — l'instrument
+  // jouait alors quelque chose qu'il n'a jamais decrit, et l'EventProcessor
+  // considerait quand meme la note comme active.
+  ActuatorCommand batch[CommandQueue::MAX_BATCH];
+  uint8_t batchCount = 0;
+  auto add = [&](const ActuatorCommand& c) -> bool {
+    if (batchCount >= CommandQueue::MAX_BATCH) return false;
+    batch[batchCount++] = c;
+    return true;
+  };
 
   for (uint8_t i = 0; i < stepCount; i++) {
     const ActionStep& step = steps[i];
@@ -114,14 +126,14 @@ bool Scheduler::scheduleActionSteps(const ActionStep* steps, uint8_t stepCount,
           if (cfg.behavior == ActuatorBehavior::SOLENOID_HOLD) {
             // C2 fix: HOLD stays on until NoteOff — don't auto-generate OFF.
             // Just schedule the ON command; solenoid_actuator's checkTimeout
-            // handles the safety max via cooldownUs.
+            // handles the safety max via maxActiveMs.
             ActuatorCommand cmd;
             cmd.actuator_id = step.actuator_id;
             cmd.command_type = (uint8_t)CommandType::PULSE;
             cmd.value = value;
             cmd.duration = 0;
             cmd.execute_at = executeAt;
-            if (!scheduleCommand(cmd)) allScheduled = false;
+            if (!add(cmd)) return false;
             continue;
           } else {
             // STRIKE: paramMin/Max sont les durees min/max en ms
@@ -141,9 +153,24 @@ bool Scheduler::scheduleActionSteps(const ActionStep* steps, uint8_t stepCount,
         ? map(curvedVelocity, 0, 127, (uint32_t)minMs * 1000, (uint32_t)maxMs * 1000)
         : (uint32_t)maxMs * 1000;
 
-      if (!schedulePulseAt(step.actuator_id, value, durationUs, executeAt)) {
-        allScheduled = false;
-      }
+      // Meme paire ON/OFF que schedulePulseAt(), mais ajoutee au lot commun
+      // pour que la transaction couvre l'evenement entier.
+      ActuatorCommand cmdOn;
+      cmdOn.actuator_id = step.actuator_id;
+      cmdOn.command_type = (uint8_t)CommandType::PULSE;
+      cmdOn.value = value;
+      uint32_t durationUnits = durationUs / 100;
+      cmdOn.duration = (durationUnits > UINT16_MAX) ? UINT16_MAX : (uint16_t)durationUnits;
+      cmdOn.execute_at = executeAt;
+
+      ActuatorCommand cmdOff;
+      cmdOff.actuator_id = step.actuator_id;
+      cmdOff.command_type = (uint8_t)CommandType::OFF;
+      cmdOff.value = 0;
+      cmdOff.duration = 0;
+      cmdOff.execute_at = executeAt + durationUs;
+
+      if (!add(cmdOn) || !add(cmdOff)) return false;
       continue;
     }
 
@@ -154,12 +181,16 @@ bool Scheduler::scheduleActionSteps(const ActionStep* steps, uint8_t stepCount,
     cmd.duration = 0;
     cmd.execute_at = executeAt;
 
-    if (!scheduleCommand(cmd)) {
-      allScheduled = false;
-    }
+    if (!add(cmd)) return false;
   }
 
-  return allScheduled;
+  if (batchCount == 0) return true;   // rien a jouer: succes trivial
+
+  if (!_queue.pushBatch(batch, batchCount)) {
+    _rejectedBatchCount++;
+    return false;   // rien n'a ete insere
+  }
+  return true;
 }
 
 void Scheduler::update() {

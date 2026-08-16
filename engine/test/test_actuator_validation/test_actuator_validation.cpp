@@ -3,6 +3,7 @@
 // ============================================================================
 #include <unity.h>
 #include "../../src/actuator/actuator_validation.cpp"
+#include "../../src/actuator/actuator_descriptor.cpp"
 
 static ActuatorConfig baseSolenoid() {
   ActuatorConfig c;               // defaults: SOLENOID / SOLENOID_STRIKE / MCP23017
@@ -503,6 +504,151 @@ void test_defaults_leave_current_undeclared() {
   TEST_ASSERT_TRUE(validateActuatorConfig(baseSolenoid(), err));
 }
 
+
+// ---------------------------------------------------------------------------
+// Descriptor table <-> validator coherence
+// ---------------------------------------------------------------------------
+// GET /api/capabilities is now generated from the same table the validator
+// reads, so it cannot advertise something the validator refuses. These tests
+// pin that property: they walk the WHOLE table and check both directions.
+// Before the table existed, capabilities drifted on all five types — STEPPER
+// missing entirely, PCA9685 advertised for motors (refused), LEDC_PWM missing
+// for solenoids (yet required by SOLENOID_HOLD).
+
+// Build a config that satisfies the type-specific parameter rules, so the only
+// thing under test is the type/behavior/bus triple.
+static ActuatorConfig configFor(ActuatorType type, ActuatorBehavior behavior,
+                                HardwareBus bus) {
+  ActuatorConfig c;
+  c.type = type;
+  c.behavior = behavior;
+  c.bus = bus;
+  switch (type) {
+    case ActuatorType::SERVO:
+      c.hwAddress = 0x40; c.hwPin = 0;
+      c.paramMin = 0; c.paramMax = 180; c.paramDefault = 90;
+      break;
+    case ActuatorType::SOLENOID:
+      c.hwPin = (bus == HardwareBus::MCP23017) ? 0 : 18;
+      if (behavior == ActuatorBehavior::SOLENOID_HOLD) {
+        c.paramMin = 200; c.paramMax = 80; c.paramDefault = 30;   // strike > hold
+      } else {
+        c.paramMin = 8; c.paramMax = 30; c.paramDefault = 15;
+      }
+      break;
+    case ActuatorType::PWM_MOTOR:
+      c.hwPin = 18;
+      c.paramMin = 20; c.paramMax = 100; c.paramDefault = 50;
+      c.endStopPin1 = 32; c.endStopPin2 = 33; c.hwAddress = 19;   // sweep/alternate
+      break;
+    case ActuatorType::MOTOR_OPTICAL:
+      c.hwPin = 18; c.hwAddress = 19;
+      c.paramMin = 1; c.paramMax = 100; c.paramDefault = 50;
+      break;
+    case ActuatorType::STEPPER:
+      c.hwPin = 18; c.hwAddress = 19; c.enablePin = 23;
+      c.paramMin = 0; c.paramMax = 800; c.paramDefault = 0;
+      if (behavior == ActuatorBehavior::STEPPER_ROTATE) {
+        c.paramMin = 20; c.paramMax = 100; c.paramDefault = 50;
+      }
+      c.stepperMaxSps = 2000;
+      break;
+    default:
+      break;
+  }
+  return c;
+}
+
+// Every (behavior, bus) pair the table advertises must be accepted.
+void test_every_advertised_pair_is_accepted() {
+  for (uint8_t i = 0; i < actuatorBehaviorDescriptorCount(); i++) {
+    const BehaviorDescriptor& d = actuatorBehaviorDescriptors()[i];
+    for (uint8_t b = 0; b < (uint8_t)HardwareBus::BUS_COUNT; b++) {
+      if ((d.busMask & busBit((HardwareBus)b)) == 0) continue;
+      ActuatorConfig c = configFor(d.type, d.behavior, (HardwareBus)b);
+      const char* err = nullptr;
+      if (!validateActuatorConfig(c, err)) {
+        printf("  advertised %s on bus %u rejected: %s\n",
+               d.name, (unsigned)b, err ? err : "?");
+        TEST_ASSERT_TRUE(false);
+      }
+    }
+  }
+}
+
+// ... and every bus it does NOT advertise must be refused, so the UI can trust
+// supportedBusMask to grey out the impossible choices.
+void test_every_unadvertised_bus_is_refused() {
+  for (uint8_t i = 0; i < actuatorBehaviorDescriptorCount(); i++) {
+    const BehaviorDescriptor& d = actuatorBehaviorDescriptors()[i];
+    for (uint8_t b = 0; b < (uint8_t)HardwareBus::BUS_COUNT; b++) {
+      if ((d.busMask & busBit((HardwareBus)b)) != 0) continue;
+      ActuatorConfig c = configFor(d.type, d.behavior, (HardwareBus)b);
+      const char* err = nullptr;
+      if (validateActuatorConfig(c, err)) {
+        printf("  %s accepted on unadvertised bus %u\n", d.name, (unsigned)b);
+        TEST_ASSERT_TRUE(false);
+      }
+    }
+  }
+}
+
+// A behavior must only be accepted under its own type.
+void test_behavior_is_bound_to_its_type() {
+  for (uint8_t i = 0; i < actuatorBehaviorDescriptorCount(); i++) {
+    const BehaviorDescriptor& d = actuatorBehaviorDescriptors()[i];
+    for (uint8_t t = 0; t < (uint8_t)ActuatorType::TYPE_COUNT; t++) {
+      if ((ActuatorType)t == d.type) continue;
+      ActuatorConfig c = configFor((ActuatorType)t, d.behavior,
+                                   actuatorTypeRecommendedBus((ActuatorType)t));
+      const char* err = nullptr;
+      TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
+    }
+  }
+}
+
+// The type mask is the union of its behaviors', and the recommended bus is
+// always a member of it — otherwise the UI would preselect a refused bus.
+void test_type_mask_and_recommended_bus_are_consistent() {
+  for (uint8_t t = 0; t < (uint8_t)ActuatorType::TYPE_COUNT; t++) {
+    ActuatorType type = (ActuatorType)t;
+    uint16_t mask = actuatorTypeBusMask(type);
+    TEST_ASSERT_TRUE(mask != 0);
+    TEST_ASSERT_TRUE((mask & busBit(actuatorTypeRecommendedBus(type))) != 0);
+
+    uint16_t expected = 0;
+    uint8_t behaviors = 0;
+    for (uint8_t i = 0; i < actuatorBehaviorDescriptorCount(); i++) {
+      const BehaviorDescriptor& d = actuatorBehaviorDescriptors()[i];
+      if (d.type == type) { expected |= d.busMask; behaviors++; }
+    }
+    TEST_ASSERT_EQUAL_UINT16(expected, mask);
+    TEST_ASSERT_TRUE(behaviors > 0);   // every type must offer a behavior
+  }
+}
+
+// STEPPER was simply absent from the advertised list.
+void test_stepper_is_advertised() {
+  TEST_ASSERT_TRUE(actuatorTypeBusMask(ActuatorType::STEPPER) != 0);
+  TEST_ASSERT_TRUE(actuatorBehaviorBelongsTo(ActuatorBehavior::STEPPER_POSITION,
+                                             ActuatorType::STEPPER));
+}
+
+// SOLENOID_HOLD needs LEDC_PWM, so the solenoid type must advertise that bus —
+// it did not, which made a hold solenoid unconfigurable from an API-driven UI.
+void test_solenoid_type_advertises_the_bus_its_hold_behavior_requires() {
+  const BehaviorDescriptor* hold =
+      actuatorBehaviorDescriptor(ActuatorBehavior::SOLENOID_HOLD);
+  TEST_ASSERT_NOT_NULL(hold);
+  TEST_ASSERT_EQUAL_UINT16(BUS_LEDC, hold->busMask);
+  TEST_ASSERT_TRUE((actuatorTypeBusMask(ActuatorType::SOLENOID) & BUS_LEDC) != 0);
+}
+
+// PWM motors were advertised as PCA9685-capable; the validator refuses it.
+void test_pwm_motor_does_not_advertise_pca9685() {
+  TEST_ASSERT_TRUE((actuatorTypeBusMask(ActuatorType::PWM_MOTOR) & BUS_PCA) == 0);
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_solenoid_hold_requires_real_pwm);
@@ -523,6 +669,13 @@ int main(int, char**) {
   RUN_TEST(test_stepper_gpio_conflict_detected_on_dir_and_enable);
   RUN_TEST(test_priority_must_be_a_known_value);
   RUN_TEST(test_defaults_leave_current_undeclared);
+  RUN_TEST(test_every_advertised_pair_is_accepted);
+  RUN_TEST(test_every_unadvertised_bus_is_refused);
+  RUN_TEST(test_behavior_is_bound_to_its_type);
+  RUN_TEST(test_type_mask_and_recommended_bus_are_consistent);
+  RUN_TEST(test_stepper_is_advertised);
+  RUN_TEST(test_solenoid_type_advertises_the_bus_its_hold_behavior_requires);
+  RUN_TEST(test_pwm_motor_does_not_advertise_pca9685);
   RUN_TEST(test_actuator_config_uses_gpio);
   RUN_TEST(test_exclusively_reserved_pins_rejected);
   RUN_TEST(test_optional_reserved_pins_allowed);

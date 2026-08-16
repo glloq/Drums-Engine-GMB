@@ -309,8 +309,28 @@ Le systeme sauvegarde et redemarre automatiquement.
 
 
 ## Capacités enrichies
-- `GET /api/capabilities` expose désormais `actuatorBehaviors[]` (id + name) en plus de `actuatorTypes[]`.
-- Limites du firmware ajoutées : `maxPipelines`, `maxCcRoutes`, `midiChannelCount`.
+
+`GET /api/capabilities` est **généré depuis la table de descripteurs**
+(`engine/src/actuator/actuator_descriptor.cpp`) que lit aussi le validateur. Les
+deux ne peuvent donc plus diverger — ce qu'elles faisaient sur les cinq types :
+`STEPPER` était absent, `PCA9685` était annoncé pour les moteurs alors que le
+validateur le refuse, et `LEDC_PWM` manquait pour les solénoïdes alors que
+`SOLENOID_HOLD` l'exige (un solénoïde à maintien était donc impossible à créer
+depuis une UI pilotée par l'API).
+
+- `actuatorTypes[]` : `id`, `name`, `recommendedBus`, `supportedBusMask`,
+  `supportedBehaviors[]`. Le masque d'un type est l'**union** de ceux de ses
+  comportements.
+- `actuatorBehaviors[]` : `id`, `name`, `type`, `supportedBusMask`. Le masque est
+  par **comportement** : `SOLENOID_STRIKE` accepte MCP23017, `SOLENOID_HOLD`
+  exige un vrai PWM. Une UI doit restreindre la liste des bus une fois le
+  comportement choisi.
+- `buses[]` : `id` + `name` de chaque `HardwareBus`.
+- Limites du firmware : `maxPipelines`, `maxCcRoutes`, `midiChannelCount`,
+  `maxActionsPerEvent`, `maxCcBindingsPerInstrument`.
+- `maxServicedActuators` / `servicedActuatorsUsed` : les actionneurs à mouvement
+  continu (steppers) occupent un pool plus petit que `maxActuators`. Un
+  dépassement est **refusé** (507), plus seulement journalisé.
 - Bloc `hardware` : `maxConcurrentActive`, `powerBudgetPeakMa` et
   `powerBudgetContinuousMa` reflètent le budget **en vigueur** (configurable à
   chaud), plus les constantes compilées ; `stepperMaxSps` donne le plafond de
@@ -324,6 +344,7 @@ renvoient :
 | Champ | Défaut | Description |
 |---|---:|---|
 | `currentMa` | 0 | Courant tiré **pendant l'activation**, en mA. `0` = non déclaré : l'actionneur reste invisible pour le budget électrique et n'est jamais refusé pour un motif de courant. |
+| `maxActiveMs` | 0 | Durée d'activation maximale en **millisecondes** (`SOLENOID_HOLD`). `0` = limite de sécurité par défaut du comportement. |
 | `priority` | 1 | `0` = Low (ornement, sacrifié en premier), `1` = Normal, `2` = High (structure rythmique). |
 | `priorityName` | — | Lecture seule, libellé de la priorité. |
 
@@ -466,3 +487,58 @@ Simule un NoteOn pour tester le pipeline d'un instrument.
 |---|---|
 | 125 | Aftertouch (channel pressure) |
 | 126 | Pitch Bend (14-bit → 7-bit) |
+
+
+## `maxActiveMs` remplace la surcharge de `cooldownUs`
+
+`cooldownUs` portait deux significations : le délai anti-rebond entre deux
+activations (en µs/100) **et**, pour `SOLENOID_HOLD`, la durée d'activation
+maximale multipliée par 10. Sur un `uint16_t`, cette seconde lecture plafonnait à
+6,553 s ; au-delà la valeur repliait, si bien qu'une durée de 60 s demandée par
+l'UI devenait ~1 s. Le repli allait toujours dans le sens court — la bobine
+coupait plus tôt que demandé, donc côté sûr — mais le réglage ne faisait pas ce
+qu'il annonçait.
+
+`cooldownUs` ne signifie plus que l'anti-rebond. La durée maximale a son propre
+champ 32 bits, `maxActiveMs`, dans l'unité que l'utilisateur saisit.
+
+**Migration** : `actuators.json` passe en version 3. Un fichier v1/v2 sans
+`maxActiveMs` est converti à la lecture (`maxActiveMs = cooldownUs / 10` pour un
+`SOLENOID_HOLD`, `cooldownUs` remis à 0). La valeur reprise est celle qui était
+**réellement appliquée**, repliement compris : on restaure le comportement
+observé, pas une intention supposée. L'API accepte encore l'ancien encodage
+envoyé seul, pour qu'une UI en cache continue de fonctionner.
+
+## Ordonnancement transactionnel des événements
+
+`POST /api/test/*` et le chemin MIDI passent par `scheduleActionSteps()`, qui met
+en file **toutes** les commandes d'un événement ou aucune. Une percussion peut
+déclencher jusqu'à `maxActionsPerEvent` actions ; auparavant elles étaient
+insérées une par une, si bien qu'une file presque pleine pouvait accepter la
+frappe et refuser l'étouffoir. Un événement refusé ne marque plus la note active
+et ne consomme plus de tour de round-robin.
+
+`GET /api/status` expose `event_rejected_batches` et
+`scheduler_rejected_batches` pour surveiller le phénomène (à distinguer de
+`scheduler_overflow`, qui compte des commandes isolées).
+
+## Modèles de percussion
+
+`GET /api/templates` et `POST /api/instruments/from-template` lisent la **même**
+table (`engine/src/instrument/percussion_template.cpp`). Trois descriptions
+parallèles coexistaient et avaient divergé :
+
+- le hi-hat annonçait un servo `HIHAT_CONTROLLER` — le comportement qui porte la
+  logique CC#4 + splash — alors que la création exigeait `SERVO_POSITION` :
+  suivre l'exigence publiée provoquait un 400 ;
+- la note par défaut annoncée par chaque modèle était ignorée à la création, qui
+  partait d'un `36` codé en dur (un hi-hat atterrissait sur la grosse caisse) ;
+- la timbale liait sa tension au CC#127 alors que le moteur convertit le Pitch
+  Bend vers le CC virtuel 126 : la liaison ne recevait jamais rien.
+
+`slotHints[].requiredBehavior` est désormais **absent** quand le modèle accepte
+n'importe quel comportement du type (le shaker se contente d'un moteur PWM).
+
+La création applique aussi le rollback des autres CRUD : un échec d'écriture
+renvoie 500 et retire l'instrument, au lieu de répondre 201 pour une
+configuration qui disparaîtrait au redémarrage.

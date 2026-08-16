@@ -39,10 +39,24 @@ class Scheduler; // Forward declaration
 
 class ActuatorManager {
 public:
+  // Nombre maximum d'actionneurs a mouvement continu (steppers). Dimensionne
+  // pour 8 et non MAX_ACTUATORS : chaque stepper mobilise 2 a 3 GPIO, il n'y a
+  // pas la place d'en cabler 64 sur un ESP32, et cette table est en .bss dont
+  // la marge est comptee (voir docs/memory-budget.md).
+  // Public : la factory doit pouvoir refuser AVANT de construire, et l'API
+  // l'expose dans /api/capabilities.
+  static constexpr uint8_t MAX_SERVICABLE = 8;
+
   ActuatorManager();
 
-  // Enregistrer un actionneur (prend possession du pointeur)
+  // Enregistrer un actionneur (prend possession du pointeur).
+  // Echoue si l'actionneur demande un service continu et qu'aucun emplacement
+  // n'est libre : un actionneur enregistre mais jamais avance accepterait des
+  // commandes sans jamais bouger, ce qui est pire qu'un refus franc.
   bool registerActuator(uint8_t id, Actuator* actuator);
+
+  // Nombre d'actionneurs a service continu actuellement enregistres.
+  uint8_t getServicableCount() const { return _servicableCount; }
 
   // Retirer un actionneur
   bool unregisterActuator(uint8_t id);
@@ -123,10 +137,6 @@ private:
   // Sous-ensemble des actionneurs qui demandent un service continu. Garde a
   // part pour que la boucle temps reel n'ait pas a parcourir tout le registre
   // a 1 kHz quand aucun stepper n'est configure (le cas courant).
-  // Dimensionne pour 8 et non MAX_ACTUATORS : chaque stepper mobilise 2 a 3
-  // GPIO, il n'y a pas la place d'en cabler 64 sur un ESP32, et cette table est
-  // en .bss dont la marge est comptee (voir docs/memory-budget.md).
-  static constexpr uint8_t MAX_SERVICABLE = 8;
   Actuator* _servicable[MAX_SERVICABLE];
   uint8_t _servicableCount = 0;
 

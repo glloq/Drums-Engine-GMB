@@ -61,19 +61,30 @@ bool CommandQueue::push(const ActuatorCommand& cmd) {
 }
 
 bool CommandQueue::pushPair(const ActuatorCommand& on, const ActuatorCommand& off) {
+  const ActuatorCommand pair[2] = { on, off };
+  return pushBatch(pair, 2);
+}
+
+bool CommandQueue::pushBatch(const ActuatorCommand* cmds, uint8_t count) {
+  if (!cmds || count == 0) return true;
+  if (count > MAX_BATCH) return false;
+
   portENTER_CRITICAL(&_mux);
 
-  // Reserve two slots up-front: insert both or neither so an actuator can
-  // never be turned ON without its scheduled OFF (P0 #7).
-  if (_count > COMMAND_QUEUE_SIZE - 2) {
+  // Reserve every slot up-front: insert all or none. A percussion can carry up
+  // to MAX_ACTIONS_PER_EVENT actions (strike + mute + servo position + second
+  // striker); inserting them one at a time meant a nearly-full queue could
+  // accept the strike and reject the mute, playing something the instrument
+  // never described. The ON/OFF pair is the two-command case of the same rule.
+  if ((uint16_t)(COMMAND_QUEUE_SIZE - _count) < count) {
     _overflowCount++;
     portEXIT_CRITICAL(&_mux);
-    DBGF("[Queue] OVERFLOW (pair rejected, count=%lu)\n", _overflowCount);
+    DBGF("[Queue] OVERFLOW (batch of %u rejected, count=%lu)\n",
+         (unsigned)count, _overflowCount);
     return false;
   }
 
-  _insertLocked(on);
-  _insertLocked(off);
+  for (uint8_t i = 0; i < count; i++) _insertLocked(cmds[i]);
   portEXIT_CRITICAL(&_mux);
   return true;
 }

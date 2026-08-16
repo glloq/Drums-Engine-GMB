@@ -57,10 +57,23 @@ FreeRTOS et le serveur web asynchrone. Ce qui compte est la marge restante dans
 Une premiere version de ce lot (`MAX_PIPELINES` 128, table d'anti-flood CC
 indexee par `(canal, CC)`) pesait +38 ko et le link a echoue avec
 `region dram0_0_seg overflowed by 7008 bytes`. La marge reelle etait donc
-d'environ **31 ko**. La version retenue en consomme ~21 ko et laisse ~10 ko.
+d'environ **31 ko**.
+
+Valeurs mesurees en CI sur la version retenue :
+
+```
+   text     data     bss      dec      hex
+1174803   454600   90209  1719612   1a3d3c   firmware.elf
+```
+
+Les deux mesures se recoupent : la version en echec portait un `.bss` d'environ
+107,7 ko et debordait de 7,0 ko, ce qui place le plafond aux alentours de
+**100,7 ko**. A 90,2 ko, il reste donc de l'ordre de **10 ko** — a partager avec
+le tas, puisque ce qui n'est pas consomme par `.bss` revient a l'allocateur.
 
 **N'estimez pas cette marge : mesurez-la.** `pio run -e esp32 --target size`,
-execute par la CI, est la seule reponse qui fasse foi.
+execute par la CI, est la seule reponse qui fasse foi — et l'echec est un echec
+de LINK, pas de compilation : aucune verification cote hote ne le verra venir.
 
 ### D'ou vient la depense
 

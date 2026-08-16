@@ -4,6 +4,7 @@
 #include <ArduinoJson.h>
 #include "../core/types.h"
 #include "../core/config.h"
+#include "../core/midi_routing.h"
 
 // ============================================================================
 // PipelineCompiler - Compile JSON UI -> Tables statiques
@@ -23,6 +24,12 @@ public:
 
   // Compiler toute la configuration et remplir la PipelineLookup
   static bool compileAll(const JsonArray& instruments, PipelineLookup& lookup);
+
+  // (Re)construire la table (canal, note) -> pipeline a partir des pipelines
+  // deja compiles. Expose pour que main.cpp, qui construit ses pipelines depuis
+  // l'InstrumentManager plutot que depuis le JSON, applique exactement les
+  // memes regles de precedence OMNI / canal explicite.
+  static void buildNoteMap(PipelineLookup& lookup);
 
   // Serialiser une PipelineLookup en JSON (pour debug/sauvegarde)
   static void lookupToJson(const PipelineLookup& lookup, JsonObject& obj);

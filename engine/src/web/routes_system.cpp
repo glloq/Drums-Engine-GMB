@@ -151,6 +151,9 @@ void WebServerManager::_handleGetCapabilities(AsyncWebServerRequest* req) {
   doc["maxActuators"] = MAX_ACTUATORS;
   doc["maxInstruments"] = MAX_INSTRUMENTS;
   doc["maxActuatorsPerInstrument"] = MAX_ACTUATORS_PER_INST;
+  doc["maxPipelines"] = MAX_PIPELINES;
+  doc["maxCcRoutes"] = MAX_CC_ROUTES;
+  doc["midiChannelCount"] = MIDI_CHANNEL_COUNT;
 
   // --- Hardware map (consumed by the "Cablage" page to generate the wiring
   // report). Everything here is a compile-time constant of the firmware, so the
@@ -170,9 +173,14 @@ void WebServerManager::_handleGetCapabilities(AsyncWebServerRequest* req) {
   hw["micSck"] = MIC_I2S_SCK;
   hw["micWs"] = MIC_I2S_WS;
   hw["micSd"] = MIC_I2S_SD;
-  hw["maxConcurrentActive"] = MAX_CONCURRENT_ACTIVE;
+  // Live values, not the compile-time defaults: the power budget is now
+  // configurable at runtime via /api/power-budget.
+  hw["maxConcurrentActive"] = _actMgr->getPowerBudget().maxConcurrent;
+  hw["powerBudgetPeakMa"] = _actMgr->getPowerBudget().maxPeakMa;
+  hw["powerBudgetContinuousMa"] = _actMgr->getPowerBudget().maxContinuousMa;
   hw["solenoidMaxOnMs"] = SOLENOID_MAX_ON_US / 1000;
   hw["motorMaxContinuousMs"] = MOTOR_MAX_CONTINUOUS_US / 1000;
+  hw["stepperMaxSps"] = STEPPER_MAX_SPEED_SPS;
   hw["ledMaxStrips"] = LED_MAX_STRIPS;
 
   // Pins the engine reserves for itself. Same table the config validator uses,
@@ -798,16 +806,96 @@ void WebServerManager::_handleSetMidiChannels(AsyncWebServerRequest* req, uint8_
   _sendJson(req, 200, resp);
 }
 
+// GET /api/power-budget
+// Etat du budget electrique : limites configurees, consommation instantanee,
+// pire cas si tout se declenchait ensemble, et refus comptabilises par motif.
+void WebServerManager::_handleGetPowerBudget(AsyncWebServerRequest* req) {
+  const PowerBudgetConfig& budget = _actMgr->getPowerBudget();
+
+  JsonDocument doc;
+  doc["maxPeakMa"] = budget.maxPeakMa;
+  doc["maxContinuousMa"] = budget.maxContinuousMa;
+  doc["maxConcurrent"] = budget.maxConcurrent;
+
+  doc["activeCurrentMa"] = _actMgr->getActiveCurrentMa();
+  doc["activeCount"] = _actMgr->getActiveCount();
+  uint32_t worstCase = _actMgr->getWorstCaseCurrentMa();
+  doc["worstCaseCurrentMa"] = worstCase;
+  // Le pire cas depasse-t-il ce que l'alimentation declaree peut fournir ? Si
+  // oui, l'arbitrage FERA son travail (des frappes seront refusees) : c'est un
+  // avertissement de dimensionnement, pas une erreur.
+  doc["worstCaseExceedsPeak"] = (budget.maxPeakMa > 0 && worstCase > budget.maxPeakMa);
+
+  JsonObject refused = doc["refused"].to<JsonObject>();
+  refused["byCount"] = _actMgr->getRefusedByCount();
+  refused["byPeak"] = _actMgr->getRefusedByPeak();
+  refused["byContinuous"] = _actMgr->getRefusedByContinuous();
+
+  JsonArray priorities = doc["priorities"].to<JsonArray>();
+  for (uint8_t p = 0; p < (uint8_t)ActuatorPriority::PRIORITY_COUNT; p++) {
+    JsonObject o = priorities.add<JsonObject>();
+    o["id"] = p;
+    o["name"] = actuatorPriorityName(p);
+  }
+
+  _sendJson(req, 200, doc);
+}
+
+// PUT /api/power-budget  {maxPeakMa, maxContinuousMa, maxConcurrent}
+void WebServerManager::_handleSetPowerBudget(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
+  JsonDocument doc;
+  if (deserializeJson(doc, data, len)) { _sendError(req, 400, "Invalid JSON"); return; }
+
+  PowerBudgetConfig budget = _actMgr->getPowerBudget();
+  if (doc.containsKey("maxPeakMa"))       budget.maxPeakMa = doc["maxPeakMa"] | 0;
+  if (doc.containsKey("maxContinuousMa")) budget.maxContinuousMa = doc["maxContinuousMa"] | 0;
+  if (doc.containsKey("maxConcurrent"))   budget.maxConcurrent = doc["maxConcurrent"] | 0;
+
+  if (budget.maxConcurrent > MAX_ACTUATORS) {
+    _sendError(req, 400, "maxConcurrent cannot exceed MAX_ACTUATORS");
+    return;
+  }
+  // Un plafond continu au-dessus du plafond crete serait inatteignable : il ne
+  // declasserait jamais rien, ce qui n'est presque jamais l'intention.
+  if (budget.maxPeakMa > 0 && budget.maxContinuousMa > budget.maxPeakMa) {
+    _sendError(req, 400, "maxContinuousMa must be <= maxPeakMa");
+    return;
+  }
+
+  _actMgr->setPowerBudget(budget);
+
+  JsonDocument saveDoc;
+  saveDoc["maxPeakMa"] = budget.maxPeakMa;
+  saveDoc["maxContinuousMa"] = budget.maxContinuousMa;
+  saveDoc["maxConcurrent"] = budget.maxConcurrent;
+  _storage->saveJsonFile(POWER_FILE, saveDoc);
+
+  JsonDocument resp;
+  resp["maxPeakMa"] = budget.maxPeakMa;
+  resp["maxContinuousMa"] = budget.maxContinuousMa;
+  resp["maxConcurrent"] = budget.maxConcurrent;
+  resp["message"] = "Power budget updated";
+  _sendJson(req, 200, resp);
+}
+
 void WebServerManager::_handleTestCC(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
   JsonDocument doc;
   if (deserializeJson(doc, data, len)) { _sendError(req, 400, "Invalid JSON"); return; }
   uint8_t cc = doc["cc"] | 7;
   uint8_t val = doc["value"] | 127;
+  // CC routing is channel aware, so the test endpoint has to be too: hardcoding
+  // channel 10 made it impossible to exercise a CC binding that belongs to an
+  // instrument on any other channel.
+  uint8_t channel = doc["channel"] | 10;
+  if (channel < 1 || channel > MIDI_CHANNEL_COUNT) {
+    _sendError(req, 400, "channel must be in [1..16]");
+    return;
+  }
 
   // Send CC event directly to EventProcessor
   MidiEvent ev;
   ev.type = MIDI_EVT_CC;
-  ev.channel = 10; // Default drums channel
+  ev.channel = channel;
   ev.data1 = cc;
   ev.data2 = val;
   ev.timestamp = micros();
@@ -826,6 +914,17 @@ void WebServerManager::_handleTestNote(AsyncWebServerRequest* req, uint8_t* data
   uint8_t velocity = doc["velocity"] | 80;
   uint8_t channel = doc["channel"] | 10;
   bool noteOff = doc["noteOff"] | false;
+
+  // Routing rejects an out-of-range channel outright rather than folding it onto
+  // channel 1. Say so, instead of accepting the request and doing nothing.
+  if (channel < 1 || channel > MIDI_CHANNEL_COUNT) {
+    _sendError(req, 400, "channel must be in [1..16]");
+    return;
+  }
+  if (note >= 128) {
+    _sendError(req, 400, "note must be in [0..127]");
+    return;
+  }
 
   MidiEvent ev;
   ev.type = noteOff ? MIDI_EVT_NOTE_OFF : MIDI_EVT_NOTE_ON;

@@ -5,6 +5,7 @@
 #include <ArduinoJson.h>
 #include "../core/config.h"
 #include "../core/types.h"
+#include "../core/midi_routing.h"
 #include "../actuator/actuator_manager.h"
 #include "../scheduler/scheduler.h"
 
@@ -45,7 +46,9 @@ public:
   bool instrumentFromJson(const JsonObject& obj, InstrumentConfig& inst);
 
   // --- Lookup ---
-  InstrumentConfig* findByMidiNote(uint8_t note);
+  // Le canal fait partie de la cle : la meme note sur deux canaux designe deux
+  // instruments differents. `channel` est le canal du fil (1..16).
+  InstrumentConfig* findByMidiNote(uint8_t channel, uint8_t note);
   uint8_t nextId() const;
 
 private:
@@ -55,10 +58,16 @@ private:
   InstrumentConfig _instruments[MAX_INSTRUMENTS];
   uint8_t _count;
 
-  // Lookup O(1) : note MIDI -> index instrument
-  int8_t _noteMap[128];
+  // Lookup O(1) : (canal, note) -> index instrument, -1 = aucun.
+  // La table etait indexee par la note seule et le canal n'etait verifie
+  // qu'APRES coup : deux instruments partageant une note sur deux canaux
+  // differents ne pouvaient donc pas coexister — le second ecrasait le premier
+  // dans la table, et le premier ne repondait plus. Les instruments OMNI
+  // (midiChannel == 0) sont deplies sur les 16 lignes a la reconstruction.
+  int8_t _noteMap[MIDI_CHANNEL_COUNT][128];
 
   void _rebuildNoteMap();
+  int8_t _lookup(uint8_t channel, uint8_t note) const;
 };
 
 #endif // INSTRUMENT_MANAGER_H

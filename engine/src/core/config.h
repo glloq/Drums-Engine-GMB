@@ -47,17 +47,37 @@
 #define PCA_FREQUENCY     50
 
 // --- Engine Limits (compile-time, zero dynamic allocation) ---
-#define MAX_ACTUATORS        32
-#define MAX_INSTRUMENTS      16
+// A General MIDI percussion map spans notes 35..81 (47 articulations), and the
+// GM_DRUM_NOTES table in core/types.h already lists 55. The previous limit of 16
+// instruments / 32 pipelines could not represent a complete kit, so a user had
+// to choose which articulations to drop. The limits below carry a full GM kit
+// on one board, plus room for a second channel of tuned/hand percussion.
+//
+// RAM cost of the raise (see docs/memory-budget.md for the full table):
+//   PipelineLookup   6.4 kB -> 28.6 kB   (128 pipelines + 16x128 channel map)
+//   InstrumentManager 3.5 kB -> 15.6 kB  (64 instruments + 16x128 channel map)
+//   ActuatorFactory  20.2 kB -> 12.4 kB  (union pool, see actuator_factory.h)
+// Net ~ +27 kB of .bss on a 320 kB part. The union actuator pool pays for a
+// large part of the raise on its own: the factory used to hold MAX_ACTUATORS
+// instances of EVERY actuator class side by side.
+#define MAX_ACTUATORS        64
+#define MAX_INSTRUMENTS      64
 #define MAX_ACTUATORS_PER_INST 8
-#define MAX_PIPELINES        32
+#define MAX_PIPELINES        128
 #define MAX_BLOCKS_PER_PIPELINE 8
 #define MAX_GLOBAL_VARS      128
 #define MAX_ACTIONS_PER_EVENT 4
 #define MAX_CC_BINDINGS       4
-#define MAX_CC_ROUTES         64
+#define MAX_CC_ROUTES         128
 #define MAX_LOOPS            8
 #define MAX_LOOP_EVENTS      256
+
+// --- MIDI routing ---
+// Notes are routed on (channel, note), not on note alone: the same note number
+// on two channels is two different instruments. Channels are 1..16 on the wire
+// and stored 0-based, so channel N lives at row N-1. midiChannel == 0 means
+// OMNI and is expanded across every row when the lookup table is built.
+#define MIDI_CHANNEL_COUNT   16
 
 // --- Scheduler ---
 #define COMMAND_QUEUE_SIZE   128
@@ -72,9 +92,33 @@
 // --- Safety ---
 #define SOLENOID_MAX_ON_US       500000    // 500ms max solenoid activation (thermal)
 #define MOTOR_MAX_CONTINUOUS_US  5000000   // 5s max continuous motor run
-#define MAX_CONCURRENT_ACTIVE    8         // Max simultaneously active actuators
 #define WATCHDOG_CHECK_US        100000    // Thermal/duration watchdog every 100ms (~10 Hz)
 #define ENDSTOP_CHECK_US         1000      // End-stop polling every 1ms (~1 kHz, review #5)
+
+// --- Power budget (supply protection) ---
+// A flat "max 8 actuators at once" limit protects the supply by proxy: it
+// assumes every actuator draws the same current. It does not — a 2 A bass-drum
+// solenoid and a 20 mA servo used to count the same. The engine now arbitrates
+// on the actual current draw declared per actuator (ActuatorConfig::currentMa),
+// and keeps the count limit as a second, independent ceiling.
+//
+// Defaults are deliberately permissive on current (0 = "no current ceiling") so
+// an existing configuration behaves EXACTLY as before the change until the user
+// declares a supply. The count limit keeps its historical value.
+#define MAX_CONCURRENT_ACTIVE       8      // Default count ceiling (0 = unlimited)
+#define POWER_BUDGET_PEAK_MA_DEF    0      // Default hard current ceiling (0 = off)
+#define POWER_BUDGET_CONT_MA_DEF    0      // Default sustained ceiling  (0 = off)
+
+// --- Stepper ---
+// Step pulses are generated from the RT core service loop, which runs at
+// ~1 kHz (vTaskDelay(1) in rtCoreTask). Each pass may emit a bounded burst so a
+// stepper can exceed the service rate without ever monopolising the RT core:
+// STEPPER_MAX_STEPS_PER_PASS pulses x STEPPER_PULSE_US of busy-wait is the
+// worst case added to one RT pass.
+#define STEPPER_PULSE_US            4      // STEP high time (DRV8825/A4988 need >=2us)
+#define STEPPER_MAX_STEPS_PER_PASS  8      // => ~8 kHz ceiling, ~32us busy-wait per pass
+#define STEPPER_MAX_SPEED_SPS       8000   // Hard clamp on configured steps/second
+#define STEPPER_HOMING_TIMEOUT_US   8000000 // 8s to reach the home end stop, then abort
 
 // --- Microphone (INMP441 via I2S) ---
 #define MIC_I2S_NUM          I2S_NUM_0    // I2S peripheral number
@@ -106,6 +150,7 @@
 #define ACTUATORS_FILE    "/actuators.json"
 #define INSTRUMENTS_FILE  "/instruments.json"
 #define LEDS_FILE         "/leds.json"
+#define POWER_FILE        "/power.json"
 #define THEMES_FILE       "/themes.json"
 #define LOOPS_DIR         "/loops"
 

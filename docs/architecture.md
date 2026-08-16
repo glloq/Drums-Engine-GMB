@@ -28,12 +28,12 @@ Core 1 (RT 1kHz)                    Core 0 (App)
 
 ### NoteOn/NoteOff
 ```
-MIDI → lookup note_to_pipeline[128] → ActionStep[] → scheduler → actuator
+MIDI → lookup note_to_pipeline[canal-1][note] → ActionStep[] → scheduler → actuator
 ```
 
 ### CC (Control Change)
 ```
-MIDI CC → update global vars → lookup cc_routes[] → anti-flood 5ms → scheduler → actuator
+MIDI CC → update global vars → lookup cc_routes[] → filtre canal → anti-flood 5ms → scheduler
 ```
 
 ### Pitch Bend
@@ -104,8 +104,49 @@ EventProcessor ──→ LedEventQueue (SPSC lock-free) ──→ LedEngine (Cor
 | | Off | Commande OFF (terminal) |
 
 ### PipelineLookup
-- `note_to_pipeline[128]` — O(1) lookup par note MIDI
-- `cc_routes[]`, `cc_to_first[128]`, `cc_to_count[128]` — table CC compilee
+- `note_to_pipeline[16][128]` — lookup O(1) par **(canal, note)**
+- `cc_routes[]`, `cc_to_first[128]`, `cc_to_count[128]` — table CC compilee,
+  chaque route portant le canal de son instrument
+
+## Routage MIDI : le canal fait partie de la cle
+
+La table de lookup etait indexee par la **note seule**. Le canal n'etait pas une
+cle : en mode pipeline il etait purement ignore (une note 36 sur le canal 1
+declenchait le kick du canal 10), et en mode legacy il n'etait verifie qu'apres
+coup, contre un slot unique par note — deux instruments sur la meme note dans
+deux canaux differents ne pouvaient donc pas coexister, le second ecrasait le
+premier et le premier ne repondait plus.
+
+La table est desormais `16 x 128` (2 ko) et le canal est une vraie cle. Cela
+permet de faire cohabiter plusieurs familles sur un seul ESP32 :
+
+```
+CH10  kit batterie          CH12  xylophone
+CH11  percussions latines   CH13  glockenspiel
+```
+
+### Regles de precedence
+
+Les deux chemins de routage — pipelines compiles et instruments legacy —
+partagent la meme implementation (`core/midi_routing.h`, testee dans
+`test/test_midi_routing`), pour qu'ils ne puissent pas diverger :
+
+1. `midiChannel == 0` signifie **OMNI** : l'entree est depliee sur les 16 lignes
+   a la compilation. Le chemin temps reel reste donc un seul acces indexe, sans
+   branche supplementaire.
+2. Un canal explicite l'emporte **toujours** sur une entree OMNI reclamant la
+   meme note, quel que soit leur ordre dans la configuration (construction en
+   deux passes).
+3. Entre deux entrees de meme rang, la premiere garde la place ; les suivantes
+   sont comptees comme masquees et signalees dans les logs plutot qu'ignorees
+   silencieusement.
+4. Un canal hors de `[1..16]` en entree est **refuse**, jamais replie sur le
+   canal 1.
+
+Le compteur `_noteActive` de l'`EventProcessor` est lui aussi passe d'un index
+par note a un index **par pipeline** : une note presente sur deux canaux suit
+maintenant son NoteOn/NoteOff independamment. L'API expose toujours un tableau
+de 128 notes pour l'UI, reconstruit a la demande.
 
 ## Securite temps reel et concurrence
 
@@ -114,7 +155,7 @@ EventProcessor ──→ LedEventQueue (SPSC lock-free) ──→ LedEngine (Cor
 - **Core 0 (App)** : Web server + Loop Engine + LED Engine + WiFi
 
 ### Protections concurrence
-- `portENTER_CRITICAL` spinlock sur `_noteActive[128]` (partage Core 0 / Core 1)
+- `portENTER_CRITICAL` spinlock sur `_noteActive[]` (partage Core 0 / Core 1)
 - `std::atomic<bool>` pour le flag ISR timer `schedulerTimerFired`
 - Mutex I2C global (`g_i2cMutex`) protegeant tous les acces MCP23017/PCA9685
 - `portMUX` par slot ISR pour le comptage edges moteur optique
@@ -125,10 +166,43 @@ EventProcessor ──→ LedEventQueue (SPSC lock-free) ──→ LedEngine (Cor
 - Re-initialisation automatique du bus Wire + re-init driver
 
 ### Anti-flood et surcharge
-- Throttle CC : max 1 dispatch batch par numero CC toutes les 5ms
-- Protection surcharge : `MAX_CONCURRENT_ACTIVE` actionneurs simultanes
+- Throttle CC : max 1 dispatch batch par **(canal, CC)** toutes les 5ms
+- Protection surcharge : budget electrique (voir ci-dessous)
 - Watchdog periodique avec timeouts par type d'actionneur
 - Cooldown par actionneur (configurable en microsecondes)
+
+### Budget electrique
+
+La protection de surcharge etait un compteur plat : au plus
+`MAX_CONCURRENT_ACTIVE` (8) actionneurs actifs. Cela revient a supposer qu'ils
+consomment tous pareil, alors que l'ecart atteint un facteur 100 entre un servo
+de hi-hat (~20 mA) et un solenoide de grosse caisse (~2 A). Sur une petite
+alimentation la limite etait trop permissive ; sur une grosse installation elle
+devenait une limite **musicale** arbitraire.
+
+L'arbitrage porte desormais sur le courant declare par actionneur
+(`ActuatorConfig::currentMa`), avec trois plafonds independants — chacun
+desactivable en le mettant a 0 :
+
+| Plafond | Effet |
+|---|---|
+| `maxPeakMa` | Plafond dur : aucune activation ne le franchit, quelle que soit la priorite |
+| `maxContinuousMa` | Plafond souple : au-dela, seules les priorites NORMAL/HIGH passent |
+| `maxConcurrent` | Plafond en nombre, conserve comme garde-fou independant |
+
+Chaque actionneur porte une priorite (`PRIO_LOW` / `PRIO_NORMAL` / `PRIO_HIGH`) :
+au-dessus du courant continu, les ornements sont sacrifies pour garder la
+structure rythmique.
+
+**Migration transparente** : un actionneur dont `currentMa` vaut 0 (courant non
+declare) ne consomme pas de budget et n'est jamais refuse pour un motif de
+courant. Les defauts compiles laissent `maxPeakMa` et `maxContinuousMa` a 0 et
+`maxConcurrent` a 8 : une configuration existante se comporte donc exactement
+comme avant tant que rien n'est declare.
+
+La regle est une fonction pure (`core/power_budget.h`), testee dans
+`test/test_power_budget`. L'etat et les refus comptabilises par motif sont
+exposes sur `GET /api/power-budget`.
 
 ### Queue scheduler
 - Ring buffer statique 128 commandes
@@ -148,6 +222,7 @@ EventProcessor ──→ LedEventQueue (SPSC lock-free) ──→ LedEngine (Cor
 /actuators.json     — Configuration des actionneurs
 /instruments.json   — Configuration des instruments
 /leds.json          — Configuration LED (strips, segments, brightness)
+/power.json         — Budget electrique (plafonds crete/continu/nombre)
 /themes.json        — Themes LED (palettes, animations)
 /wifi.json          — Credentials WiFi
 /auth.json          — Token API
@@ -169,6 +244,58 @@ EventProcessor ──→ LedEventQueue (SPSC lock-free) ──→ LedEngine (Cor
 | SERVO_MUTE | Servo | Etouffoir toggle (position mute/libre) |
 | SOLENOID_MUTE | Solenoid | Etouffoir solenoid |
 | MOTOR_OPTICAL_TRACK | Motor | Suivi optique ISR hardware (4 slots) |
+| STEPPER_POSITION | Stepper | Position absolue en pas (zone de frappe, tension) |
+| STEPPER_STRIKE | Stepper | Aller-retour maillet : frappe puis retour au repos |
+| STEPPER_ROTATE | Stepper | Rotation continue a vitesse variable |
+
+## Stepper (cinquieme type d'actionneur)
+
+Un stepper n'est indispensable a aucune batterie classique. Il devient
+interessant des que la **repetabilite de la position** compte plus que la vitesse
+de frappe : maillet rotatif, mecanisme de roulement, changement de zone de
+frappe, reglage de tension de peau (timbale), pedale mecanique.
+
+### Cablage (bus `GPIO_DIRECT` obligatoire)
+
+| Champ | Role |
+|---|---|
+| `hwPin` | STEP |
+| `hwAddress` | DIR |
+| `enablePin` | /ENABLE actif bas (255 = driver toujours actif) |
+| `endStopPin1` | Butee mini / origine |
+| `endStopPin2` | Butee maxi |
+| `paramMin`/`paramMax` | Bornes de course en pas (en % de vitesse pour ROTATE) |
+| `paramDefault` | Position de repos |
+| `stepperMaxSps` | Vitesse max en pas/seconde |
+| `stepperAccelSps2` | Acceleration en pas/s² (0 = pas de rampe) |
+
+Ni MCP23017 (un aller-retour I2C par pas) ni PCA9685 (50 Hz) ne peuvent produire
+un train d'impulsions ; LEDC n'aide pas non plus puisque les pas doivent etre
+comptes. Le validateur impose donc `GPIO_DIRECT`.
+
+### Generation des pas
+
+Les impulsions sortent de `Actuator::service()`, appele a chaque passe de la
+boucle temps reel (~1 kHz) via `ActuatorManager::serviceAll()`. Une passe peut
+emettre une **rafale bornee** de `STEPPER_MAX_STEPS_PER_PASS` pas, ce qui porte
+le plafond a ~8 kpas/s tout en bornant la charge : 8 pas x (4 µs haut + 4 µs bas)
+= ~64 µs par passe dans le pire cas, soit ~6 % d'une passe de 1 ms. C'est le
+compromis assume — pas de timer materiel dedie, mais une charge deterministe et
+un plafond de vitesse annonce (`STEPPER_MAX_SPEED_SPS`, impose par le validateur).
+
+La vitesse suit une rampe d'acceleration, avec deceleration d'approche calculee
+sur la distance restante (`v = sqrt(2·a·d)`) pour que le moteur arrive a l'arret
+plutot qu'en pleine vitesse — sinon la charge continue sur son inertie et des pas
+sont perdus.
+
+### Prise d'origine
+
+Si une butee mini est declaree, la position reste **inconnue** au demarrage et le
+premier deplacement absolu declenche une prise d'origine (approche lente, bornee
+par `STEPPER_HOMING_TIMEOUT_US`) avant de rejoindre la cible demandee. Sans
+butee, la position de repos declaree est prise pour argent comptant. Un timeout
+de prise d'origine laisse la position marquee inconnue, pour qu'un deplacement
+ulterieur retente au lieu de partir d'un zero invente.
 
 ## Motor optical (ISR hardware)
 
@@ -182,9 +309,11 @@ EventProcessor ──→ LedEventQueue (SPSC lock-free) ──→ LedEngine (Cor
 
 ```
 engine/src/
-├── core/           Config, types, constantes, error_log
+├── core/           Config, types, constantes, error_log,
+│                   midi_routing (regles (canal,note)), power_budget (arbitrage)
 ├── hal/            Drivers: MCP23017, PCA9685, LEDC, GPIO + interface I2C mutex
-├── actuator/       Comportements: servo, solenoid, motor + manager avec cache activeCount
+├── actuator/       Comportements: servo, solenoid, motor, stepper + manager
+│                   (budget electrique, pool type-efface)
 ├── scheduler/      Ordonnanceur temps reel (queue statique, timer hardware)
 ├── event/          Pipeline compile, traitement MIDI runtime, spinlock _noteActive
 ├── instrument/     Gestion instruments, templates, factory actionneurs

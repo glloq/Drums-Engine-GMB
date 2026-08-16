@@ -10,73 +10,70 @@ ActuatorFactory::ActuatorFactory(ActuatorManager* manager,
     _mcpDrivers(mcpDrivers), _mcpSlots(mcpSlots),
     _pcaDrivers(pcaDrivers), _pcaSlots(pcaSlots),
     _gpioDriver(gpioDriver), _ledcDriver(ledcDriver),
-    _solenoidIdx(0), _servoIdx(0), _motorIdx(0),
-    _configCount(0), _createdCount(0) {
-  // Initialiser les pools servo avec un pointeur PCA par defaut
-  // (sera reassigne dans createAndRegister)
-}
+    _poolIdx(0),
+    _configCount(0), _createdCount(0) {}
 
 Actuator* ActuatorFactory::createAndRegister(const ActuatorConfig& config) {
-  if (_createdCount >= MAX_ACTUATORS) {
+  if (_createdCount >= MAX_ACTUATORS || _poolIdx >= MAX_ACTUATORS) {
     DBGLN("[Factory] Max actuators reached!");
     return nullptr;
   }
 
+  // L'emplacement n'est consomme (_poolIdx++) qu'une fois l'actionneur
+  // effectivement construit ET enregistre : un driver manquant ne doit pas
+  // bruler une place du pool.
+  ActuatorSlot& slot = _pool[_poolIdx];
   Actuator* actuator = nullptr;
 
   switch (config.type) {
     case ActuatorType::SOLENOID: {
-      if (_solenoidIdx >= MAX_ACTUATORS) return nullptr;
       HalDriver* driver = _getDriver(config.bus, config.hwAddress);
       if (!driver) {
         DBGF("[Factory] No HAL driver for solenoid '%s' (bus=%d, addr=0x%02X)\n",
              config.name, (int)config.bus, config.hwAddress);
         return nullptr;
       }
-      SolenoidActuator& sol = _solenoidPool[_solenoidIdx];
-      sol = SolenoidActuator(driver);
-      sol.setConfig(config);
-      actuator = &sol;
-      _solenoidIdx++;
+      actuator = slot.emplace<SolenoidActuator>(driver);
       break;
     }
 
     case ActuatorType::SERVO: {
-      if (_servoIdx >= MAX_ACTUATORS) return nullptr;
       PCA9685Driver* pcaDriver = _getPcaDriver(config.hwAddress);
       if (!pcaDriver) {
         DBGF("[Factory] No PCA9685 driver for servo '%s' (addr=0x%02X)\n",
              config.name, config.hwAddress);
         return nullptr;
       }
-      ServoActuator& srv = _servoPool[_servoIdx];
-      srv = ServoActuator(pcaDriver);
-      srv.setConfig(config);
-      actuator = &srv;
-      _servoIdx++;
+      actuator = slot.emplace<ServoActuator>(pcaDriver);
       break;
     }
 
     case ActuatorType::PWM_MOTOR:
     case ActuatorType::MOTOR_OPTICAL: {
-      if (_motorIdx >= MAX_ACTUATORS) return nullptr;
       HalDriver* driver = _getDriver(config.bus, config.hwAddress);
       if (!driver) {
         DBGF("[Factory] No HAL driver for motor '%s' (bus=%d)\n",
              config.name, (int)config.bus);
         return nullptr;
       }
-      MotorActuator& mot = _motorPool[_motorIdx];
-      mot = MotorActuator(driver);
-      mot.setConfig(config);
+      actuator = slot.emplace<MotorActuator>(driver);
       // Attach the LEDC channel eagerly here (build time, Core 0) so the RT
       // dispatch path never triggers a first-use allocation — closes the narrow
       // two-core first-attach race in LedcDriver.
       if (config.bus == HardwareBus::LEDC_PWM && _ledcDriver) {
         _ledcDriver->ensureAttached(config.hwPin);
       }
-      actuator = &mot;
-      _motorIdx++;
+      break;
+    }
+
+    case ActuatorType::STEPPER: {
+      // STEP/DIR/ENABLE sont pilotes en GPIO direct (le validateur impose
+      // bus == GPIO_DIRECT) : le driver LEDC/I2C n'a rien a faire ici.
+      if (!_gpioDriver) {
+        DBGF("[Factory] No GPIO driver for stepper '%s'\n", config.name);
+        return nullptr;
+      }
+      actuator = slot.emplace<StepperActuator>(_gpioDriver);
       break;
     }
 
@@ -85,21 +82,23 @@ Actuator* ActuatorFactory::createAndRegister(const ActuatorConfig& config) {
       return nullptr;
   }
 
-  if (actuator) {
-    if (_manager->registerActuator(config.id, actuator)) {
-      actuator->init();
-      _createdCount++;
-      DBGF("[Factory] Created '%s' (id=%d, type=%s, bus=%s, pin=%d)\n",
-           config.name, config.id,
-           actuatorTypeName(config.type),
-           hardwareBusName(config.bus),
-           config.hwPin);
-      return actuator;
-    } else {
-      DBGF("[Factory] Failed to register '%s' (id=%d)\n", config.name, config.id);
-    }
+  if (!actuator) return nullptr;
+  actuator->setConfig(config);
+
+  if (_manager->registerActuator(config.id, actuator)) {
+    actuator->init();
+    _poolIdx++;
+    _createdCount++;
+    DBGF("[Factory] Created '%s' (id=%d, type=%s, bus=%s, pin=%d)\n",
+         config.name, config.id,
+         actuatorTypeName(config.type),
+         hardwareBusName(config.bus),
+         config.hwPin);
+    return actuator;
   }
 
+  DBGF("[Factory] Failed to register '%s' (id=%d)\n", config.name, config.id);
+  slot.destroy();   // rendre l'emplacement au pool
   return nullptr;
 }
 
@@ -216,13 +215,18 @@ int ActuatorFactory::rebuildAll() {
     return REBUILD_BUSY;
   }
 
-  // Nettoyer les enregistrements existants dans le manager
+  // Nettoyer les enregistrements existants dans le manager (stopAll() y coupe
+  // le materiel avant que les objets ne disparaissent).
   _manager->clearAll();
 
-  // Reset les pools
-  _solenoidIdx = 0;
-  _servoIdx = 0;
-  _motorIdx = 0;
+  // Detruire les actionneurs en place AVANT de reutiliser leurs emplacements :
+  // c'est ce qui rend au systeme les ressources qu'ils detiennent (emplacement
+  // d'ISR optique, par exemple). L'ancien pool type-plein se contentait de remettre
+  // les index a zero et de re-affecter par-dessus.
+  for (uint8_t i = 0; i < MAX_ACTUATORS; i++) {
+    _pool[i].destroy();
+  }
+  _poolIdx = 0;
   _createdCount = 0;
 
   return createAll(_configPool, _configCount);

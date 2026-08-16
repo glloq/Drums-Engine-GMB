@@ -23,8 +23,14 @@ Base URL: `http://<ip-esp32>/`
 ### Tests
 - `POST /api/test/instrument`
 - `POST /api/test/actuator`
-- `POST /api/test/note` — envoyer une note MIDI brute (piano virtuel)
-- `POST /api/test/cc` — envoyer un CC MIDI
+- `POST /api/test/note` — envoyer une note MIDI brute (piano virtuel).
+  `{note, velocity, channel, noteOff}` ; `channel` doit etre dans `[1..16]`
+  (defaut 10) — le routage refuse un canal hors plage au lieu de le replier sur
+  le canal 1, donc la route repond 400 plutot que d'accepter sans rien faire.
+- `POST /api/test/cc` — envoyer un CC MIDI. `{cc, value, channel}` ; `channel`
+  accepte `[1..16]` (defaut 10). Le routage CC etant lie au canal, un CC de test
+  force sur le canal 10 ne pouvait pas exercer une liaison appartenant a un
+  instrument d'un autre canal.
 
 ### Notes actives (temps reel)
 - `GET /api/notes/active` — retourne les notes MIDI actuellement actives
@@ -100,6 +106,12 @@ Base URL: `http://<ip-esp32>/`
 ### MIDI Configuration
 - `GET /api/midi/channels` — canaux MIDI actifs (bitmask + array)
 - `PUT /api/midi/channels` — configurer les canaux (`{channelMask: 0xFFFF}` ou `{channels: [1,10]}`)
+
+### Budget electrique
+- `GET /api/power-budget` — plafonds configures, consommation instantanee, pire
+  cas, et refus comptabilises par motif
+- `PUT /api/power-budget` — `{maxPeakMa, maxContinuousMa, maxConcurrent}`
+  (persiste dans `/power.json`)
 
 ### Securite
 - `GET /api/auth-token` — obtenir le token API (acces local uniquement)
@@ -298,6 +310,64 @@ Le systeme sauvegarde et redemarre automatiquement.
 
 ## Capacités enrichies
 - `GET /api/capabilities` expose désormais `actuatorBehaviors[]` (id + name) en plus de `actuatorTypes[]`.
+- Limites du firmware ajoutées : `maxPipelines`, `maxCcRoutes`, `midiChannelCount`.
+- Bloc `hardware` : `maxConcurrentActive`, `powerBudgetPeakMa` et
+  `powerBudgetContinuousMa` reflètent le budget **en vigueur** (configurable à
+  chaud), plus les constantes compilées ; `stepperMaxSps` donne le plafond de
+  vitesse pas-à-pas.
+
+## Champs actionneur ajoutés
+
+`GET /api/actuators`, `POST /api/actuators` et `PUT /api/actuator` acceptent et
+renvoient :
+
+| Champ | Défaut | Description |
+|---|---:|---|
+| `currentMa` | 0 | Courant tiré **pendant l'activation**, en mA. `0` = non déclaré : l'actionneur reste invisible pour le budget électrique et n'est jamais refusé pour un motif de courant. |
+| `priority` | 1 | `0` = Low (ornement, sacrifié en premier), `1` = Normal, `2` = High (structure rythmique). |
+| `priorityName` | — | Lecture seule, libellé de la priorité. |
+
+Pour `type = 4` (`STEPPER`) uniquement :
+
+| Champ | Défaut | Description |
+|---|---:|---|
+| `enablePin` | 255 | GPIO `/ENABLE` actif bas ; `255` = driver toujours actif |
+| `stepperMaxSps` | 1000 | Vitesse max en pas/seconde (plafonnée par `stepperMaxSps` des capacités) |
+| `stepperAccelSps2` | 0 | Accélération en pas/s² ; `0` = pas de rampe |
+
+Pour un stepper, `hwPin` porte STEP et `hwAddress` porte DIR (et non une adresse
+I2C) ; le bus doit être `GPIO_DIRECT`.
+
+**Rétrocompatibilité** : un `actuators.json` antérieur ne contient aucun de ces
+champs. Les valeurs par défaut ci-dessus reproduisent exactement le comportement
+précédent.
+
+## `GET /api/power-budget`
+
+```json
+{
+  "maxPeakMa": 15000,
+  "maxContinuousMa": 8000,
+  "maxConcurrent": 8,
+  "activeCurrentMa": 2400,
+  "activeCount": 3,
+  "worstCaseCurrentMa": 21500,
+  "worstCaseExceedsPeak": true,
+  "refused": { "byCount": 0, "byPeak": 12, "byContinuous": 3 },
+  "priorities": [ {"id":0,"name":"Low"}, {"id":1,"name":"Normal"}, {"id":2,"name":"High"} ]
+}
+```
+
+- `worstCaseCurrentMa` : somme des courants déclarés si **tous** les actionneurs
+  activés se déclenchaient ensemble. `worstCaseExceedsPeak` signale un
+  sous-dimensionnement d'alimentation : l'arbitrage fera son travail (des frappes
+  seront refusées), ce qui est un avertissement de dimensionnement, pas une
+  erreur.
+- `refused` : compteurs cumulés depuis le démarrage, par motif de refus.
+
+`PUT` rejette (400) un `maxContinuousMa` supérieur à `maxPeakMa` — il ne
+déclasserait jamais rien — et un `maxConcurrent` supérieur à `MAX_ACTUATORS`.
+Mettre un plafond à `0` le désactive.
 
 - Création depuis template `motor_optical`: validation stricte de slot (type `MOTOR_OPTICAL` + behavior `MOTOR_OPTICAL_TRACK`).
 

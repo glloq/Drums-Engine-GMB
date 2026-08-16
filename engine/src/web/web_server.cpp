@@ -529,6 +529,24 @@ void WebServerManager::_setupRoutes() {
       _handleSetMidiChannels(req, body, bodyLen);
     });
 
+  // --- Power budget (supply protection) ---
+  _server.on("/api/power-budget", HTTP_GET,
+    [this](AsyncWebServerRequest* req) { _handleGetPowerBudget(req); });
+
+  _server.on("/api/power-budget", HTTP_PUT,
+    [](AsyncWebServerRequest* req) { /* guards run in the body callback: it is invoked first */ },
+    nullptr,
+    [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (index == 0) {
+        if (!_rateLimiter.checkRate(req)) return;
+        if (!_auth.checkAuth(req)) return;
+      }
+      uint8_t* body = nullptr;
+      size_t bodyLen = 0;
+      if (!_collectBody(req, data, len, index, total, body, bodyLen)) return;
+      _handleSetPowerBudget(req, body, bodyLen);
+    });
+
   // --- LED Strips API ---
   _server.on("/api/led/strips", HTTP_GET,
     [this](AsyncWebServerRequest* req) { _handleGetLedStrips(req); });

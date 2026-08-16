@@ -76,7 +76,7 @@ conserves dans le `localStorage` du navigateur (cle `wiringParams`) :
 | Rail moteurs (V) / courant crete (A) | 12 V / 1.0 A | Rail moteurs, choix du MOSFET ou du pont en H |
 | Rail LED (V) / courant par LED (mA) | 5 V / 60 mA | Consommation des strips, limitee par `maxBrightness` de chaque strip |
 | Marge de securite (%) | 30 % | Marge ajoutee au courant simultane pour la colonne "alim conseillee" |
-| Actionneurs simultanes | `MAX_CONCURRENT_ACTIVE` | Nombre d'actionneurs actifs en meme temps retenu pour le dimensionnement |
+| Actionneurs simultanes | plafond de nombre en vigueur (`maxConcurrentActive` de `/api/capabilities`, defaut `MAX_CONCURRENT_ACTIVE`) | Nombre d'actionneurs actifs en meme temps retenu pour le dimensionnement |
 | Etage de puissance solenoides | MOSFET | MOSFET discret, ULN2803A, module pre-cable ou relais — change la BOM, les schemas et les etapes de cablage |
 | Arret d'urgence | Interrupteur coup-de-poing | Aucun, interrupteur coup-de-poing sur le rail, ou contacteur sur boucle ARU — apparait sur chaque rail du schema, dans la BOM et dans la checklist |
 

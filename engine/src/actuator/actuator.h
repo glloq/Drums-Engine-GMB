@@ -55,6 +55,17 @@ public:
   // Retourne true si l'actionneur a ete arrete suite a une butee.
   virtual bool checkEndStops(uint32_t nowUs) { return false; }
 
+  // --- Service continu ---
+  // Certains actionneurs ne se contentent pas d'un etat ON/OFF : un stepper doit
+  // emettre ses impulsions de pas en continu jusqu'a atteindre sa cible. Ceux-la
+  // renvoient true a needsService() et sont appeles a chaque passe de la boucle
+  // temps reel (~1 kHz) via ActuatorManager::serviceAll().
+  //
+  // Contrat : service() fait des E/S (GPIO), il n'est donc JAMAIS appele sous le
+  // spinlock du manager — meme regle que checkTimeout()/checkEndStops().
+  virtual bool needsService() const { return false; }
+  virtual void service(uint32_t nowUs) {}
+
 protected:
   ActuatorConfig _config;
   bool _active = false;

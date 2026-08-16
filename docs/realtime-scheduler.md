@@ -28,9 +28,14 @@
 
 ## Securite
 - Watchdog periodique des actionneurs (timeout configurable par type).
-- Limites max d'activation simultanee (`MAX_CONCURRENT_ACTIVE`).
-- Cache `_activeCount` O(1) mis a jour apres chaque dispatch/watchdog.
+- Budget electrique : arbitrage sur le courant declare par actionneur, avec
+  plafonds crete/continu/nombre configurables (`MAX_CONCURRENT_ACTIVE` n'est plus
+  qu'un defaut). Voir `architecture.md` § Budget electrique.
+- Cache `_activeCount` / `_activeCurrentMa` O(1) mis a jour apres chaque
+  dispatch/watchdog.
 - Cooldown par actionneur (configurable).
+- Service continu (`serviceAll`) a chaque passe pour les actionneurs a mouvement
+  (steppers), avec rafales de pas bornees pour ne pas monopoliser la boucle RT.
 
 ## Concurrence I2C
 - Mutex FreeRTOS global (`g_i2cMutex`) pour tous les acces bus I2C.

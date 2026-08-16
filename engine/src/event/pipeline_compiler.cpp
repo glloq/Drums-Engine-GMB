@@ -85,6 +85,7 @@ static void buildCcRoutingTable(PipelineLookup& lookup) {
         route.range_min = binding.range_min;
         route.range_max = binding.range_max;
         route.curve = binding.curve;
+        route.channel = pipeline.midi_channel;   // 0 = OMNI
         route.inverted = binding.inverted;
         count++;
       }
@@ -105,6 +106,10 @@ bool PipelineCompiler::compileInstrument(const JsonObject& json, CompiledPipelin
   pipeline.cc_binding_count = 0;
   pipeline.retrigger_mode = json["retriggerMode"] | (uint8_t)RetriggerMode::IGNORE;
   pipeline.output_actuator_id = json["outputActuatorId"] | 0xFF;
+  // Reset the routing key too: the caller may reuse a pipeline slot, and a
+  // stale (channel, note) would survive into the next buildNoteMap().
+  pipeline.midi_note = json["midiNote"] | 0xFF;
+  pipeline.midi_channel = json["midiChannel"] | 10;
 
   JsonArray blocks = json["blocks"].as<JsonArray>();
   if (!blocks.isNull()) {
@@ -147,7 +152,7 @@ bool PipelineCompiler::compileBlock(const JsonObject& json, CompiledBlock& block
 }
 
 bool PipelineCompiler::compileAll(const JsonArray& instruments, PipelineLookup& lookup) {
-  memset(lookup.note_to_pipeline, 0xFF, sizeof(lookup.note_to_pipeline));
+  lookup.clearNoteMap();
   lookup.pipeline_count = 0;
   lookup.cc_route_count = 0;
   lookup.cc_route_dropped = 0;
@@ -160,6 +165,13 @@ bool PipelineCompiler::compileAll(const JsonArray& instruments, PipelineLookup& 
     uint8_t midiNote = inst["midiNote"] | 0xFF;
     if (midiNote >= 128) continue;
 
+    // 0 = OMNI, 1..16 = explicit channel. The default matches
+    // InstrumentManager::instrumentFromJson() so both readers agree on what a
+    // missing field means. Anything above 16 is a corrupted config; routing it
+    // to every channel would be the more dangerous reading, so it is dropped.
+    uint8_t midiChannel = inst["midiChannel"] | 10;
+    if (midiChannel > MIDI_CHANNEL_COUNT) continue;
+
     bool enabled = inst["enabled"] | true;
     if (!enabled) continue;
 
@@ -168,6 +180,8 @@ bool PipelineCompiler::compileAll(const JsonArray& instruments, PipelineLookup& 
     pipeline.note_on_count = 0;
     pipeline.note_off_count = 0;
     pipeline.cc_binding_count = 0;
+    pipeline.midi_note = midiNote;
+    pipeline.midi_channel = midiChannel;
     pipeline.retrigger_mode = inst["retriggerMode"] | (uint8_t)RetriggerMode::IGNORE;
 
     JsonArray pipelineBlocks = inst["pipeline"].as<JsonArray>();
@@ -199,14 +213,31 @@ bool PipelineCompiler::compileAll(const JsonArray& instruments, PipelineLookup& 
 
     parseActionAndCcBindings(inst, pipeline);
 
-    lookup.note_to_pipeline[midiNote] = lookup.pipeline_count;
     lookup.pipeline_count++;
   }
 
+  buildNoteMap(lookup);
   buildCcRoutingTable(lookup);
 
   DBGF("[Compiler] Compiled %d pipelines, %d CC routes (%d dropped)\n", lookup.pipeline_count, lookup.cc_route_count, lookup.cc_route_dropped);
   return true;
+}
+
+// Fill the (channel, note) -> pipeline table. The precedence rules live in
+// core/midi_routing.h and are shared with InstrumentManager, so both routing
+// paths can never drift apart.
+void PipelineCompiler::buildNoteMap(PipelineLookup& lookup) {
+  uint16_t shadowed = midiBuildNoteMap<uint8_t>(
+      lookup.note_to_pipeline, 0xFF, lookup.pipeline_count,
+      [&lookup](uint16_t i) -> MidiBinding {
+        const CompiledPipeline& pipe = lookup.pipelines[i];
+        return { pipe.midi_channel, pipe.midi_note, pipe.midi_note < 128 };
+      });
+
+  if (shadowed > 0) {
+    DBGF("[Compiler] %u pipeline(s) shadowed by an earlier (channel, note) mapping\n",
+         shadowed);
+  }
 }
 
 void PipelineCompiler::lookupToJson(const PipelineLookup& lookup, JsonObject& obj) {
@@ -214,13 +245,20 @@ void PipelineCompiler::lookupToJson(const PipelineLookup& lookup, JsonObject& ob
   obj["cc_route_count"] = lookup.cc_route_count;
   obj["cc_route_dropped"] = lookup.cc_route_dropped;
 
+  // The note map is now 16 x 128. Emitting every populated cell would repeat an
+  // OMNI instrument sixteen times, so report it per pipeline instead: one entry
+  // per pipeline with the channel it answers on (0 = OMNI / all channels).
   JsonArray noteMap = obj["note_map"].to<JsonArray>();
-  for (uint8_t i = 0; i < 128; i++) {
-    if (lookup.note_to_pipeline[i] != 0xFF) {
-      JsonObject entry = noteMap.add<JsonObject>();
-      entry["note"] = i;
-      entry["pipeline"] = lookup.note_to_pipeline[i];
-    }
+  for (uint8_t p = 0; p < lookup.pipeline_count; p++) {
+    const CompiledPipeline& pipe = lookup.pipelines[p];
+    if (pipe.midi_note >= 128) continue;
+    JsonObject entry = noteMap.add<JsonObject>();
+    entry["note"] = pipe.midi_note;
+    entry["channel"] = pipe.midi_channel;
+    entry["pipeline"] = p;
+    // A pipeline can be compiled but shadowed by a duplicate (channel, note).
+    entry["routed"] = (lookup.pipelineFor(
+        pipe.midi_channel == 0 ? 1 : pipe.midi_channel, pipe.midi_note) == p);
   }
 
   JsonArray ccMap = obj["cc_map"].to<JsonArray>();

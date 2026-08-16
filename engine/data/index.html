@@ -2296,7 +2296,7 @@ function renderActuators() {
       if (a.inverted) details += ' [INV]';
     }
     if (a.type===1 && a.cooldownUs > 0 && a.behavior===0) details += ' · Cooldown: '+Math.round(a.cooldownUs*0.1)+'ms';
-    if (a.type===1 && a.behavior===1) details += ' · Actif max: '+Math.round(a.cooldownUs*0.1)+'ms';
+    if (a.type===1 && a.behavior===1) details += ' · Actif max: '+(a.maxActiveMs||0)+'ms';
     const usedBy = actUsedBy[a.id];
     const usedByHtml = usedBy ? ' · <span style="color:var(--accent);">\u266a ' + usedBy.map(escapeHtml).join(', ') + '</span>' : ' · <span style="color:var(--fg2);opacity:0.6;">non assigne</span>';
     const tIcon = typeIcons[a.type] || '?';
@@ -2409,7 +2409,7 @@ function editActuator(id) {
     document.getElementById('actHoldPwmActivation').value = a.paramMin;
     document.getElementById('actHoldPwmHold').value = a.paramMax;
     document.getElementById('actHoldPwmMaxTime').value = a.paramDefault;
-    document.getElementById('actHoldMaxActiveTime').value = Math.round(a.cooldownUs * 0.1);
+    document.getElementById('actHoldMaxActiveTime').value = a.maxActiveMs || 0;
   } else if (a.type === 0) {
     document.getElementById('actAngleClosed').value = a.paramMin;
     document.getElementById('actAngleOpen').value = a.paramMax;
@@ -2441,6 +2441,7 @@ async function saveActuator() {
   if (type === 2 && behavior === 6) type = 3;
 
   let paramMin, paramMax, paramDefault, cooldownUs;
+  let maxActiveMs = 0;
   if (type === 1 && behavior === 0) {
     // Solenoid Strike
     paramMin = parseInt(document.getElementById('actTimeMin').value);
@@ -2453,7 +2454,10 @@ async function saveActuator() {
     paramMin = parseInt(document.getElementById('actHoldPwmActivation').value);
     paramMax = parseInt(document.getElementById('actHoldPwmHold').value);
     paramDefault = parseInt(document.getElementById('actHoldPwmMaxTime').value);
-    cooldownUs = parseInt(document.getElementById('actHoldMaxActiveTime').value) * 10;
+    // La duree d'activation max part dans son propre champ 32 bits : encodee
+    // dans cooldownUs (x10, uint16) elle repliait au-dela de 6,553 s.
+    maxActiveMs = parseInt(document.getElementById('actHoldMaxActiveTime').value);
+    cooldownUs = 0;
   } else if (type === 1 && behavior === 9) {
     paramMin = 0; paramMax = 1; paramDefault = 0; cooldownUs = 0;
   } else if (type === 0) {
@@ -2494,6 +2498,7 @@ async function saveActuator() {
     paramMax: paramMax,
     paramDefault: paramDefault,
     cooldownUs: cooldownUs,
+    maxActiveMs: maxActiveMs,
     enabled: document.getElementById('actEnabled').checked,
     inverted: (type === 2 || type === 3) ? document.getElementById('actMotorInverted').checked : false,
     endStopPin1: (type === 2 || type === 3) ? parseInt(document.getElementById('actMotorEndStop1').value) : 255,
@@ -2862,6 +2867,7 @@ async function applyActuator() {
   if (type === 2 && behavior === 6) type = 3;
 
   let paramMin, paramMax, paramDefault, cooldownUs;
+  let maxActiveMs = 0;
   if (type === 1 && behavior === 0) {
     paramMin = parseInt(document.getElementById('actTimeMin').value);
     paramMax = parseInt(document.getElementById('actTimeMax').value);
@@ -2872,7 +2878,10 @@ async function applyActuator() {
     paramMin = parseInt(document.getElementById('actHoldPwmActivation').value);
     paramMax = parseInt(document.getElementById('actHoldPwmHold').value);
     paramDefault = parseInt(document.getElementById('actHoldPwmMaxTime').value);
-    cooldownUs = parseInt(document.getElementById('actHoldMaxActiveTime').value) * 10;
+    // La duree d'activation max part dans son propre champ 32 bits : encodee
+    // dans cooldownUs (x10, uint16) elle repliait au-dela de 6,553 s.
+    maxActiveMs = parseInt(document.getElementById('actHoldMaxActiveTime').value);
+    cooldownUs = 0;
   } else if (type === 1 && behavior === 9) {
     paramMin = 0; paramMax = 1; paramDefault = 0; cooldownUs = 0;
   } else if (type === 0) {
@@ -2907,6 +2916,7 @@ async function applyActuator() {
     hwPin: parseInt(document.getElementById('actPin').value),
     paramMin: paramMin, paramMax: paramMax, paramDefault: paramDefault,
     cooldownUs: cooldownUs,
+    maxActiveMs: maxActiveMs,
     enabled: document.getElementById('actEnabled').checked,
     inverted: (type === 2 || type === 3) ? document.getElementById('actMotorInverted').checked : false,
     endStopPin1: (type === 2 || type === 3) ? parseInt(document.getElementById('actMotorEndStop1').value) : 255,
@@ -8799,7 +8809,7 @@ function wActuatorSteps(a, p, hw) {
         Math.round(a.cooldownUs * 0.1) + ' ms entre deux frappes.');
     } else if (a.behavior === 1) {
       steps.push('Maintien : PWM d\'appel ' + a.paramMin + '/255 puis maintien ' + a.paramMax + '/255 apres ' + a.paramDefault + ' ms.');
-      steps.push('Duree d\'activation maximale : ' + Math.round(a.cooldownUs * 0.1) + ' ms (protection thermique de la bobine).');
+      steps.push('Duree d\'activation maximale : ' + (a.maxActiveMs || 0) + ' ms (protection thermique de la bobine).');
     } else if (a.behavior === 9) {
       steps.push('Etouffoir : bobine au repos = contact applique. Prevoyez que la coupure d\'alimentation laisse l\'instrument etouffe.');
     }

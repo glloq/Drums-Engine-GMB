@@ -193,6 +193,102 @@ void test_clear_empties() {
   TEST_ASSERT_FALSE(q.pop(out));
 }
 
+
+// ---------------------------------------------------------------------------
+// pushBatch: all-or-nothing for a whole percussion event
+// ---------------------------------------------------------------------------
+// A percussion can fire up to MAX_ACTIONS_PER_EVENT actions (strike + mute +
+// servo position + second striker). Inserting them one at a time let a nearly
+// full queue accept the strike and reject the mute, playing something the
+// instrument never described.
+
+void test_pushbatch_inserts_all_sorted() {
+  CommandQueue q;
+  ActuatorCommand batch[3] = {
+    mk(1, CommandType::PULSE, 300),
+    mk(2, CommandType::PULSE, 100),
+    mk(3, CommandType::PULSE, 200),
+  };
+  TEST_ASSERT_TRUE(q.pushBatch(batch, 3));
+  TEST_ASSERT_EQUAL_UINT16(3, q.count());
+
+  ActuatorCommand out;
+  q.pop(out); TEST_ASSERT_EQUAL_UINT8(2, out.actuator_id);   // 100
+  q.pop(out); TEST_ASSERT_EQUAL_UINT8(3, out.actuator_id);   // 200
+  q.pop(out); TEST_ASSERT_EQUAL_UINT8(1, out.actuator_id);   // 300
+}
+
+void test_pushbatch_rejects_atomically_when_short_on_space() {
+  CommandQueue q;
+  // Leave exactly 2 free slots, then ask for 3.
+  for (uint16_t i = 0; i < COMMAND_QUEUE_SIZE - 2; i++) {
+    TEST_ASSERT_TRUE(q.push(mk(9, CommandType::PULSE, 1000 + i)));
+  }
+  uint16_t before = q.count();
+
+  ActuatorCommand batch[3] = {
+    mk(1, CommandType::PULSE, 10),
+    mk(2, CommandType::PULSE, 20),
+    mk(3, CommandType::PULSE, 30),
+  };
+  TEST_ASSERT_FALSE(q.pushBatch(batch, 3));
+  TEST_ASSERT_EQUAL_UINT16(before, q.count());   // rien insere
+
+  // The head must still be the pre-existing command: no partial insertion.
+  ActuatorCommand head;
+  TEST_ASSERT_TRUE(q.peek(head));
+  TEST_ASSERT_EQUAL_UINT8(9, head.actuator_id);
+
+  // Two commands still fit, so a smaller batch is accepted.
+  TEST_ASSERT_TRUE(q.pushBatch(batch, 2));
+  TEST_ASSERT_EQUAL_UINT16(before + 2, q.count());
+}
+
+void test_pushbatch_exact_fit_accepted() {
+  CommandQueue q;
+  for (uint16_t i = 0; i < COMMAND_QUEUE_SIZE - 2; i++) {
+    q.push(mk(9, CommandType::PULSE, 1000 + i));
+  }
+  ActuatorCommand batch[2] = {
+    mk(1, CommandType::PULSE, 10),
+    mk(2, CommandType::OFF, 20),
+  };
+  TEST_ASSERT_TRUE(q.pushBatch(batch, 2));
+  TEST_ASSERT_TRUE(q.isFull());
+}
+
+void test_pushbatch_empty_is_a_noop_success() {
+  CommandQueue q;
+  TEST_ASSERT_TRUE(q.pushBatch(nullptr, 0));
+  TEST_ASSERT_TRUE(q.isEmpty());
+}
+
+void test_pushbatch_refuses_oversized_batch() {
+  CommandQueue q;
+  ActuatorCommand batch[CommandQueue::MAX_BATCH + 1];
+  for (uint8_t i = 0; i < CommandQueue::MAX_BATCH + 1; i++) {
+    batch[i] = mk(i, CommandType::PULSE, 10 + i);
+  }
+  TEST_ASSERT_FALSE(q.pushBatch(batch, CommandQueue::MAX_BATCH + 1));
+  TEST_ASSERT_TRUE(q.isEmpty());
+}
+
+// A batch is NOT given the OFF eviction privilege of push(): evicting several
+// commands to make room for one event would trade one instrument's correctness
+// for another's.
+void test_pushbatch_with_off_does_not_evict() {
+  CommandQueue q;
+  for (uint16_t i = 0; i < COMMAND_QUEUE_SIZE; i++) {
+    q.push(mk(9, CommandType::PULSE, 1000 + i));
+  }
+  ActuatorCommand batch[2] = {
+    mk(1, CommandType::OFF, 10),
+    mk(2, CommandType::OFF, 20),
+  };
+  TEST_ASSERT_FALSE(q.pushBatch(batch, 2));
+  TEST_ASSERT_EQUAL_UINT16(COMMAND_QUEUE_SIZE, q.count());
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_immediate_not_blocked_by_future);
@@ -206,5 +302,11 @@ int main(int, char**) {
   RUN_TEST(test_off_eviction_never_drops_existing_off);
   RUN_TEST(test_off_rejected_when_all_offs);
   RUN_TEST(test_clear_empties);
+  RUN_TEST(test_pushbatch_inserts_all_sorted);
+  RUN_TEST(test_pushbatch_rejects_atomically_when_short_on_space);
+  RUN_TEST(test_pushbatch_exact_fit_accepted);
+  RUN_TEST(test_pushbatch_empty_is_a_noop_success);
+  RUN_TEST(test_pushbatch_refuses_oversized_batch);
+  RUN_TEST(test_pushbatch_with_off_does_not_evict);
   return UNITY_END();
 }

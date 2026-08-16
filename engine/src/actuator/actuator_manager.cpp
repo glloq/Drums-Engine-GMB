@@ -25,18 +25,21 @@ bool ActuatorManager::registerActuator(uint8_t id, Actuator* actuator) {
     return false;
   }
 
+  // Verifier AVANT de s'enregistrer : un actionneur a mouvement continu sans
+  // emplacement de service ne bougerait jamais tout en acceptant les commandes.
+  // Une configuration declaree valide ne doit pas contenir d'actionneur mort,
+  // donc on refuse l'enregistrement plutot que d'emettre un simple avertissement.
+  if (actuator->needsService() && _servicableCount >= MAX_SERVICABLE) {
+    DBGF("[ActMgr] Refused '%s': all %d continuous-service slots are taken\n",
+         actuator->getConfig().name, MAX_SERVICABLE);
+    return false;
+  }
+
   _actuators[_count] = actuator;
   _idMap[_count] = id;
   _count++;
   if (actuator->needsService()) {
-    if (_servicableCount < MAX_SERVICABLE) {
-      _servicable[_servicableCount++] = actuator;
-    } else {
-      // Refuser en silence laisserait un stepper enregistre mais jamais
-      // avance : il accepterait les commandes sans jamais bouger.
-      DBGF("[ActMgr] '%s' needs continuous service but all %d slots are taken — "
-           "it will not move\n", actuator->getConfig().name, MAX_SERVICABLE);
-    }
+    _servicable[_servicableCount++] = actuator;
   }
 
   DBGF("[ActMgr] Registered actuator '%s' (id=%d, total=%d)\n",

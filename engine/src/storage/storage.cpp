@@ -43,6 +43,7 @@ static void actuatorConfigToJson(const ActuatorConfig& cfg, JsonObject& obj) {
   obj["paramMax"] = cfg.paramMax;
   obj["paramDefault"] = cfg.paramDefault;
   obj["cooldownUs"] = cfg.cooldownUs;
+  obj["maxActiveMs"] = cfg.maxActiveMs;
   obj["enabled"] = cfg.enabled;
   obj["inverted"] = cfg.inverted;
   if (cfg.endStopPin1 != 0xFF) obj["endStopPin1"] = cfg.endStopPin1;
@@ -69,6 +70,21 @@ static void actuatorConfigFromJson(const JsonObject& obj, ActuatorConfig& cfg) {
   cfg.paramDefault = obj["paramDefault"] | 15;
   cfg.cooldownUs = obj["cooldownUs"] | 200;
   cfg.enabled = obj["enabled"] | true;
+  // Migration v2 -> v3 : SOLENOID_HOLD rangeait sa duree d'activation maximale
+  // dans cooldownUs (x10). Un fichier ecrit avant ce changement n'a pas de champ
+  // maxActiveMs ; on le reconstruit depuis l'ancien encodage et on libere
+  // cooldownUs, qui ne sert pas a HOLD (le cooldown y est explicitement saute).
+  // La valeur recuperee est celle qui etait REELLEMENT appliquee, repliement
+  // uint16 compris — on restaure le comportement observe, pas une intention
+  // supposee.
+  if (obj["maxActiveMs"].is<uint32_t>()) {
+    cfg.maxActiveMs = obj["maxActiveMs"] | 0u;
+  } else if (cfg.behavior == ActuatorBehavior::SOLENOID_HOLD) {
+    cfg.maxActiveMs = (uint32_t)cfg.cooldownUs / 10;
+    cfg.cooldownUs = 0;
+  } else {
+    cfg.maxActiveMs = 0;
+  }
   cfg.inverted = obj["inverted"] | false;
   cfg.endStopPin1 = obj["endStopPin1"] | 0xFF;
   cfg.endStopPin2 = obj["endStopPin2"] | 0xFF;
@@ -83,7 +99,10 @@ static void actuatorConfigFromJson(const JsonObject& obj, ActuatorConfig& cfg) {
 
 bool Storage::saveActuators(const ActuatorFactory& factory) {
   JsonDocument doc;
-  doc["version"] = 2;
+  // v3: maxActiveMs devient un champ a part entiere (il etait encode dans
+  // cooldownUs pour SOLENOID_HOLD). actuatorConfigFromJson() migre les fichiers
+  // v1/v2 a la lecture.
+  doc["version"] = 3;
   JsonArray arr = doc["actuators"].to<JsonArray>();
 
   for (uint8_t i = 0; i < factory.getConfigCount(); i++) {

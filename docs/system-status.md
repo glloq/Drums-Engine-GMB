@@ -93,13 +93,29 @@ Le moteur supporte un modele instrument oriente actions multi-etapes (NoteOn/Not
   `.bss` sur ~31 ko de marge DRAM ; detail et methode de mesure dans
   [`memory-budget.md`](memory-budget.md).
 
+### Coherence des descriptions
+- Types/comportements/bus d'actionneur : table unique
+  (`actuator/actuator_descriptor.cpp`) lue par le validateur ET par
+  `GET /api/capabilities` — la derive entre les deux n'est plus representable
+- Modeles de percussion : table unique (`instrument/percussion_template.cpp`)
+  lue par `GET /api/templates` ET par la creation
+- Ordonnancement transactionnel : toutes les commandes d'un evenement, ou aucune
+
 ### Tests
 - Script `tests/test_api.sh`: 31 tests curl (CRUD, auth, validation, cleanup)
-- Tests natifs Unity: queue scheduler, validation actionneur/instrument,
-  routage `(canal, note)`, budget electrique
+- Tests natifs Unity: queue scheduler (dont lots atomiques), validation
+  actionneur/instrument, coherence descripteurs/validateur, modeles de
+  percussion, routage `(canal, note)`, budget electrique
 
 ## Limites restantes
 - Les templates avances restent generiques (pas de calibration hardware automatique).
+- La banque de variables derriere `ValueSource::CC_VAR` reste globale, indexee
+  par numero de CC seul : deux canaux utilisant le meme CC partagent la valeur.
+- Un depassement de `MAX_CC_ROUTES` est compte (`cc_route_dropped`) mais
+  n'empeche pas la sauvegarde d'une configuration partiellement inoperante.
+- L'unicite du couple `(canal, note)` n'est pas validee a la creation : un
+  doublon est masque et signale dans les logs, pas refuse.
+- La suppression forcee d'un actionneur ecrit deux fichiers sans transaction.
 - Le renderer Mappings UI est informatif, pas encore un graphe complet editable.
 - La SPA n'expose pas encore les nouveaux champs (courant, priorite, stepper) ni
   le budget electrique : ils sont disponibles par l'API uniquement.

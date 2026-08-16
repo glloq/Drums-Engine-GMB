@@ -1,5 +1,6 @@
 #include "actuator_factory.h"
 #include "actuator_validation.h"
+#include "actuator_descriptor.h"
 #include "../core/reconfig_barrier.h"
 
 ActuatorFactory::ActuatorFactory(ActuatorManager* manager,
@@ -115,8 +116,29 @@ uint8_t ActuatorFactory::createAll(const ActuatorConfig* configs, uint8_t count)
   return created;
 }
 
+uint8_t ActuatorFactory::getServicableConfigCount() const {
+  uint8_t n = 0;
+  for (uint8_t i = 0; i < _configCount; i++) {
+    if (_configPool[i].enabled &&
+        actuatorTypeNeedsContinuousService(_configPool[i].type)) {
+      n++;
+    }
+  }
+  return n;
+}
+
 int ActuatorFactory::addConfig(const ActuatorConfig& config) {
-  if (_configCount >= MAX_ACTUATORS) return -1;
+  if (_configCount >= MAX_ACTUATORS) return ADD_FULL;
+
+  // Refuser ici plutot qu'a l'enregistrement : ActuatorManager refuserait aussi,
+  // mais la config serait deja dans le pool et persistee. Une configuration
+  // sauvegardee ne doit jamais contenir un actionneur qui ne bougera pas.
+  if (config.enabled && actuatorTypeNeedsContinuousService(config.type) &&
+      getServicableConfigCount() >= ActuatorManager::MAX_SERVICABLE) {
+    DBGF("[Factory] Rejected '%s': all %d continuous-service slots are taken\n",
+         config.name, ActuatorManager::MAX_SERVICABLE);
+    return ADD_NO_SERVICE_SLOT;
+  }
 
   // P1 #15: reject invalid configs at the common funnel (LittleFS load, V4
   // migration, templates and the API all pass through here) so a corrupted or
@@ -125,7 +147,7 @@ int ActuatorFactory::addConfig(const ActuatorConfig& config) {
   if (!validateActuatorConfig(config, err)) {
     DBGF("[Factory] Rejected invalid actuator config '%s': %s\n",
          config.name, err ? err : "?");
-    return -1;
+    return ADD_INVALID;
   }
 
   // Assigner un ID unique si pas deja defini
@@ -142,12 +164,12 @@ int ActuatorFactory::addConfig(const ActuatorConfig& config) {
   // would make the second config silently fail to register at rebuild time.
   if (cfg.id == 0xFF) {
     DBGLN("[Factory] Rejected actuator config: id 255 is reserved");
-    return -1;
+    return ADD_INVALID;
   }
   for (uint8_t i = 0; i < _configCount; i++) {
     if (_configPool[i].id == cfg.id) {
       DBGF("[Factory] Rejected actuator config: duplicate id %d\n", cfg.id);
-      return -1;
+      return ADD_INVALID;
     }
   }
 
@@ -157,7 +179,7 @@ int ActuatorFactory::addConfig(const ActuatorConfig& config) {
   if (hasResourceConflict(cfg, 0xFF, conflictId)) {
     DBGF("[Factory] Rejected actuator '%s': hardware resource conflict with id %d\n",
          cfg.name, conflictId);
-    return -1;
+    return ADD_INVALID;
   }
 
   _configPool[_configCount] = cfg;

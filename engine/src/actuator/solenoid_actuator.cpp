@@ -107,11 +107,13 @@ bool SolenoidActuator::checkTimeout(uint32_t nowUs) {
     return false;
   }
 
-  // HOLD behavior: use configured max active time (cooldownUs stores maxActiveTime*10)
+  // HOLD behavior: use the configured max active time, in milliseconds.
+  // It used to be squeezed into cooldownUs (uint16, x10), which silently capped
+  // it at 6.553 s and wrapped anything longer to an arbitrary shorter value.
   // STRIKE behavior: use strike duration (C1 fix), fallback to safety limit
   uint32_t maxOnUs;
-  if (_config.behavior == ActuatorBehavior::SOLENOID_HOLD && _config.cooldownUs > 0) {
-    maxOnUs = (uint32_t)_config.cooldownUs * 100;  // cooldownUs stored as value/100
+  if (_config.behavior == ActuatorBehavior::SOLENOID_HOLD && _config.maxActiveMs > 0) {
+    maxOnUs = _config.maxActiveMs * 1000UL;
   } else if (_strikeDurationUs > 0) {
     maxOnUs = _strikeDurationUs;  // C1: Use strike duration instead of 500ms safety max
   } else {

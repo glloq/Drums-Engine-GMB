@@ -38,8 +38,11 @@ public:
                        uint32_t durationUs, uint32_t executeAt);
 
 
-  // Planifier une sequence d'actions (multi-output)
+  // Planifier une sequence d'actions (multi-output) de facon TRANSACTIONNELLE :
+  // toutes les commandes de l'evenement sont mises en file, ou aucune.
   // activeGroup: 0 = fire all, N = fire only steps with alternate_group==0 or ==N
+  // Retourne false si le lot a ete refuse (file saturee) — l'appelant ne doit
+  // alors marquer ni note active, ni avancement du round-robin.
   bool scheduleActionSteps(const ActionStep* steps, uint8_t stepCount,
                            uint8_t velocity, uint32_t timestamp,
                            const uint16_t* globalVars,
@@ -56,6 +59,10 @@ public:
   float queueUsage() const { return _queue.usage(); }
   uint32_t getOverflowCount() const { return _queue.getOverflowCount(); }
   uint32_t getDispatchCount() const { return _dispatchCount; }
+  // Evenements refuses en bloc parce que la file n'avait pas la place pour
+  // toutes leurs commandes. A distinguer de getOverflowCount(), qui compte les
+  // commandes individuelles.
+  uint32_t getRejectedBatchCount() const { return _rejectedBatchCount; }
 
   // Mesure jitter
   uint32_t getLastJitterUs() const { return _lastJitterUs; }
@@ -68,6 +75,7 @@ private:
 
   // Statistiques
   uint32_t _dispatchCount;
+  uint32_t _rejectedBatchCount;
   uint32_t _lastJitterUs;
   uint32_t _maxJitterUs;
 };

@@ -70,25 +70,41 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
         return;
       }
       if (pipeline.retrigger_mode == (uint8_t)RetriggerMode::RESET && pipeline.note_off_count > 0) {
-        _scheduler->scheduleActionSteps(pipeline.note_off_actions, pipeline.note_off_count,
-                                        ev.data2, ev.timestamp, _state->raw().variables);
-        portENTER_CRITICAL(&_noteActiveMux);
-        _noteActive[pipelineIdx] = 0;  // Reset counter before re-triggering
-        portEXIT_CRITICAL(&_noteActiveMux);
+        // Ne remettre le compteur a zero que si la release a bien ete mise en
+        // file : sinon on oublierait une note toujours active.
+        if (_scheduler->scheduleActionSteps(pipeline.note_off_actions, pipeline.note_off_count,
+                                            ev.data2, ev.timestamp, _state->raw().variables)) {
+          portENTER_CRITICAL(&_noteActiveMux);
+          _noteActive[pipelineIdx] = 0;  // Reset counter before re-triggering
+          portEXIT_CRITICAL(&_noteActiveMux);
+        } else {
+          _ccStats.rejected_batches++;
+          return;   // rien n'a ete joue, ne pas re-declencher par-dessus
+        }
       }
       // STACK: counter will increment below, allowing proper NoteOff tracking
     }
 
     if (pipeline.note_on_count > 0) {
+      // Le round-robin est LU sans etre avance : la mise en file est
+      // transactionnelle, donc un evenement refuse ne doit pas consommer un
+      // tour d'alternance — sinon un striker serait saute a la frappe suivante
+      // alors que rien n'a ete joue.
       uint8_t activeGroup = 0;
       if (pipeline.alternate_group_count > 0) {
-        // Round-robin: advance counter, get active group (1-based)
-        uint8_t rr = _state->advanceRoundRobin(pipelineIdx, pipeline.alternate_group_count);
-        activeGroup = rr + 1; // advanceRoundRobin returns 0-based, groups are 1-based
+        activeGroup = _state->getRoundRobin(pipelineIdx) + 1;  // groupes 1-based
       }
-      _scheduler->scheduleActionSteps(pipeline.note_on_actions, pipeline.note_on_count,
-                                      ev.data2, ev.timestamp, _state->raw().variables,
-                                      activeGroup);
+      if (!_scheduler->scheduleActionSteps(pipeline.note_on_actions, pipeline.note_on_count,
+                                           ev.data2, ev.timestamp, _state->raw().variables,
+                                           activeGroup)) {
+        // Rien n'a ete mis en file : ni note active, ni avancement du
+        // round-robin, ni evenement LED. L'etat reste exactement celui d'avant.
+        _ccStats.rejected_batches++;
+        return;
+      }
+      if (pipeline.alternate_group_count > 0) {
+        _state->advanceRoundRobin(pipelineIdx, pipeline.alternate_group_count);
+      }
       // Push LED event (Core 1 → Core 0, lock-free)
       if (_ledQueue) {
         LedEvent ledEv;

@@ -102,8 +102,20 @@ public:
   ActuatorConfig& getConfig(uint8_t index) { return _configPool[index]; }
   uint8_t getConfigCount() const { return _configCount; }
 
-  // Ajouter une config au pool (depuis JSON, etc.)
+  // Ajouter une config au pool (depuis JSON, etc.).
+  // Retourne l'index, ou un code negatif : ADD_FULL si le pool est plein,
+  // ADD_NO_SERVICE_SLOT si la config demande un service continu et que les
+  // emplacements sont epuises, ADD_INVALID pour toute autre raison. Les codes
+  // permettent a l'API de renvoyer un message precis plutot qu'un 507 generique.
+  static const int ADD_INVALID = -1;
+  static const int ADD_FULL = -2;
+  static const int ADD_NO_SERVICE_SLOT = -3;
   int addConfig(const ActuatorConfig& config);
+
+  // Nombre de configs demandant un service continu (steppers). Compte sur les
+  // CONFIGS et non sur les objets crees, pour pouvoir refuser avant de
+  // construire quoi que ce soit.
+  uint8_t getServicableConfigCount() const;
   bool removeConfig(uint8_t id);
   ActuatorConfig* findConfig(uint8_t id);
 

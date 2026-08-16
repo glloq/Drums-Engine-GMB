@@ -1,8 +1,24 @@
 #include "web_server.h"
 #include "../actuator/actuator_validation.h"
+#include "../actuator/actuator_descriptor.h"
 #include "../core/reconfig_barrier.h"
 
 // --- Actuators ---
+
+// Lire la duree d'activation maximale d'un SOLENOID_HOLD.
+// `maxActiveMs` est le champ courant. Une UI mise en cache avant ce changement
+// n'envoie que `cooldownUs` avec l'ancien encodage (millisecondes x 10) : on le
+// convertit plutot que de laisser la duree tomber a zero, ce qui ferait
+// silencieusement retomber la bobine sur la limite de securite par defaut.
+static uint32_t _readMaxActiveMs(const JsonDocument& doc, const ActuatorConfig& cfg) {
+  if (doc["maxActiveMs"].is<uint32_t>()) return doc["maxActiveMs"] | 0u;
+  if (cfg.behavior == ActuatorBehavior::SOLENOID_HOLD &&
+      doc["cooldownUs"].is<uint32_t>()) {
+    return (uint32_t)(doc["cooldownUs"] | 0u) / 10;
+  }
+  return cfg.maxActiveMs;
+}
+
 
 void WebServerManager::_handleGetActuators(AsyncWebServerRequest* req) {
   JsonDocument doc;
@@ -24,6 +40,7 @@ void WebServerManager::_handleGetActuators(AsyncWebServerRequest* req) {
     obj["paramMax"] = cfg.paramMax;
     obj["paramDefault"] = cfg.paramDefault;
     obj["cooldownUs"] = cfg.cooldownUs;
+    obj["maxActiveMs"] = cfg.maxActiveMs;
     obj["enabled"] = cfg.enabled;
     obj["inverted"] = cfg.inverted;
     obj["endStopPin1"] = cfg.endStopPin1;
@@ -82,6 +99,7 @@ void WebServerManager::_handleCreateActuator(AsyncWebServerRequest* req, uint8_t
   cfg.paramMax = doc["paramMax"] | 30;
   cfg.paramDefault = doc["paramDefault"] | 15;
   cfg.cooldownUs = doc["cooldownUs"] | 200;
+  cfg.maxActiveMs = _readMaxActiveMs(doc, cfg);
   cfg.enabled = doc["enabled"] | true;
   cfg.inverted = doc["inverted"] | false;
   cfg.endStopPin1 = doc["endStopPin1"] | 0xFF;
@@ -119,7 +137,23 @@ void WebServerManager::_handleCreateActuator(AsyncWebServerRequest* req, uint8_t
   }
 
   int idx = _actFactory->addConfig(cfg);
-  if (idx < 0) { _sendError(req, 507, "Max actuators reached (or invalid config)"); return; }
+  if (idx < 0) {
+    // Un 507 generique laissait l'utilisateur deviner. Le cas des actionneurs a
+    // service continu (steppers) merite surtout son propre message : la limite
+    // est bien plus basse que MAX_ACTUATORS et n'a rien d'evident.
+    if (idx == ActuatorFactory::ADD_NO_SERVICE_SLOT) {
+      char msg[128];
+      snprintf(msg, sizeof(msg),
+               "Maximum continuously serviced actuators reached (limit %u)",
+               (unsigned)ActuatorManager::MAX_SERVICABLE);
+      _sendError(req, 507, msg);
+    } else if (idx == ActuatorFactory::ADD_FULL) {
+      _sendError(req, 507, "Max actuators reached");
+    } else {
+      _sendError(req, 400, "Invalid actuator config (see logs)");
+    }
+    return;
+  }
 
   uint8_t newId = _actFactory->getConfig(idx).id;
 
@@ -164,6 +198,9 @@ void WebServerManager::_handleUpdateActuator(AsyncWebServerRequest* req, uint8_t
   if (doc.containsKey("paramMax"))    candidate.paramMax = doc["paramMax"] | 30;
   if (doc.containsKey("paramDefault")) candidate.paramDefault = doc["paramDefault"] | 15;
   if (doc.containsKey("cooldownUs"))  candidate.cooldownUs = doc["cooldownUs"] | 200;
+  if (doc.containsKey("maxActiveMs") || doc.containsKey("cooldownUs")) {
+    candidate.maxActiveMs = _readMaxActiveMs(doc, candidate);
+  }
   if (doc.containsKey("enabled"))     candidate.enabled = doc["enabled"] | true;
   if (doc.containsKey("inverted"))    candidate.inverted = doc["inverted"] | false;
   if (doc.containsKey("endStopPin1")) candidate.endStopPin1 = doc["endStopPin1"] | 0xFF;
@@ -178,6 +215,24 @@ void WebServerManager::_handleUpdateActuator(AsyncWebServerRequest* req, uint8_t
   if (!_validateActuatorConfig(candidate, errMsg)) {
     _sendError(req, 400, errMsg);
     return;  // live config untouched
+  }
+
+  // Continuous-service slots are scarce (steppers). The create path checks them,
+  // but an UPDATE can turn a solenoid into a stepper — same overrun, different
+  // door. Only count it as new demand if this config did not already hold a slot.
+  {
+    bool wasServiced = cfg->enabled && actuatorTypeNeedsContinuousService(cfg->type);
+    bool wantsService = candidate.enabled &&
+                        actuatorTypeNeedsContinuousService(candidate.type);
+    if (wantsService && !wasServiced &&
+        _actFactory->getServicableConfigCount() >= ActuatorManager::MAX_SERVICABLE) {
+      char msg[128];
+      snprintf(msg, sizeof(msg),
+               "Maximum continuously serviced actuators reached (limit %u)",
+               (unsigned)ActuatorManager::MAX_SERVICABLE);
+      _sendError(req, 507, msg);
+      return;  // live config untouched
+    }
   }
 
   // The create path rejects a config that fights over a physical pin/channel;

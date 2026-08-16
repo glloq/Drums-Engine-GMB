@@ -37,6 +37,9 @@ public:
     uint32_t routed_commands = 0;
     uint32_t routed_batches = 0;
     uint32_t unrouted = 0;
+    // Evenements de note refuses EN BLOC faute de place pour toutes leurs
+    // commandes. Ils n'ont rien joue du tout : ni note active, ni round-robin.
+    uint32_t rejected_batches = 0;
   };
   EventProcessor(Scheduler* scheduler, EngineState* state);
 

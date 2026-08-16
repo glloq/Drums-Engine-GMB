@@ -35,9 +35,22 @@ public:
   // evincent la commande la moins urgente plutot que d'etre rejetees).
   bool push(const ActuatorCommand& cmd);
 
-  // Inserer un couple ON/OFF de facon transactionnelle (P0 #7).
-  // Les deux commandes sont inserees, ou aucune. Reserve les 2 emplacements
-  // avant d'accepter. Retourne false (rien insere) si moins de 2 places libres.
+  // Nombre maximum de commandes dans un lot : MAX_ACTIONS_PER_EVENT actions,
+  // chacune pouvant produire une paire ON+OFF.
+  static constexpr uint8_t MAX_BATCH = MAX_ACTIONS_PER_EVENT * 2;
+
+  // Inserer un lot de facon transactionnelle : toutes les commandes, ou aucune.
+  // Les emplacements sont reserves avant d'accepter quoi que ce soit.
+  //
+  // C'est la generalisation de pushPair() a l'evenement complet. Une percussion
+  // peut declencher jusqu'a MAX_ACTIONS_PER_EVENT actions (frappe + etouffoir +
+  // position servo + seconde frappe) ; en les inserant une par une, une file
+  // presque pleine acceptait la frappe et refusait l'etouffoir, produisant un
+  // resultat que l'instrument n'a jamais decrit.
+  bool pushBatch(const ActuatorCommand* cmds, uint8_t count);
+
+  // Inserer un couple ON/OFF de facon transactionnelle (P0 #7) : cas a deux
+  // commandes de pushBatch(), pour ne jamais activer un actionneur sans son OFF.
   bool pushPair(const ActuatorCommand& on, const ActuatorCommand& off);
 
   // Retirer la commande la plus urgente (tete). Retourne false si vide.

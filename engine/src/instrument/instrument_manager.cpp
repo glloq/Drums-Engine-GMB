@@ -71,13 +71,12 @@ void InstrumentManager::onNoteOn(uint8_t channel, uint8_t note, uint8_t velocity
     return;
   }
 
-  if (note >= 128) return;   // review #11: _noteMap has 128 entries
-  int8_t idx = _noteMap[note];
+  // The (channel, note) pair IS the key — the channel is no longer re-checked
+  // after the fact against a note-only lookup.
+  int8_t idx = _lookup(channel, note);
   if (idx < 0) return;
 
   InstrumentConfig& inst = _instruments[idx];
-  if (!inst.enabled) return;
-  if (inst.midiChannel != 0 && inst.midiChannel != channel) return;
 
   DBGF("[MIDI] NoteOn ch=%d note=%d vel=%d -> '%s'\n", channel, note, velocity, inst.name);
 
@@ -99,13 +98,10 @@ void InstrumentManager::onNoteOn(uint8_t channel, uint8_t note, uint8_t velocity
 }
 
 void InstrumentManager::onNoteOff(uint8_t channel, uint8_t note) {
-  if (note >= 128) return;   // review #11: _noteMap has 128 entries
-  int8_t idx = _noteMap[note];
+  int8_t idx = _lookup(channel, note);
   if (idx < 0) return;
 
   InstrumentConfig& inst = _instruments[idx];
-  if (!inst.enabled) return;
-  if (inst.midiChannel != 0 && inst.midiChannel != channel) return;
 
   // Envoyer OFF a tous les actionneurs
   for (uint8_t i = 0; i < inst.actuatorCount; i++) {
@@ -381,11 +377,19 @@ bool InstrumentManager::instrumentFromJson(const JsonObject& obj, InstrumentConf
 
 // --- Lookup ---
 
-InstrumentConfig* InstrumentManager::findByMidiNote(uint8_t note) {
-  if (note >= 128) return nullptr;
-  int8_t idx = _noteMap[note];
-  if (idx < 0 || idx >= _count) return nullptr;
+InstrumentConfig* InstrumentManager::findByMidiNote(uint8_t channel, uint8_t note) {
+  int8_t idx = _lookup(channel, note);
+  if (idx < 0) return nullptr;
   return &_instruments[idx];
+}
+
+int8_t InstrumentManager::_lookup(uint8_t channel, uint8_t note) const {
+  if (note >= 128) return -1;
+  if (channel < 1 || channel > MIDI_CHANNEL_COUNT) return -1;
+  int8_t idx = _noteMap[channel - 1][note];
+  if (idx < 0 || idx >= (int8_t)_count) return -1;
+  if (!_instruments[idx].enabled) return -1;
+  return idx;
 }
 
 uint8_t InstrumentManager::nextId() const {
@@ -396,11 +400,20 @@ uint8_t InstrumentManager::nextId() const {
   return maxId + 1;
 }
 
+// Precedence rules shared with PipelineCompiler::buildNoteMap() — see
+// core/midi_routing.h.
 void InstrumentManager::_rebuildNoteMap() {
-  memset(_noteMap, -1, sizeof(_noteMap));
-  for (uint8_t i = 0; i < _count; i++) {
-    if (_instruments[i].enabled && _instruments[i].midiNote < 128) {
-      _noteMap[_instruments[i].midiNote] = i;
-    }
+  uint16_t shadowed = midiBuildNoteMap<int8_t>(
+      _noteMap, -1, _count,
+      [this](uint16_t i) -> MidiBinding {
+        const InstrumentConfig& inst = _instruments[i];
+        return { inst.midiChannel, inst.midiNote,
+                 inst.enabled && inst.midiNote < 128 &&
+                 inst.midiChannel <= MIDI_CHANNEL_COUNT };
+      });
+
+  if (shadowed > 0) {
+    DBGF("[InstrMgr] %u instrument(s) shadowed by an earlier (channel, note) mapping\n",
+         shadowed);
   }
 }

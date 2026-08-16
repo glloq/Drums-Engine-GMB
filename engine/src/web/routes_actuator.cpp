@@ -28,6 +28,14 @@ void WebServerManager::_handleGetActuators(AsyncWebServerRequest* req) {
     obj["inverted"] = cfg.inverted;
     obj["endStopPin1"] = cfg.endStopPin1;
     obj["endStopPin2"] = cfg.endStopPin2;
+    obj["currentMa"] = cfg.currentMa;
+    obj["priority"] = cfg.priority;
+    obj["priorityName"] = actuatorPriorityName(cfg.priority);
+    if (cfg.type == ActuatorType::STEPPER) {
+      obj["enablePin"] = cfg.enablePin;
+      obj["stepperMaxSps"] = cfg.stepperMaxSps;
+      obj["stepperAccelSps2"] = cfg.stepperAccelSps2;
+    }
 
     // Etat temps reel
     Actuator* act = _actMgr->getActuator(cfg.id);
@@ -78,6 +86,11 @@ void WebServerManager::_handleCreateActuator(AsyncWebServerRequest* req, uint8_t
   cfg.inverted = doc["inverted"] | false;
   cfg.endStopPin1 = doc["endStopPin1"] | 0xFF;
   cfg.endStopPin2 = doc["endStopPin2"] | 0xFF;
+  cfg.currentMa = doc["currentMa"] | 0;
+  cfg.priority = doc["priority"] | (uint8_t)ActuatorPriority::PRIO_NORMAL;
+  cfg.enablePin = doc["enablePin"] | 0xFF;
+  cfg.stepperMaxSps = doc["stepperMaxSps"] | 1000;
+  cfg.stepperAccelSps2 = doc["stepperAccelSps2"] | 0;
 
   const char* errMsg = nullptr;
   if (!_validateActuatorConfig(cfg, errMsg)) {
@@ -89,8 +102,9 @@ void WebServerManager::_handleCreateActuator(AsyncWebServerRequest* req, uint8_t
   // config wants against everything else in the running system too (LED strips,
   // a fitted microphone), which nothing did before.
   {
-    const uint8_t pins[] = { cfg.hwPin, cfg.hwAddress, cfg.endStopPin1, cfg.endStopPin2 };
-    for (uint8_t i = 0; i < 4; i++) {
+    const uint8_t pins[] = { cfg.hwPin, cfg.hwAddress, cfg.endStopPin1, cfg.endStopPin2,
+                             cfg.enablePin };
+    for (uint8_t i = 0; i < sizeof(pins); i++) {
       if (!actuatorConfigUsesGpio(cfg, pins[i])) continue;
       const char* owner = nullptr;
       if (_gpioClaimedBy(pins[i], 0xFF, owner) &&
@@ -154,6 +168,11 @@ void WebServerManager::_handleUpdateActuator(AsyncWebServerRequest* req, uint8_t
   if (doc.containsKey("inverted"))    candidate.inverted = doc["inverted"] | false;
   if (doc.containsKey("endStopPin1")) candidate.endStopPin1 = doc["endStopPin1"] | 0xFF;
   if (doc.containsKey("endStopPin2")) candidate.endStopPin2 = doc["endStopPin2"] | 0xFF;
+  if (doc.containsKey("currentMa"))   candidate.currentMa = doc["currentMa"] | 0;
+  if (doc.containsKey("priority"))    candidate.priority = doc["priority"] | (uint8_t)ActuatorPriority::PRIO_NORMAL;
+  if (doc.containsKey("enablePin"))   candidate.enablePin = doc["enablePin"] | 0xFF;
+  if (doc.containsKey("stepperMaxSps")) candidate.stepperMaxSps = doc["stepperMaxSps"] | 1000;
+  if (doc.containsKey("stepperAccelSps2")) candidate.stepperAccelSps2 = doc["stepperAccelSps2"] | 0;
 
   const char* errMsg = nullptr;
   if (!_validateActuatorConfig(candidate, errMsg)) {

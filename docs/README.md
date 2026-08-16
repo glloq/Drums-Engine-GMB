@@ -12,6 +12,7 @@ Ce dossier regroupe la documentation utile et maintenue du projet.
 7. [`deployment-guide.md`](deployment-guide.md) — guide de deploiement complet (flash, WiFi, securite, MIDI).
 8. [`wiring-page.md`](wiring-page.md) — page "Cablage" : dossier de branchements electriques genere depuis la configuration.
 9. [`production-readiness.md`](production-readiness.md) — audit production et historique des sprints.
+10. [`memory-budget.md`](memory-budget.md) — cout RAM des tables statiques et limites de configuration.
 
 ## Regles de maintenance
 - Toute nouvelle doc doit etre ajoutee ici (pas a la racine).

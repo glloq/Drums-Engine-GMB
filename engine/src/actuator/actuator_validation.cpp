@@ -71,6 +71,10 @@ static void collectGpios(const ActuatorConfig& c, uint8_t* out, uint8_t& n) {
   add(c.endStopPin1);
   add(c.endStopPin2);
   if (c.type == ActuatorType::MOTOR_OPTICAL) add(c.hwAddress);  // sensor pin (GPIO)
+  if (c.type == ActuatorType::STEPPER) {
+    add(c.hwAddress);    // DIR pin (GPIO)
+    add(c.enablePin);    // /ENABLE pin (GPIO), 0xFF ignore par add()
+  }
   if (c.type == ActuatorType::PWM_MOTOR &&
       (c.behavior == ActuatorBehavior::MOTOR_SWEEP ||
        c.behavior == ActuatorBehavior::MOTOR_ALTERNATE) &&
@@ -152,6 +156,10 @@ bool validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg) {
     errMsg = "Invalid hardware bus";
     return false;
   }
+  if (cfg.priority >= (uint8_t)ActuatorPriority::PRIORITY_COUNT) {
+    errMsg = "priority must be 0 (low), 1 (normal) or 2 (high)";
+    return false;
+  }
 
   // --- End-stop pins must be input-capable GPIOs or 0xFF (disabled) ---
   // Input-only pins (34..39) are fine for a limit switch; flash pins are not.
@@ -169,7 +177,7 @@ bool validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg) {
   // the whole I2C bus (and with it every MCP23017/PCA9685 actuator), which used
   // to be accepted silently.
   {
-    struct { uint8_t pin; const char* msg; } used[4];
+    struct { uint8_t pin; const char* msg; } used[5];
     uint8_t n = 0;
     if (cfg.bus == HardwareBus::GPIO_DIRECT || cfg.bus == HardwareBus::LEDC_PWM) {
       used[n++] = { cfg.hwPin,
@@ -185,13 +193,19 @@ bool validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg) {
     }
     // hwAddress doubles as a GPIO for optical motors (sensor) and for
     // MOTOR_SWEEP / MOTOR_ALTERNATE (direction); it is an I2C address otherwise.
+    // For a stepper, hwAddress is the DIR pin and enablePin is /ENABLE.
     if (cfg.type == ActuatorType::MOTOR_OPTICAL ||
+        cfg.type == ActuatorType::STEPPER ||
         (cfg.bus == HardwareBus::LEDC_PWM &&
          (cfg.behavior == ActuatorBehavior::MOTOR_SWEEP ||
           cfg.behavior == ActuatorBehavior::MOTOR_ALTERNATE) &&
          cfg.hwAddress > 0 && cfg.hwAddress < 40)) {
       used[n++] = { cfg.hwAddress,
                     "hwAddress pin is reserved by the engine (I2C bus, status LED or BOOT button)" };
+    }
+    if (cfg.type == ActuatorType::STEPPER && cfg.enablePin != 0xFF) {
+      used[n++] = { cfg.enablePin,
+                    "enablePin is reserved by the engine (I2C bus, status LED or BOOT button)" };
     }
 
     const char* label = nullptr;
@@ -396,6 +410,63 @@ bool validateActuatorConfig(const ActuatorConfig& cfg, const char*& errMsg) {
     }
     if (cfg.hwPin == cfg.hwAddress) {
       errMsg = "Motor optical drive pin and sensor pin must be different";
+      return false;
+    }
+  }
+
+  if (cfg.type == ActuatorType::STEPPER) {
+    // STEP/DIR/ENABLE sont des sorties logiques pilotees directement par le
+    // firmware. Ni MCP23017 (trop lent, un aller-retour I2C par pas) ni PCA9685
+    // (50 Hz) ne peuvent produire un train d'impulsions ; LEDC n'aide pas non
+    // plus puisque le nombre de pas doit etre compte.
+    if (cfg.bus != HardwareBus::GPIO_DIRECT) {
+      errMsg = "Stepper requires the GPIO_DIRECT bus (STEP/DIR are timed logic outputs; "
+               "I2C expanders and LEDC cannot emit a counted step train)";
+      return false;
+    }
+    if (cfg.behavior != ActuatorBehavior::STEPPER_POSITION &&
+        cfg.behavior != ActuatorBehavior::STEPPER_STRIKE &&
+        cfg.behavior != ActuatorBehavior::STEPPER_ROTATE) {
+      errMsg = "Stepper behavior must be STEPPER_POSITION, STEPPER_STRIKE or STEPPER_ROTATE";
+      return false;
+    }
+    if (!esp32GpioCanOutput(cfg.hwPin)) {
+      errMsg = "Stepper STEP pin (hwPin) must be an output-capable ESP32 GPIO";
+      return false;
+    }
+    if (!esp32GpioCanOutput(cfg.hwAddress)) {
+      errMsg = "Stepper DIR pin (hwAddress) must be an output-capable ESP32 GPIO";
+      return false;
+    }
+    if (cfg.hwPin == cfg.hwAddress) {
+      errMsg = "Stepper STEP and DIR pins must be different";
+      return false;
+    }
+    if (cfg.enablePin != 0xFF) {
+      if (!esp32GpioCanOutput(cfg.enablePin)) {
+        errMsg = "Stepper enablePin must be an output-capable ESP32 GPIO (or 255=always enabled)";
+        return false;
+      }
+      if (cfg.enablePin == cfg.hwPin || cfg.enablePin == cfg.hwAddress) {
+        errMsg = "Stepper enablePin must differ from STEP and DIR";
+        return false;
+      }
+    }
+    if (cfg.stepperMaxSps == 0) {
+      errMsg = "Stepper stepperMaxSps must be greater than 0";
+      return false;
+    }
+    // Le plafond n'est pas arbitraire : les impulsions sont emises depuis la
+    // boucle temps reel a ~1 kHz, par rafales bornees (voir stepper_actuator.h).
+    if (cfg.stepperMaxSps > STEPPER_MAX_SPEED_SPS) {
+      errMsg = "Stepper stepperMaxSps exceeds what the RT service loop can emit "
+               "(see STEPPER_MAX_SPEED_SPS in core/config.h)";
+      return false;
+    }
+    // STEPPER_ROTATE reinterprete paramMin/paramMax en pourcentages de vitesse.
+    if (cfg.behavior == ActuatorBehavior::STEPPER_ROTATE &&
+        (cfg.paramMin > 100 || cfg.paramMax > 100)) {
+      errMsg = "STEPPER_ROTATE paramMin/paramMax are percentages and must be in [0..100]";
       return false;
     }
   }

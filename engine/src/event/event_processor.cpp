@@ -7,15 +7,26 @@ static portMUX_TYPE _noteActiveMux = portMUX_INITIALIZER_UNLOCKED;
 
 EventProcessor::EventProcessor(Scheduler* scheduler, EngineState* state)
   : _scheduler(scheduler), _state(state) {
-  memset(_lastCcDispatchUs, 0, sizeof(_lastCcDispatchUs));
+  memset(_lastCcDispatchMs, 0, sizeof(_lastCcDispatchMs));
   memset(_noteActive, 0, sizeof(_noteActive));
   _ccStats = {};
 }
 
 void EventProcessor::getNoteActive(uint8_t* out) const {
+  uint8_t snapshot[MAX_PIPELINES];
   portENTER_CRITICAL(&_noteActiveMux);
-  memcpy(out, _noteActive, 128);
+  memcpy(snapshot, _noteActive, sizeof(snapshot));
   portEXIT_CRITICAL(&_noteActiveMux);
+
+  // Fold the per-pipeline counters back onto note numbers for the UI. Two
+  // pipelines can share a note number across channels; the note reads as active
+  // with the highest of their counters.
+  memset(out, 0, 128);
+  for (uint8_t p = 0; p < _lookup.pipeline_count && p < MAX_PIPELINES; p++) {
+    uint8_t note = _lookup.pipelines[p].midi_note;
+    if (note >= 128 || snapshot[p] == 0) continue;
+    if (snapshot[p] > out[note]) out[note] = snapshot[p];
+  }
 }
 
 void EventProcessor::panicReset() {
@@ -37,20 +48,21 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
     if (!isRelease) return;
   }
 
-  // review #11: note-indexed lookups (note_to_pipeline / _noteActive) must be
-  // bounds-checked — /api/test/note can inject a raw uint8_t (0..255).
+  // review #11: note-indexed lookups must be bounds-checked — /api/test/note can
+  // inject a raw uint8_t (0..255). PipelineLookup::pipelineFor() also rejects an
+  // out-of-range channel rather than folding it onto channel 1.
   if ((ev.type == MIDI_EVT_NOTE_ON || ev.type == MIDI_EVT_NOTE_OFF) && ev.data1 >= 128) {
     return;
   }
 
   if (ev.type == MIDI_EVT_NOTE_ON && ev.data2 > 0) {
-    uint8_t pipelineIdx = _lookup.note_to_pipeline[ev.data1];
+    uint8_t pipelineIdx = _lookup.pipelineFor(ev.channel, ev.data1);
     if (pipelineIdx == 0xFF || pipelineIdx >= _lookup.pipeline_count) return;
 
     const CompiledPipeline& pipeline = _lookup.pipelines[pipelineIdx];
 
     portENTER_CRITICAL(&_noteActiveMux);
-    uint8_t noteCount = _noteActive[ev.data1];
+    uint8_t noteCount = _noteActive[pipelineIdx];
     portEXIT_CRITICAL(&_noteActiveMux);
 
     if (noteCount > 0) {
@@ -61,7 +73,7 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
         _scheduler->scheduleActionSteps(pipeline.note_off_actions, pipeline.note_off_count,
                                         ev.data2, ev.timestamp, _state->raw().variables);
         portENTER_CRITICAL(&_noteActiveMux);
-        _noteActive[ev.data1] = 0;  // Reset counter before re-triggering
+        _noteActive[pipelineIdx] = 0;  // Reset counter before re-triggering
         portEXIT_CRITICAL(&_noteActiveMux);
       }
       // STACK: counter will increment below, allowing proper NoteOff tracking
@@ -87,7 +99,7 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
         _ledQueue->push(ledEv);
       }
       portENTER_CRITICAL(&_noteActiveMux);
-      if (_noteActive[ev.data1] < 255) _noteActive[ev.data1]++;
+      if (_noteActive[pipelineIdx] < 255) _noteActive[pipelineIdx]++;
       portEXIT_CRITICAL(&_noteActiveMux);
       return;
     }
@@ -103,11 +115,11 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
       _ledQueue->push(ledEv);
     }
     portENTER_CRITICAL(&_noteActiveMux);
-    if (_noteActive[ev.data1] < 255) _noteActive[ev.data1]++;
+    if (_noteActive[pipelineIdx] < 255) _noteActive[pipelineIdx]++;
     portEXIT_CRITICAL(&_noteActiveMux);
   }
   else if (ev.type == MIDI_EVT_NOTE_OFF || (ev.type == MIDI_EVT_NOTE_ON && ev.data2 == 0)) {
-    uint8_t pipelineIdx = _lookup.note_to_pipeline[ev.data1];
+    uint8_t pipelineIdx = _lookup.pipelineFor(ev.channel, ev.data1);
     if (pipelineIdx == 0xFF || pipelineIdx >= _lookup.pipeline_count) return;
 
     const CompiledPipeline& pipeline = _lookup.pipelines[pipelineIdx];
@@ -115,19 +127,19 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
     // C3 fix: Atomic read-check-modify to prevent race between cores
     bool fireNoteOff = false;
     portENTER_CRITICAL(&_noteActiveMux);
-    uint8_t noteOffCount = _noteActive[ev.data1];
+    uint8_t noteOffCount = _noteActive[pipelineIdx];
     if (noteOffCount == 0) {
       portEXIT_CRITICAL(&_noteActiveMux);
       return;  // No active note — ignore spurious NoteOff
     }
     if (noteOffCount > 1 &&
         pipeline.retrigger_mode == (uint8_t)RetriggerMode::STACK) {
-      _noteActive[ev.data1]--;
+      _noteActive[pipelineIdx]--;
       portEXIT_CRITICAL(&_noteActiveMux);
       return;  // Other instances still active, don't fire noteOff yet
     }
     // Last instance releasing — zero counter and fire noteOff
-    _noteActive[ev.data1] = 0;
+    _noteActive[pipelineIdx] = 0;
     fireNoteOff = true;
     portEXIT_CRITICAL(&_noteActiveMux);
 
@@ -154,7 +166,7 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
 
       if (!scheduled) {
         portENTER_CRITICAL(&_noteActiveMux);
-        if (_noteActive[ev.data1] == 0) _noteActive[ev.data1] = 1;  // allow retry
+        if (_noteActive[pipelineIdx] == 0) _noteActive[pipelineIdx] = 1;  // allow retry
         portEXIT_CRITICAL(&_noteActiveMux);
       } else if (_ledQueue) {
         // Push LED NoteOff event (fade out animation) only once truly released.
@@ -202,18 +214,14 @@ void EventProcessor::processMidiEvent(const MidiEvent& ev) {
 
 void EventProcessor::_processCcEvent(const MidiEvent& ev) {
   if (ev.data1 >= 128) return;  // Guard against out-of-bounds CC number
+  if (ev.channel < 1 || ev.channel > MIDI_CHANNEL_COUNT) return;
   _ccStats.received++;
   if (ev.data1 < MAX_GLOBAL_VARS) {
+    // NB: the global variable bank behind ValueSource::CC_VAR stays keyed by CC
+    // number alone — it is a single shared bank by design, documented as such in
+    // the pipeline reference. Only the ROUTING below is channel aware.
     _state->setVariable(ev.data1, ev.data2);
   }
-
-  // Anti-flood: max 1 dispatch batch per CC every 5ms
-  uint32_t lastTs = _lastCcDispatchUs[ev.data1];
-  if (lastTs != 0 && (ev.timestamp - lastTs) < 5000) {
-    _ccStats.throttled++;
-    return;
-  }
-  _lastCcDispatchUs[ev.data1] = ev.timestamp;
 
   uint8_t first = _lookup.cc_to_first[ev.data1];
   uint8_t count = _lookup.cc_to_count[ev.data1];
@@ -222,6 +230,41 @@ void EventProcessor::_processCcEvent(const MidiEvent& ev) {
     return;
   }
 
+  // Does any route actually listen to this CC on THIS channel? Answering first
+  // is what keeps the anti-flood table one-dimensional: an unrouted flood on
+  // channel 1 no longer stamps the timestamp that channel 10 depends on, so it
+  // cannot starve the hi-hat pedal. The route list for one CC is short, so the
+  // scan costs far less than the 4 kB a (channel, CC) table would.
+  bool hasMatch = false;
+  for (uint8_t i = 0; i < count; i++) {
+    uint8_t routeIdx = first + i;
+    if (routeIdx >= _lookup.cc_route_count) break;
+    const CCRoutingEntry& r = _lookup.cc_routes[routeIdx];
+    if (r.actuator_id == 0xFF) continue;
+    if (r.channel != 0 && r.channel != ev.channel) continue;
+    hasMatch = true;
+    break;
+  }
+  if (!hasMatch) {
+    _ccStats.unrouted++;
+    return;
+  }
+
+  // Anti-flood: max 1 dispatch batch per CC every 5ms. Timestamps are truncated
+  // to milliseconds (uint16); uint16 subtraction wraps correctly over the 5 ms
+  // window, and 0 is the "never dispatched" sentinel (costing one extra
+  // dispatch every ~65 s at worst).
+  // Residual: two channels that BOTH route the same CC number still share the
+  // window. Both are genuinely routed, and the throttle exists to protect the
+  // command queue, so sharing it is the intended behaviour rather than a gap.
+  uint16_t nowMs = (uint16_t)(ev.timestamp / 1000);
+  uint16_t& lastMs = _lastCcDispatchMs[ev.data1];
+  if (lastMs != 0 && (uint16_t)(nowMs - lastMs) < 5) {
+    _ccStats.throttled++;
+    return;
+  }
+  lastMs = (nowMs == 0) ? 1 : nowMs;
+
   _ccStats.routed_batches++;
   for (uint8_t i = 0; i < count; i++) {
     uint8_t routeIdx = first + i;
@@ -229,6 +272,8 @@ void EventProcessor::_processCcEvent(const MidiEvent& ev) {
 
     const CCRoutingEntry& route = _lookup.cc_routes[routeIdx];
     if (route.actuator_id == 0xFF) continue;
+    // Channel filter: 0 = OMNI binding, listens on every channel.
+    if (route.channel != 0 && route.channel != ev.channel) continue;
 
     uint8_t inVal = route.inverted ? (127 - ev.data2) : ev.data2;
     uint8_t curved = _applyVelocityCurve(inVal, route.curve);
@@ -521,12 +566,12 @@ uint8_t EventProcessor::_applyVelocityCurve(uint8_t value, uint8_t curveType) {
 }
 
 void EventProcessor::recompileLookup() {
-  memset(_lookup.note_to_pipeline, 0xFF, sizeof(_lookup.note_to_pipeline));
+  _lookup.clearNoteMap();
   _lookup.cc_route_count = 0;
   _lookup.cc_route_dropped = 0;
   memset(_lookup.cc_to_first, 0xFF, sizeof(_lookup.cc_to_first));
   memset(_lookup.cc_to_count, 0, sizeof(_lookup.cc_to_count));
-  memset(_lastCcDispatchUs, 0, sizeof(_lastCcDispatchUs));
+  memset(_lastCcDispatchMs, 0, sizeof(_lastCcDispatchMs));
   memset(_noteActive, 0, sizeof(_noteActive));
   _ccStats = {};
   DBGF("[EventProc] Lookup recompiled (%d pipelines)\n", _lookup.pipeline_count);

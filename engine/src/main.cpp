@@ -9,7 +9,7 @@
 //         |
 //   [Scheduler]       <- Queue statique, timestamps microsecondes
 //         |
-//   [Actuator Engine] <- Classes Actuator (Servo, Solenoid, Motor)
+//   [Actuator Engine] <- Classes Actuator (Servo, Solenoid, Motor, Stepper)
 //         |
 //   [HAL Drivers]     <- MCP23017, PCA9685, GPIO, LEDC
 //
@@ -19,7 +19,7 @@
 //
 // Principes :
 //   - Zero allocation dynamique en runtime critique
-//   - Lookup O(1) note -> pipeline
+//   - Lookup O(1) (canal, note) -> pipeline
 //   - Latence cible : 1-2 ms stable
 //   - Jitter < 500 us
 //   - Modulaire et extensible
@@ -233,6 +233,11 @@ void rtCoreTask(void* param) {
 
     uint32_t now = micros();
 
+    // Actionneurs a mouvement continu (steppers) : ils doivent emettre leurs
+    // impulsions de pas a chaque passe, pas seulement au dispatch d'une
+    // commande. Sort immediatement s'il n'y en a aucun de configure.
+    actuatorManager.serviceAll(now);
+
     // End stops: polling haute frequence (~1 kHz) pour reagir vite aux butees
     // (review #5, separe du watchdog thermique).
     if (now - lastEndStopCheck >= ENDSTOP_CHECK_US) {
@@ -395,7 +400,7 @@ void compilePipelines() {
   PipelineLookup& lookup = eventProcessor.getLookup();
 
   // Reinitialiser
-  memset(lookup.note_to_pipeline, 0xFF, sizeof(lookup.note_to_pipeline));
+  lookup.clearNoteMap();
   lookup.pipeline_count = 0;
   lookup.cc_route_count = 0;
   memset(lookup.cc_to_first, 0xFF, sizeof(lookup.cc_to_first));
@@ -406,6 +411,7 @@ void compilePipelines() {
   for (uint8_t i = 0; i < instrumentManager.getInstrumentCount(); i++) {
     InstrumentConfig* inst = instrumentManager.getInstrumentByIndex(i);
     if (!inst || !inst->enabled || inst->midiNote >= 128) continue;
+    if (inst->midiChannel > MIDI_CHANNEL_COUNT) continue;  // 0 = OMNI, 1..16
     if (lookup.pipeline_count >= MAX_PIPELINES) break;
 
     uint8_t pipeIdx = lookup.pipeline_count;
@@ -415,6 +421,8 @@ void compilePipelines() {
     pipeline.note_on_count = 0;
     pipeline.note_off_count = 0;
     pipeline.cc_binding_count = 0;
+    pipeline.midi_note = inst->midiNote;
+    pipeline.midi_channel = inst->midiChannel;
     pipeline.retrigger_mode = inst->retriggerMode;
 
     // Prefer explicit action model when instrument already provides it
@@ -474,11 +482,14 @@ void compilePipelines() {
       }
     }
 
-    // Mapper la note MIDI vers ce pipeline
-    lookup.note_to_pipeline[inst->midiNote] = pipeIdx;
     inst->pipelineId = pipeIdx;
     lookup.pipeline_count++;
   }
+
+  // Mapper (canal, note) -> pipeline. Passe par le compilateur pour appliquer
+  // les memes regles de precedence OMNI / canal explicite que la compilation
+  // depuis JSON.
+  PipelineCompiler::buildNoteMap(lookup);
 
   // Compiler la table de routage CC (phase 2)
   for (uint8_t cc = 0; cc < 128; cc++) {
@@ -498,6 +509,7 @@ void compilePipelines() {
         route.range_min = binding.range_min;
         route.range_max = binding.range_max;
         route.curve = binding.curve;
+        route.channel = pipe.midi_channel;   // 0 = OMNI
         route.inverted = binding.inverted;
         count++;
       }
@@ -673,6 +685,28 @@ void initTask(void* param) {
       uint16_t mask = midiCfg["channelMask"] | 0xFFFF;
       midiEngine.setChannelMask(mask);
       DBGF("[Config] MIDI channel mask: 0x%04X\n", mask);
+    }
+  }
+
+  // 8c. Load the power budget. Absent file = compiled defaults, i.e. the
+  // historical count-only protection.
+  {
+    JsonDocument powerCfg;
+    if (storage.loadJsonFile(POWER_FILE, powerCfg)) {
+      PowerBudgetConfig budget;
+      budget.maxPeakMa = powerCfg["maxPeakMa"] | POWER_BUDGET_PEAK_MA_DEF;
+      budget.maxContinuousMa = powerCfg["maxContinuousMa"] | POWER_BUDGET_CONT_MA_DEF;
+      budget.maxConcurrent = powerCfg["maxConcurrent"] | MAX_CONCURRENT_ACTIVE;
+      if (budget.maxConcurrent > MAX_ACTUATORS) budget.maxConcurrent = MAX_ACTUATORS;
+      actuatorManager.setPowerBudget(budget);
+    }
+    uint32_t worstCase = actuatorManager.getWorstCaseCurrentMa();
+    const PowerBudgetConfig& active = actuatorManager.getPowerBudget();
+    if (active.maxPeakMa > 0 && worstCase > active.maxPeakMa) {
+      DBGF("[Config] Power: worst case %lu mA exceeds peak budget %u mA - "
+           "simultaneous hits will be refused\n",
+           (unsigned long)worstCase, active.maxPeakMa);
+      ErrorLog::warn("Power budget below worst-case actuator draw");
     }
   }
 

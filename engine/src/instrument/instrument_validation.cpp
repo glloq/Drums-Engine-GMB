@@ -26,14 +26,22 @@ bool validateInstrumentConfig(InstrumentConfig& cfg, const char*& errMsg,
   };
 
   auto commandCompatibleWithActuator = [&](uint8_t commandType, const ActuatorConfig& actCfg) -> bool {
+    // Un stepper accepte les trois commandes, mais chacune n'a de sens que pour
+    // un comportement : PULSE frappe, POSITION positionne, PWM fait tourner.
     switch ((CommandType)commandType) {
       case CommandType::PULSE:
-        return actCfg.type == ActuatorType::SOLENOID || actCfg.type == ActuatorType::SERVO;
+        return actCfg.type == ActuatorType::SOLENOID || actCfg.type == ActuatorType::SERVO
+            || (actCfg.type == ActuatorType::STEPPER &&
+                actCfg.behavior == ActuatorBehavior::STEPPER_STRIKE);
       case CommandType::POSITION:
-        return actCfg.type == ActuatorType::SERVO || actCfg.type == ActuatorType::MOTOR_OPTICAL;
+        return actCfg.type == ActuatorType::SERVO || actCfg.type == ActuatorType::MOTOR_OPTICAL
+            || (actCfg.type == ActuatorType::STEPPER &&
+                actCfg.behavior != ActuatorBehavior::STEPPER_ROTATE);
       case CommandType::PWM:
         return actCfg.type == ActuatorType::PWM_MOTOR || actCfg.type == ActuatorType::MOTOR_OPTICAL
-            || actCfg.type == ActuatorType::SERVO;
+            || actCfg.type == ActuatorType::SERVO
+            || (actCfg.type == ActuatorType::STEPPER &&
+                actCfg.behavior == ActuatorBehavior::STEPPER_ROTATE);
       case CommandType::OFF:
         return true;
       default:

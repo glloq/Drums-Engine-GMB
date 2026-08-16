@@ -8,6 +8,9 @@
 #include "solenoid_actuator.h"
 #include "servo_actuator.h"
 #include "motor_actuator.h"
+#include "stepper_actuator.h"
+#include <new>
+#include <stddef.h>
 #include "../hal/mcp23017_driver.h"
 #include "../hal/pca9685_driver.h"
 #include "../hal/gpio_driver.h"
@@ -20,7 +23,57 @@
 // les lie aux bons drivers HAL, et les enregistre dans l'ActuatorManager.
 //
 // Pool statique pre-alloue (zero allocation dynamique en runtime).
+//
+// Le pool est TYPE-EFFACE : MAX_ACTUATORS emplacements, chacun dimensionne sur
+// le plus gros type d'actionneur, construits par placement new. Auparavant la
+// factory tenait MAX_ACTUATORS exemplaires de CHAQUE classe cote a cote, donc
+// 4 x MAX_ACTUATORS objets pour au plus MAX_ACTUATORS actionneurs reels — un
+// gaspillage qui aurait ete multiplie par deux en passant la limite a 64, et
+// aggrave encore par l'ajout d'un cinquieme type.
 // ============================================================================
+
+// Dimensions du plus gros actionneur. Au namespace et non dans la classe : une
+// fonction membre constexpr ne peut pas etre appelee dans une expression
+// constante tant que sa classe est incomplete.
+namespace actuator_pool {
+constexpr size_t maxOf(size_t a, size_t b) { return a > b ? a : b; }
+constexpr size_t kSlotSize =
+    maxOf(maxOf(sizeof(SolenoidActuator), sizeof(ServoActuator)),
+          maxOf(sizeof(MotorActuator), sizeof(StepperActuator)));
+constexpr size_t kSlotAlign =
+    maxOf(maxOf(alignof(SolenoidActuator), alignof(ServoActuator)),
+          maxOf(alignof(MotorActuator), alignof(StepperActuator)));
+}  // namespace actuator_pool
+
+// Un emplacement de pool : de l'octet brut aligne, plus le pointeur vers
+// l'objet construit dedans (nullptr = libre).
+struct ActuatorSlot {
+  alignas(actuator_pool::kSlotAlign) unsigned char storage[actuator_pool::kSlotSize];
+  Actuator* live = nullptr;
+
+  // Construire un actionneur de type T dans cet emplacement.
+  template <typename T, typename... Args>
+  T* emplace(Args&&... args) {
+    static_assert(sizeof(T) <= actuator_pool::kSlotSize,
+                  "actuator type larger than the pool slot — add it to kSlotSize");
+    static_assert(alignof(T) <= actuator_pool::kSlotAlign,
+                  "actuator type needs stricter alignment than the pool slot");
+    destroy();
+    T* obj = new (storage) T(static_cast<Args&&>(args)...);
+    live = obj;
+    return obj;
+  }
+
+  // Detruire l'objet en place. Actuator a un destructeur virtuel, donc le bon
+  // destructeur de classe derivee est bien appele (le MotorActuator libere par
+  // exemple son emplacement d'ISR optique).
+  void destroy() {
+    if (live) {
+      live->~Actuator();
+      live = nullptr;
+    }
+  }
+};
 
 class ActuatorFactory {
 public:
@@ -85,13 +138,9 @@ private:
   GpioDriver* _gpioDriver;
   LedcDriver* _ledcDriver;
 
-  // Pool statique d'actionneurs (pas de new/delete)
-  SolenoidActuator _solenoidPool[MAX_ACTUATORS];
-  ServoActuator _servoPool[MAX_ACTUATORS];
-  MotorActuator _motorPool[MAX_ACTUATORS];
-  uint8_t _solenoidIdx;
-  uint8_t _servoIdx;
-  uint8_t _motorIdx;
+  // Pool statique d'actionneurs, tous types confondus (pas de new/delete global)
+  ActuatorSlot _pool[MAX_ACTUATORS];
+  uint8_t _poolIdx;
 
   // Pool de configs
   ActuatorConfig _configPool[MAX_ACTUATORS];

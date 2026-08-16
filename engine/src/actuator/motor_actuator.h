@@ -35,6 +35,11 @@ public:
                     _sweepPhase(0),
                     _homing(false), _endStopReached(false) {}
   MotorActuator(HalDriver* driver);
+  // Le pool de la factory detruit les actionneurs en place lors d'une
+  // reconstruction : c'est ici que l'emplacement d'ISR optique (ressource
+  // globale, 4 seulement) est rendu, sinon une reconfiguration qui change la
+  // pin du capteur les epuiserait un par un.
+  ~MotorActuator() override { _detachOpticalISR(); }
 
   void init() override;
   void execute(const ActuatorCommand& cmd) override;

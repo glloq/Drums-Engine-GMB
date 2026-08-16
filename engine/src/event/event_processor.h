@@ -48,7 +48,11 @@ public:
   const PipelineLookup& getLookup() const { return _lookup; }
   const CcDispatchStats& getCcDispatchStats() const { return _ccStats; }
 
-  // Get active note states (thread-safe snapshot)
+  // Get active note states (thread-safe snapshot).
+  // `out` must have 128 entries: the counters are tracked per PIPELINE (a note
+  // number alone is no longer a unique target now that routing is channel
+  // aware), and folded back onto note numbers here for the UI, which displays a
+  // keyboard rather than a pipeline list.
   void getNoteActive(uint8_t* out) const;
 
   // Emergency stop: reset NoteOn / retrigger counters (thread-safe).
@@ -65,8 +69,16 @@ private:
   Scheduler* _scheduler;
   EngineState* _state;
   PipelineLookup _lookup;
-  uint32_t _lastCcDispatchUs[128];
-  uint8_t _noteActive[128];  // Counter: 0=inactive, N=N stacked instances active
+  // Anti-flood timestamps per CC number, in truncated milliseconds.
+  // Deliberately NOT indexed by channel: _processCcEvent() only stamps this
+  // once it knows a route matches the event's channel, which removes the
+  // cross-channel starvation a flat per-CC table would otherwise cause — for
+  // 256 bytes instead of the 4 kB a 16x128 table costs.
+  uint16_t _lastCcDispatchMs[128];
+  // Counter per PIPELINE: 0=inactive, N=N stacked instances active.
+  // Keyed by pipeline (not by note) so that the same note number on two MIDI
+  // channels tracks its NoteOn/NoteOff independently.
+  uint8_t _noteActive[MAX_PIPELINES];
 
   CcDispatchStats _ccStats;
 

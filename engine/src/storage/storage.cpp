@@ -47,6 +47,13 @@ static void actuatorConfigToJson(const ActuatorConfig& cfg, JsonObject& obj) {
   obj["inverted"] = cfg.inverted;
   if (cfg.endStopPin1 != 0xFF) obj["endStopPin1"] = cfg.endStopPin1;
   if (cfg.endStopPin2 != 0xFF) obj["endStopPin2"] = cfg.endStopPin2;
+  obj["currentMa"] = cfg.currentMa;
+  obj["priority"] = cfg.priority;
+  if (cfg.type == ActuatorType::STEPPER) {
+    if (cfg.enablePin != 0xFF) obj["enablePin"] = cfg.enablePin;
+    obj["stepperMaxSps"] = cfg.stepperMaxSps;
+    obj["stepperAccelSps2"] = cfg.stepperAccelSps2;
+  }
 }
 
 static void actuatorConfigFromJson(const JsonObject& obj, ActuatorConfig& cfg) {
@@ -65,6 +72,13 @@ static void actuatorConfigFromJson(const JsonObject& obj, ActuatorConfig& cfg) {
   cfg.inverted = obj["inverted"] | false;
   cfg.endStopPin1 = obj["endStopPin1"] | 0xFF;
   cfg.endStopPin2 = obj["endStopPin2"] | 0xFF;
+  // Defaults keep a pre-existing actuators.json working unchanged: no declared
+  // current means the actuator is invisible to the power budget.
+  cfg.currentMa = obj["currentMa"] | 0;
+  cfg.priority = obj["priority"] | (uint8_t)ActuatorPriority::PRIO_NORMAL;
+  cfg.enablePin = obj["enablePin"] | 0xFF;
+  cfg.stepperMaxSps = obj["stepperMaxSps"] | 1000;
+  cfg.stepperAccelSps2 = obj["stepperAccelSps2"] | 0;
 }
 
 bool Storage::saveActuators(const ActuatorFactory& factory) {

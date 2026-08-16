@@ -355,6 +355,154 @@ void test_actuator_config_uses_gpio() {
   TEST_ASSERT_FALSE(actuatorConfigUsesGpio(c, 0xFF));
 }
 
+// ---------------------------------------------------------------------------
+// STEPPER (fifth actuator type)
+// ---------------------------------------------------------------------------
+
+static ActuatorConfig baseStepper() {
+  ActuatorConfig c;
+  c.type = ActuatorType::STEPPER;
+  c.behavior = ActuatorBehavior::STEPPER_POSITION;
+  c.bus = HardwareBus::GPIO_DIRECT;
+  c.hwPin = 18;         // STEP
+  c.hwAddress = 19;     // DIR
+  c.enablePin = 23;     // /ENABLE
+  c.paramMin = 0; c.paramMax = 800; c.paramDefault = 0;
+  c.stepperMaxSps = 2000;
+  return c;
+}
+
+void test_valid_stepper_passes() {
+  const char* err = nullptr;
+  ActuatorConfig c = baseStepper();
+  TEST_ASSERT_TRUE(validateActuatorConfig(c, err));
+  TEST_ASSERT_NULL(err);
+}
+
+// STEP/DIR are timed logic outputs: an I2C expander would need a bus round trip
+// per step, and LEDC cannot count the steps it emits.
+void test_stepper_requires_gpio_direct_bus() {
+  const char* err = nullptr;
+  ActuatorConfig c = baseStepper();
+  c.bus = HardwareBus::LEDC_PWM;
+  TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
+  c.bus = HardwareBus::MCP23017;
+  TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
+  c.bus = HardwareBus::PCA9685;
+  TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
+}
+
+void test_stepper_rejects_non_stepper_behavior() {
+  const char* err = nullptr;
+  ActuatorConfig c = baseStepper();
+  c.behavior = ActuatorBehavior::SOLENOID_STRIKE;
+  TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
+}
+
+void test_stepper_pins_must_be_output_capable_and_distinct() {
+  const char* err = nullptr;
+
+  ActuatorConfig c = baseStepper();
+  c.hwPin = 34;                   // 34..39 have no output driver
+  TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
+
+  c = baseStepper();
+  c.hwAddress = 7;                // SPI flash pin
+  TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
+
+  c = baseStepper();
+  c.hwAddress = c.hwPin;          // STEP == DIR
+  TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
+
+  c = baseStepper();
+  c.enablePin = c.hwPin;          // /ENABLE == STEP
+  TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
+}
+
+void test_stepper_enable_pin_is_optional() {
+  const char* err = nullptr;
+  ActuatorConfig c = baseStepper();
+  c.enablePin = 0xFF;             // driver permanently enabled
+  TEST_ASSERT_TRUE(validateActuatorConfig(c, err));
+}
+
+// The ceiling is not arbitrary: step pulses come out of the ~1 kHz RT service
+// loop in bounded bursts, so a higher configured rate could never be delivered.
+void test_stepper_speed_bounds_enforced() {
+  const char* err = nullptr;
+  ActuatorConfig c = baseStepper();
+  c.stepperMaxSps = 0;
+  TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
+  c.stepperMaxSps = STEPPER_MAX_SPEED_SPS + 1;
+  TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
+  c.stepperMaxSps = STEPPER_MAX_SPEED_SPS;
+  TEST_ASSERT_TRUE(validateActuatorConfig(c, err));
+}
+
+// STEPPER_ROTATE reinterprets paramMin/paramMax as percentages of max speed.
+void test_stepper_rotate_percent_range_enforced() {
+  const char* err = nullptr;
+  ActuatorConfig c = baseStepper();
+  c.behavior = ActuatorBehavior::STEPPER_ROTATE;
+  c.paramMin = 20; c.paramMax = 100; c.paramDefault = 50;
+  TEST_ASSERT_TRUE(validateActuatorConfig(c, err));
+  c.paramMax = 255;
+  TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
+}
+
+// The engine's own pins stay off limits for DIR and /ENABLE too, not just for
+// the output pin — taking GPIO 21/22 would drop the whole I2C bus.
+void test_stepper_reserved_pins_rejected() {
+  const char* err = nullptr;
+  ActuatorConfig c = baseStepper();
+  c.hwAddress = I2C_SDA;
+  TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
+  c = baseStepper();
+  c.enablePin = STATUS_LED_PIN;
+  TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
+}
+
+// A stepper shares physical GPIOs through DIR and /ENABLE, so the conflict
+// detector has to see them — otherwise two steppers could claim the same DIR.
+void test_stepper_gpio_conflict_detected_on_dir_and_enable() {
+  ActuatorConfig a = baseStepper();
+  ActuatorConfig b = baseStepper();
+  b.hwPin = 25;                   // different STEP...
+  b.hwAddress = a.hwAddress;      // ...but same DIR
+  b.enablePin = 26;
+  TEST_ASSERT_TRUE(actuatorConfigsConflict(a, b));
+
+  b.hwAddress = 27;
+  b.enablePin = a.enablePin;      // same /ENABLE
+  TEST_ASSERT_TRUE(actuatorConfigsConflict(a, b));
+
+  b.enablePin = 26;
+  TEST_ASSERT_FALSE(actuatorConfigsConflict(a, b));
+}
+
+// ---------------------------------------------------------------------------
+// Power budget fields
+// ---------------------------------------------------------------------------
+
+void test_priority_must_be_a_known_value() {
+  const char* err = nullptr;
+  ActuatorConfig c = baseSolenoid();
+  c.priority = (uint8_t)ActuatorPriority::PRIO_HIGH;
+  TEST_ASSERT_TRUE(validateActuatorConfig(c, err));
+  c.priority = 99;
+  TEST_ASSERT_FALSE(validateActuatorConfig(c, err));
+}
+
+// A config that predates the power budget has no declared current: it must stay
+// valid, and stay invisible to the arbitration.
+void test_defaults_leave_current_undeclared() {
+  ActuatorConfig c;
+  TEST_ASSERT_EQUAL_UINT16(0, c.currentMa);
+  TEST_ASSERT_EQUAL_UINT8((uint8_t)ActuatorPriority::PRIO_NORMAL, c.priority);
+  const char* err = nullptr;
+  TEST_ASSERT_TRUE(validateActuatorConfig(baseSolenoid(), err));
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_solenoid_hold_requires_real_pwm);
@@ -364,6 +512,17 @@ int main(int, char**) {
   RUN_TEST(test_motor_percent_range_enforced);
   RUN_TEST(test_duty_conversion_helpers);
   RUN_TEST(test_servo_angle_range_enforced);
+  RUN_TEST(test_valid_stepper_passes);
+  RUN_TEST(test_stepper_requires_gpio_direct_bus);
+  RUN_TEST(test_stepper_rejects_non_stepper_behavior);
+  RUN_TEST(test_stepper_pins_must_be_output_capable_and_distinct);
+  RUN_TEST(test_stepper_enable_pin_is_optional);
+  RUN_TEST(test_stepper_speed_bounds_enforced);
+  RUN_TEST(test_stepper_rotate_percent_range_enforced);
+  RUN_TEST(test_stepper_reserved_pins_rejected);
+  RUN_TEST(test_stepper_gpio_conflict_detected_on_dir_and_enable);
+  RUN_TEST(test_priority_must_be_a_known_value);
+  RUN_TEST(test_defaults_leave_current_undeclared);
   RUN_TEST(test_actuator_config_uses_gpio);
   RUN_TEST(test_exclusively_reserved_pins_rejected);
   RUN_TEST(test_optional_reserved_pins_allowed);

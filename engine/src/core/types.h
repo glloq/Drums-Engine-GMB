@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include "config.h"  // Include config.h first to get all macro definitions
+#include "power_budget.h"  // ActuatorPriority + PowerBudgetConfig
 
 // ============================================================================
 // Drums Engine - Types fondamentaux
@@ -51,11 +52,13 @@ enum class BlockType : uint8_t {
 };
 
 // --- Types d'actionneurs ---
+// NB: these values are persisted in actuators.json — only ever APPEND.
 enum class ActuatorType : uint8_t {
   SERVO = 0,
   SOLENOID,
   PWM_MOTOR,
   MOTOR_OPTICAL,
+  STEPPER,               // Step/dir driver (DRV8825, A4988, TMC2209...)
   TYPE_COUNT
 };
 
@@ -75,8 +78,14 @@ enum class ActuatorBehavior : uint8_t {
   MOTOR_SPEED,            // Moteur vitesse continue (velocity → vitesse)
   MOTOR_SWEEP,            // 1 end stop: aller puis arret / 2 end stops: aller-retour
   MOTOR_ALTERNATE,        // Moteur alterne direction entre end stops
+  STEPPER_POSITION,       // Position absolue en pas (zone de frappe, tension, timbale)
+  STEPPER_STRIKE,         // Aller-retour: frappe puis retour au repos (maillet)
+  STEPPER_ROTATE,         // Rotation continue a vitesse variable (maillet rotatif)
   BEHAVIOR_COUNT
 };
+
+// ActuatorPriority et PowerBudgetConfig vivent dans core/power_budget.h, avec
+// la regle d'arbitrage elle-meme.
 
 // --- Type de bus hardware ---
 enum class HardwareBus : uint8_t {
@@ -195,6 +204,25 @@ struct ActuatorConfig {
   uint8_t endStopPin1;     // End stop pin 1 GPIO (0xFF = disabled)
   uint8_t endStopPin2;     // End stop pin 2 GPIO (0xFF = disabled)
 
+  // --- Power budget (ActuatorManager arbitration) ---
+  // currentMa is the current this actuator draws WHILE ACTIVE, in milliamps
+  // (coil inrush for a solenoid, stall/run current for a motor, holding current
+  // for a servo). 0 means "not declared": the actuator then contributes nothing
+  // to the budget and is never refused on current grounds, which is what makes
+  // every pre-existing configuration behave exactly as it did before.
+  uint16_t currentMa;
+  uint8_t priority;        // ActuatorPriority
+
+  // --- Stepper (type == STEPPER) ---
+  // hwPin      = STEP output   (bus must be GPIO_DIRECT)
+  // hwAddress  = DIR output    (GPIO)
+  // enablePin  = /ENABLE output, active low (0xFF = always enabled)
+  // endStopPin1 = home/min end stop, endStopPin2 = max end stop
+  // paramMin/paramMax = travel limits in steps, paramDefault = rest position
+  uint8_t enablePin;       // 0xFF = driver permanently enabled
+  uint16_t stepperMaxSps;  // Max step rate, steps/second (clamped to STEPPER_MAX_SPEED_SPS)
+  uint16_t stepperAccelSps2; // Acceleration in steps/s^2 (0 = instant, no ramp)
+
   // --- Behavior-specific param semantics ---
   // NB: every PWM figure below is converted to the normalised 0..PWM_DUTY_MAX
   // duty of HalDriver::pwmWrite() (hal/hal_interface.h) before reaching the
@@ -216,6 +244,11 @@ struct ActuatorConfig {
   //                    1 end stop → aller simple / 2 end stops + hwAddress=dirPin → aller-retour
   // MOTOR_ALTERNATE:   paramMin=pwmMin%, paramMax=pwmMax%, hwAddress=dirPin GPIO,
   //                    endStopPin1/2 requis (alterne direction entre les 2 butees)
+  // STEPPER_POSITION:  paramMin/paramMax=bornes en pas, paramDefault=repos,
+  //                    valeur de commande 0..127 mappee sur [paramMin, paramMax]
+  // STEPPER_STRIKE:    paramDefault=repos, paramMax=position de frappe,
+  //                    velocity -> vitesse d'attaque, retour auto au repos
+  // STEPPER_ROTATE:    paramMin/paramMax=vitesses min/max en % de stepperMaxSps
 
   ActuatorConfig()
     : id(0), type(ActuatorType::SOLENOID), behavior(ActuatorBehavior::SOLENOID_STRIKE),
@@ -223,10 +256,13 @@ struct ActuatorConfig {
       paramMin(8), paramMax(30), paramDefault(15),
       cooldownUs(200), lastActivation(0),
       enabled(true), inverted(false),
-      endStopPin1(0xFF), endStopPin2(0xFF) {
+      endStopPin1(0xFF), endStopPin2(0xFF),
+      currentMa(0), priority((uint8_t)ActuatorPriority::PRIO_NORMAL),
+      enablePin(0xFF), stepperMaxSps(1000), stepperAccelSps2(0) {
     name[0] = '\0';
   }
 };
+
 
 // --- Configuration d'un instrument ---
 struct InstrumentConfig {
@@ -313,16 +349,22 @@ struct CCRoutingEntry {
   uint8_t range_min;
   uint8_t range_max;
   uint8_t curve;
+  // Canal de l'instrument proprietaire de la liaison : 0 = OMNI, 1..16 sinon.
+  // Sans lui, un CC#4 (pedale hi-hat) emis sur le canal 11 pilotait aussi le
+  // hi-hat du canal 10 — le pendant, pour les CC, du bug de lookup des notes.
+  uint8_t channel;
   bool inverted;
 
   CCRoutingEntry()
     : actuator_id(0xFF), command_type((uint8_t)CommandType::POSITION),
-      range_min(0), range_max(127), curve(0), inverted(false) {}
+      range_min(0), range_max(127), curve(0), channel(0), inverted(false) {}
 };
 
 struct CompiledPipeline {
   uint8_t block_count;
   uint8_t output_actuator_id;   // Actionneur de sortie
+  uint8_t midi_note;            // Note source (0..127, 0xFF = non liee)
+  uint8_t midi_channel;         // Canal source: 0 = OMNI, 1..16 = canal explicite
   CompiledBlock blocks[MAX_BLOCKS_PER_PIPELINE];
   ActionStep note_on_actions[MAX_ACTIONS_PER_EVENT];
   uint8_t note_on_count;
@@ -335,6 +377,7 @@ struct CompiledPipeline {
 
   CompiledPipeline()
     : block_count(0), output_actuator_id(0xFF),
+      midi_note(0xFF), midi_channel(0),
       note_on_count(0), note_off_count(0), cc_binding_count(0),
       retrigger_mode((uint8_t)RetriggerMode::IGNORE),
       alternate_group_count(0) {
@@ -342,9 +385,16 @@ struct CompiledPipeline {
   }
 };
 
-// --- Table de lookup note -> pipeline O(1) ---
+// --- Table de lookup (canal, note) -> pipeline O(1) ---
+// La table etait indexee par la note seule, ce qui rendait le canal MIDI
+// inoperant : une note 36 sur le canal 1 declenchait le kick du canal 10, et
+// deux instruments sur la meme note dans deux canaux differents ne pouvaient
+// pas coexister. L'indexation est desormais [canal-1][note] (16 x 128 = 2 ko),
+// et les instruments OMNI (midiChannel == 0) sont deplies sur les 16 lignes a
+// la compilation — le chemin temps reel reste donc un seul acces indexe, sans
+// branche supplementaire.
 struct PipelineLookup {
-  uint8_t note_to_pipeline[128];     // -1 (0xFF) = pas de pipeline
+  uint8_t note_to_pipeline[MIDI_CHANNEL_COUNT][128];  // 0xFF = pas de pipeline
   CompiledPipeline pipelines[MAX_PIPELINES];
   uint8_t pipeline_count;
 
@@ -355,11 +405,34 @@ struct PipelineLookup {
   uint16_t cc_route_dropped;         // routes ignorees (table pleine)
 
   PipelineLookup() : pipeline_count(0), cc_route_count(0), cc_route_dropped(0) {
-    memset(note_to_pipeline, 0xFF, sizeof(note_to_pipeline));
+    clearNoteMap();
     memset(cc_to_first, 0xFF, sizeof(cc_to_first));
     memset(cc_to_count, 0, sizeof(cc_to_count));
   }
+
+  void clearNoteMap() { memset(note_to_pipeline, 0xFF, sizeof(note_to_pipeline)); }
+
+  // Lookup temps reel. `channel` est le canal du fil (1..16) ; toute valeur hors
+  // de cette plage est refusee plutot que repliee sur le canal 1.
+  // Le remplissage de la table est fait par PipelineCompiler::buildNoteMap(),
+  // qui delegue les regles de precedence a core/midi_routing.h.
+  uint8_t pipelineFor(uint8_t channel, uint8_t note) const {
+    if (channel < 1 || channel > MIDI_CHANNEL_COUNT || note >= 128) return 0xFF;
+    return note_to_pipeline[channel - 1][note];
+  }
 };
+
+// Index de pipeline maximum representable dans la table de lookup : 0xFF est le
+// marqueur "aucun pipeline", donc un index ne peut pas l'atteindre.
+static_assert(MAX_PIPELINES <= 255, "MAX_PIPELINES must stay below the 0xFF sentinel");
+// One pipeline per enabled instrument, never more: a larger MAX_PIPELINES only
+// buys unreachable slots at ~198 bytes of .bss each.
+static_assert(MAX_PIPELINES >= MAX_INSTRUMENTS,
+              "every instrument must be able to get a pipeline");
+static_assert(MAX_PIPELINES <= MAX_INSTRUMENTS,
+              "pipeline slots beyond MAX_INSTRUMENTS can never be filled");
+static_assert(MAX_INSTRUMENTS <= 127, "InstrumentManager note map stores indices as int8_t");
+static_assert(MAX_CC_ROUTES < 255, "cc_to_first stores route indices with 0xFF as sentinel");
 
 // --- Etat global accessible aux blocs CONDITION ---
 struct GlobalState {
@@ -402,6 +475,7 @@ inline const char* actuatorTypeName(ActuatorType t) {
     case ActuatorType::SOLENOID:   return "Solenoid";
     case ActuatorType::PWM_MOTOR:  return "PWM Motor";
     case ActuatorType::MOTOR_OPTICAL: return "Motor Optical";
+    case ActuatorType::STEPPER:    return "Stepper";
     default:                       return "Unknown";
   }
 }
@@ -422,6 +496,9 @@ inline const char* actuatorBehaviorName(ActuatorBehavior b) {
     case ActuatorBehavior::MOTOR_SPEED:         return "Motor Speed";
     case ActuatorBehavior::MOTOR_SWEEP:         return "Motor Sweep";
     case ActuatorBehavior::MOTOR_ALTERNATE:     return "Motor Alternate";
+    case ActuatorBehavior::STEPPER_POSITION:    return "Stepper Position";
+    case ActuatorBehavior::STEPPER_STRIKE:      return "Stepper Strike";
+    case ActuatorBehavior::STEPPER_ROTATE:      return "Stepper Rotate";
     default:                               return "Unknown";
   }
 }

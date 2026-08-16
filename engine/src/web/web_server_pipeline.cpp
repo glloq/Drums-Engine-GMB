@@ -245,12 +245,16 @@ void WebServerManager::_handleGetPipelineBlocks(AsyncWebServerRequest* req) {
     return;
   }
 
-  // Find the compiled pipeline for this instrument
-  uint8_t pipelineIdx = _eventProc->getLookup().note_to_pipeline[inst->midiNote];
+  // Find the compiled pipeline for this instrument. Routing is keyed on
+  // (channel, note); an OMNI instrument (channel 0) is present on every row, so
+  // any row answers for it — channel 1 is used as the probe.
+  uint8_t probeChannel = inst->midiChannel == 0 ? 1 : inst->midiChannel;
+  uint8_t pipelineIdx = _eventProc->getLookup().pipelineFor(probeChannel, inst->midiNote);
 
   JsonDocument doc;
   doc["instrumentId"] = instrId;
   doc["midiNote"] = inst->midiNote;
+  doc["midiChannel"] = inst->midiChannel;
 
   if (pipelineIdx != 0xFF && pipelineIdx < _eventProc->getLookup().pipeline_count) {
     const CompiledPipeline& pipeline = _eventProc->getLookup().pipelines[pipelineIdx];

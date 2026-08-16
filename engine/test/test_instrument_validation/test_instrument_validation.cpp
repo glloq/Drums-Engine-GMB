@@ -4,8 +4,9 @@
 #include <unity.h>
 #include "../../src/instrument/instrument_validation.cpp"
 
-// Mock actuator table: id 1 = solenoid strike, id 2 = servo position.
-static ActuatorConfig g_acts[2];
+// Mock actuator table: id 1 = solenoid strike, id 2 = servo position,
+// id 3 = stepper position, id 4 = stepper strike, id 5 = stepper rotate.
+static ActuatorConfig g_acts[5];
 
 static const ActuatorConfig* mockLookup(void* ctx, uint8_t id) {
   (void)ctx;
@@ -20,6 +21,28 @@ static void seedActuators() {
   g_acts[1] = ActuatorConfig();
   g_acts[1].id = 2; g_acts[1].type = ActuatorType::SERVO;
   g_acts[1].behavior = ActuatorBehavior::SERVO_POSITION;
+  g_acts[2] = ActuatorConfig();
+  g_acts[2].id = 3; g_acts[2].type = ActuatorType::STEPPER;
+  g_acts[2].behavior = ActuatorBehavior::STEPPER_POSITION;
+  g_acts[3] = ActuatorConfig();
+  g_acts[3].id = 4; g_acts[3].type = ActuatorType::STEPPER;
+  g_acts[3].behavior = ActuatorBehavior::STEPPER_STRIKE;
+  g_acts[4] = ActuatorConfig();
+  g_acts[4].id = 5; g_acts[4].type = ActuatorType::STEPPER;
+  g_acts[4].behavior = ActuatorBehavior::STEPPER_ROTATE;
+}
+
+// A stepper accepts all three commands, but each one only makes sense for one
+// behavior — sending the wrong one would silently do nothing at runtime.
+static bool stepAccepts(uint8_t actuatorId, CommandType cmd) {
+  InstrumentConfig inst;
+  inst.midiNote = 38; inst.midiChannel = 10;
+  inst.noteOnCount = 1;
+  inst.noteOnActions[0].actuator_id = actuatorId;
+  inst.noteOnActions[0].command_type = (uint8_t)cmd;
+  inst.noteOnActions[0].value_source = (uint8_t)ValueSource::VELOCITY;
+  const char* err = nullptr;
+  return validateInstrumentConfig(inst, err, mockLookup, nullptr);
 }
 
 static InstrumentConfig baseInstrument() {
@@ -97,6 +120,25 @@ void test_range_normalization() {
   TEST_ASSERT_EQUAL_UINT8(100, inst.ccBindings[0].range_max);
 }
 
+void test_stepper_position_accepts_position_only() {
+  TEST_ASSERT_TRUE(stepAccepts(3, CommandType::POSITION));
+  TEST_ASSERT_TRUE(stepAccepts(3, CommandType::OFF));
+  TEST_ASSERT_FALSE(stepAccepts(3, CommandType::PULSE));
+  TEST_ASSERT_FALSE(stepAccepts(3, CommandType::PWM));
+}
+
+void test_stepper_strike_accepts_pulse() {
+  TEST_ASSERT_TRUE(stepAccepts(4, CommandType::PULSE));
+  TEST_ASSERT_TRUE(stepAccepts(4, CommandType::POSITION));
+  TEST_ASSERT_FALSE(stepAccepts(4, CommandType::PWM));
+}
+
+void test_stepper_rotate_accepts_pwm_only() {
+  TEST_ASSERT_TRUE(stepAccepts(5, CommandType::PWM));
+  TEST_ASSERT_FALSE(stepAccepts(5, CommandType::PULSE));
+  TEST_ASSERT_FALSE(stepAccepts(5, CommandType::POSITION));
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_valid_instrument_passes);
@@ -106,5 +148,8 @@ int main(int, char**) {
   RUN_TEST(test_incompatible_command_rejected);
   RUN_TEST(test_cc_binding_command_must_be_position_or_pwm);
   RUN_TEST(test_range_normalization);
+  RUN_TEST(test_stepper_position_accepts_position_only);
+  RUN_TEST(test_stepper_strike_accepts_pulse);
+  RUN_TEST(test_stepper_rotate_accepts_pwm_only);
   return UNITY_END();
 }

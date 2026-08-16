@@ -106,9 +106,40 @@
 - **Stats CC** : `routed_commands` n'est incremente que si la commande est
   effectivement acceptee par la file.
 
+### Lot suivant : routage canal, capacite, stepper, budget electrique
+
+- **Lookup (canal, note) — FAIT.** La table de lookup etait indexee par la note
+  seule. En mode pipeline le canal etait purement ignore ; en mode legacy il
+  n'etait verifie qu'apres coup contre un slot unique par note, donc deux
+  instruments partageant une note sur deux canaux ne pouvaient pas coexister.
+  Les deux chemins passent desormais par `core/midi_routing.h` (`16 x 128`,
+  OMNI deplie, canal explicite prioritaire), couvert par
+  `test/test_midi_routing`. Les routes CC portent aussi leur canal, et
+  l'anti-flood CC est reclé sur `(canal, CC)`.
+- **Capacite — FAIT.** `MAX_INSTRUMENTS` 16 → 64, `MAX_PIPELINES` 32 → 64,
+  `MAX_ACTUATORS` 32 → 64, `MAX_CC_ROUTES` 64 → 96. Un kit General MIDI complet
+  (notes 35..81) ne pouvait pas etre represente avec 16 instruments. Cout ~21 ko
+  de `.bss` sur ~31 ko de marge DRAM disponible, detaille dans
+  `docs/memory-budget.md` ; le pool d'actionneurs, passe a un stockage
+  type-efface, absorbe une grande partie de la hausse.
+  `MAX_PIPELINES` est desormais lie a `MAX_INSTRUMENTS` par `static_assert` : les
+  deux compilateurs de pipeline en emettent au plus un par instrument, donc tout
+  slot au-dela etait du `.bss` inatteignable.
+- **`STEPPER` — FAIT.** Cinquieme type d'actionneur (STEP/DIR/ENABLE en GPIO
+  direct), avec prise d'origine sur butee, rampe d'acceleration et deceleration
+  d'approche. Les pas sont emis par rafales bornees depuis la boucle RT.
+- **Budget electrique — FAIT.** `MAX_CONCURRENT_ACTIVE = 8` devient le defaut
+  d'un plafond configurable, complete par un arbitrage sur le courant declare par
+  actionneur et une priorite. Couvert par `test/test_power_budget`.
+
 ### Reste a faire (non traite — voir §fin)
 - Concurrence : modele proprietaire-unique Core 1, double-buffer des lookups,
-  lookup canal MIDI, reconfiguration a chaud sure.
+  reconfiguration a chaud sure.
+- MIDI : transports DIN/BLE/USB, Poly Aftertouch, MIDI Clock, Start/Stop,
+  Program Change / Bank Select.
+- UI : le mode simple (presets de percussion) et la calibration guidee restent a
+  faire ; les nouveaux champs (courant, priorite, stepper) sont exposes par
+  l'API mais pas encore dans la SPA.
 - Web : corps HTTP fragmentes, auth WebSocket, route de validation de session.
 - Securite reseau : PIN obligatoire + hache, mot de passe AP unique.
 - UI : decoupage SPA en modules, accessibilite.
@@ -125,9 +156,9 @@
 |---|---|---|
 | Architecture 6 couches | 100% | DONE |
 | HAL (GPIO, LEDC, MCP23017, PCA9685) | 100% | DONE — mutex I2C + recovery |
-| Actuators (Servo, Solenoid, Motor) | 100% | DONE — ISR multi-instance |
+| Actuators (Servo, Solenoid, Motor, Stepper) | 100% | DONE — ISR multi-instance, 5 types, pool type-efface |
 | Scheduler temps reel | 85% | Queue triee/spinlock/transactionnelle; insertion O(n) sous verrou a mesurer |
-| Event Processor + Pipeline | 70% | NoteOff fiabilise + bornes note; lookup canal MIDI et double-buffer manquants |
+| Event Processor + Pipeline | 85% | NoteOff fiabilise + bornes note; lookup (canal,note) fait; double-buffer manquant |
 | MIDI Engine (rtpMIDI WiFi) | 100% | DONE |
 | Instrument Manager + CRUD | 100% | DONE |
 | Loop Engine | 70% | beatValue corrige, IDs stabilises; handles JSON corriges |
@@ -136,9 +167,9 @@
 | UI Web embarquee | 90% | Editeur de pipeline present; monolithe innerHTML/CSP a durcir |
 | Templates (8 presets) | 90% | Pas de calibration auto |
 | Routage CC compile | 100% | DONE |
-| Concurrence dual-core | 85% | Partiel — spinlocks + mutex + panic latch atomique; modele proprietaire-unique Core 1, double-buffer des lookups et lookup canal MIDI encore differes |
+| Concurrence dual-core | 85% | Partiel — spinlocks + mutex + panic latch atomique; modele proprietaire-unique Core 1 et double-buffer des lookups encore differes |
 | Documentation | 100% | DONE — mise a jour complete |
-| Tests automatises | 80% | Script curl + tests natifs Unity (queue, validation) |
+| Tests automatises | 85% | Script curl + tests natifs Unity (queue, validation, routage canal, budget electrique) |
 | CI/CD | 70% | GitHub Actions: tests natifs + build ESP32 + cppcheck |
 | Securite | 60% | Auth Bearer/rate-limit/panic/anti-XSS OK; token ouvert sans PIN, PIN en clair, AP fixe, WS non authentifie |
 
@@ -200,7 +231,7 @@
 1. **CI/CD** — En place (`.github/workflows/ci.yml` : tests natifs + build ESP32 + cppcheck).
    Reste a etendre : clang-format/clang-tidy, ESLint, validation HTML.
 2. **Concurrence Core 1** — modele proprietaire-unique + double-buffer des lookups
-   + lookup canal MIDI (voir §0 "Reste a faire").
+   (voir §0 "Reste a faire"). Le lookup canal MIDI est fait.
 3. **Corps HTTP fragmentes** — accumuler les fragments avant parsing JSON.
 
 ### PRIORITE MOYENNE
@@ -265,6 +296,6 @@
 
 Le projet **Drums-Engine-MIDI** dispose d'une architecture solide et d'un coeur temps reel fonctionnel avec protections concurrence completes. Les couches MIDI, Scheduler, Actuator et Event sont operationnelles et fiabilisees pour l'usage dual-core.
 
-**Les actions critiques P0 sont implementees** et une CI GitHub Actions (tests natifs + build ESP32 + cppcheck) est en place. Restent des items P1/P2 documentes ci-dessus (concurrence Core 1, lookup canal, corps HTTP fragmentes, SPA/accessibilite).
+**Les actions critiques P0 sont implementees** et une CI GitHub Actions (tests natifs + build ESP32 + cppcheck) est en place. Restent des items P1/P2 documentes ci-dessus (concurrence Core 1, corps HTTP fragmentes, SPA/accessibilite, transports MIDI).
 
-Le projet est estime a **~90% d'avancement** : le coeur temps reel et la securite sont fiabilises, mais plusieurs items P1/P2 (lookup canal MIDI, double-buffer, corps HTTP fragmentes, SPA/accessibilite) restent ouverts.
+Le projet est estime a **~90% d'avancement** : le coeur temps reel et la securite sont fiabilises, le routage (canal, note) et la capacite d'un kit GM complet sont acquis, mais plusieurs items P1/P2 (double-buffer, corps HTTP fragmentes, SPA/accessibilite, transports MIDI DIN/BLE/USB) restent ouverts.

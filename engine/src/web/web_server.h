@@ -117,6 +117,8 @@ private:
   void _handleSetPin(AsyncWebServerRequest* req, uint8_t* data, size_t len);
   void _handleGetMidiChannels(AsyncWebServerRequest* req);
   void _handleSetMidiChannels(AsyncWebServerRequest* req, uint8_t* data, size_t len);
+  void _handleGetPowerBudget(AsyncWebServerRequest* req);
+  void _handleSetPowerBudget(AsyncWebServerRequest* req, uint8_t* data, size_t len);
   void _handleFactoryReset(AsyncWebServerRequest* req);
   void _handlePanic(AsyncWebServerRequest* req);
   void _handlePanicReset(AsyncWebServerRequest* req);

@@ -68,6 +68,10 @@
 // MIDI
 #include "midi/midi_engine.h"
 
+// GMB (reconnaissance automatique General-Midi-Boop)
+#include "gmb/gmb_sysex_service.h"
+#include "gmb/gmb_identity.h"
+
 // Loop
 #include "loop/loop_engine.h"
 
@@ -92,6 +96,8 @@ void compilePipelines();
 void loadLoops();
 void loadLedConfig();
 void rebuildLedNoteLookup();
+void rebuildGmbCapabilities();
+void persistGmbState();
 void setupSchedulerTimer();
 void initTask(void* param);
 void rtCoreTask(void* param);
@@ -163,6 +169,10 @@ MidiEngine midiEngine(&eventProcessor, &instrumentManager);
 LoopEngine loopEngine(&instrumentManager);
 Storage storage;
 WiFiManager wifiManager;
+// Service GMB : cache du descripteur, revision, limiteur de debit, compteurs.
+// Reconstruit UNIQUEMENT depuis rebuildGmbCapabilities(), appele a la fin de
+// compilePipelines() — c'est-a-dire a l'activation d'une configuration validee.
+GmbSysExService gmbService;
 StatusLed statusLed;
 
 // Boot button (GPIO 0) long-press tracking
@@ -274,6 +284,9 @@ void appCoreTask(void* param) {
 
     // LED strips (WS2812B, 60 fps)
     ledEngine.update();
+
+    // Revision de capacites GMB a ecrire (hors verrou temps reel)
+    persistGmbState();
 
     // Bouton BOOT (GPIO 0) - detection appui long 3s
     bool btnPressed = (digitalRead(BOOT_BUTTON_PIN) == LOW);
@@ -529,6 +542,75 @@ void compilePipelines() {
 
   DBGF("[Pipeline] Compiled %d pipelines from %d instruments, %d CC routes\n",
        lookup.pipeline_count, instrumentManager.getInstrumentCount(), lookup.cc_route_count);
+
+  // La configuration active vient de changer : c'est LE point ou les capacites
+  // annoncees a General-Midi-Boop sont recalculees. Toujours ici, jamais
+  // ailleurs — et toujours sous le meme ReconfigLock que la table de pipelines,
+  // pour qu'une requete SysEx arrivant sur le coeur temps reel ne puisse pas
+  // lire un descripteur a moitie reecrit.
+  rebuildGmbCapabilities();
+}
+
+// ============================================================================
+// Recalculer les capacites GMB depuis la configuration ACTIVE
+// ============================================================================
+// Le resolveur d'actionneur interroge l'ActuatorManager et non le pool de
+// configurations : ce qui compte pour une capacite musicale, c'est ce qui
+// existe reellement au bout du bus, pas ce qui est ecrit dans le fichier.
+static const ActuatorConfig* gmbActuatorLookup(void* ctx, uint8_t actuatorId) {
+  const ActuatorManager* mgr = (const ActuatorManager*)ctx;
+  const Actuator* act = mgr->getActuator(actuatorId);
+  return act ? &act->getConfig() : nullptr;
+}
+
+void rebuildGmbCapabilities() {
+  GmbBuildInputs in;
+  in.lookup = &eventProcessor.getLookup();
+  in.actuatorLookup = gmbActuatorLookup;
+  in.actuatorCtx = &actuatorManager;
+  // Un canal filtre par l'utilisateur n'est pas routable : ses notes ne sont
+  // donc pas des capacites, et il ne faut pas les annoncer.
+  in.channelMask = midiEngine.getChannelMask();
+  in.power = actuatorManager.getPowerBudget();
+
+  const bool changed = gmbService.rebuild(in, millis());
+  if (changed) {
+    DBGF("[GMB] Capabilities revision %u, descriptor %u bytes, %d logical instrument(s)\n",
+         (unsigned)gmbService.revision(), (unsigned)gmbService.descriptorSize(),
+         gmbService.snapshot().instrumentCount);
+  }
+  if (gmbService.instrumentsDropped() > 0) {
+    // Jamais silencieux : un canal qui n'a pas tenu dans le descripteur est un
+    // canal que l'hote ne verra pas.
+    ErrorLog::warn("GMB descriptor truncated: some MIDI channels were dropped");
+  }
+  if (gmbService.snapshot().droppedMechanisms > 0) {
+    ErrorLog::warn("GMB capabilities: actuator pool full, some voices not described");
+  }
+}
+
+// ============================================================================
+// Persister la revision de capacites
+// ============================================================================
+// Ecrit hors du ReconfigLock, depuis Core 0 : aucune ecriture flash ne doit se
+// produire pendant que le coeur temps reel est gare. Et rien n'est ecrit tant
+// que les capacites n'ont pas reellement change — une edition d'interface qui
+// ne modifie aucune capacite ne coute donc pas un cycle de flash.
+void persistGmbState() {
+  if (!gmbService.persistPending()) return;
+  JsonDocument doc;
+  doc["revision"] = gmbService.revision();
+  doc["hash"] = gmbService.stateHash();
+  if (!storage.saveJsonFile(GMB_STATE_FILE, doc)) {
+    // Echec d'ecriture. On abandonne quand meme la tentative plutot que de
+    // reessayer a chaque passe sur un systeme de fichiers en panne : la
+    // situation se rattrape toute seule au redemarrage suivant, ou l'empreinte
+    // relue sera perimee, donc detectee comme un changement, donc la revision
+    // repartira EN AVANT. Elle ne peut pas reculer, ce qui est la seule
+    // propriete dont GMB depend pour ne pas manquer une mise a jour.
+    ErrorLog::warn("GMB: failed to persist capability revision");
+  }
+  gmbService.markPersisted();
 }
 
 // ============================================================================
@@ -652,8 +734,59 @@ void initTask(void* param) {
   scheduler.begin();
   actuatorManager.setScheduler(&scheduler);
 
+  // 3b. GMB : identite physique + revision de capacites persistee. DOIT
+  // preceder loadConfiguration(), qui compile les pipelines et donc reconstruit
+  // le descripteur : sans la revision relue, un simple redemarrage la ferait
+  // repartir de zero et GMB re-telechargerait le descripteur a chaque boot.
+  {
+    JsonDocument gmbState;
+    uint32_t revision = 0;
+    uint32_t stateHash = 0;
+    if (storage.loadJsonFile(GMB_STATE_FILE, gmbState)) {
+      revision = gmbState["revision"] | (uint32_t)0;
+      stateHash = gmbState["hash"] | (uint32_t)0;
+    }
+    gmbService.begin(gmbInstanceId(), revision, stateHash);
+    midiEngine.setGmbService(&gmbService);
+    DBGF("[GMB] Instance ID 0x%08X, stored revision %u\n",
+         (unsigned)gmbService.instanceId(), (unsigned)revision);
+  }
+
+  // 3c. Filtre de canaux MIDI. Charge AVANT la configuration : un canal filtre
+  // n'est pas routable, donc ses notes ne sont pas des capacites — le premier
+  // calcul du descripteur doit deja en tenir compte, sinon le boot annoncerait
+  // des notes injouables puis se corrigerait en incrementant la revision pour
+  // rien.
+  {
+    JsonDocument midiCfg;
+    if (storage.loadJsonFile("/midi.json", midiCfg)) {
+      uint16_t mask = midiCfg["channelMask"] | 0xFFFF;
+      midiEngine.setChannelMask(mask);
+      DBGF("[Config] MIDI channel mask: 0x%04X\n", mask);
+    }
+  }
+
+  // 3d. Budget electrique. Charge AVANT la configuration pour la meme raison
+  // que le filtre de canaux : c'est lui qui decide combien de frappes
+  // simultanees la machine peut reellement tenir, donc la polyphonie annoncee.
+  // Fichier absent = defauts compiles, c'est-a-dire la protection historique
+  // par le nombre.
+  {
+    JsonDocument powerCfg;
+    if (storage.loadJsonFile(POWER_FILE, powerCfg)) {
+      PowerBudgetConfig budget;
+      budget.maxPeakMa = powerCfg["maxPeakMa"] | POWER_BUDGET_PEAK_MA_DEF;
+      budget.maxContinuousMa = powerCfg["maxContinuousMa"] | POWER_BUDGET_CONT_MA_DEF;
+      budget.maxConcurrent = powerCfg["maxConcurrent"] | MAX_CONCURRENT_ACTIVE;
+      if (budget.maxConcurrent > MAX_ACTUATORS) budget.maxConcurrent = MAX_ACTUATORS;
+      actuatorManager.setPowerBudget(budget);
+    }
+  }
+
   // 4. Load configuration + create actuators + compile pipelines
+  //    (compilePipelines() rebuilds the GMB capability snapshot at its end)
   loadConfiguration();
+  persistGmbState();
 
   // 5. Connecter le LoopEngine au pipeline system
   loopEngine.setEventProcessor(&eventProcessor);
@@ -678,28 +811,11 @@ void initTask(void* param) {
   // 8. MIDI over WiFi
   midiEngine.begin();
 
-  // 8b. Load MIDI channel filter from storage
+  // 8c. Verifier le budget electrique une fois les actionneurs crees. Le budget
+  // lui-meme est charge plus haut (etape 3d) : il plafonne la polyphonie
+  // annoncee a GMB, donc il doit etre en place avant le premier calcul du
+  // descripteur.
   {
-    JsonDocument midiCfg;
-    if (storage.loadJsonFile("/midi.json", midiCfg)) {
-      uint16_t mask = midiCfg["channelMask"] | 0xFFFF;
-      midiEngine.setChannelMask(mask);
-      DBGF("[Config] MIDI channel mask: 0x%04X\n", mask);
-    }
-  }
-
-  // 8c. Load the power budget. Absent file = compiled defaults, i.e. the
-  // historical count-only protection.
-  {
-    JsonDocument powerCfg;
-    if (storage.loadJsonFile(POWER_FILE, powerCfg)) {
-      PowerBudgetConfig budget;
-      budget.maxPeakMa = powerCfg["maxPeakMa"] | POWER_BUDGET_PEAK_MA_DEF;
-      budget.maxContinuousMa = powerCfg["maxContinuousMa"] | POWER_BUDGET_CONT_MA_DEF;
-      budget.maxConcurrent = powerCfg["maxConcurrent"] | MAX_CONCURRENT_ACTIVE;
-      if (budget.maxConcurrent > MAX_ACTUATORS) budget.maxConcurrent = MAX_ACTUATORS;
-      actuatorManager.setPowerBudget(budget);
-    }
     uint32_t worstCase = actuatorManager.getWorstCaseCurrentMa();
     const PowerBudgetConfig& active = actuatorManager.getPowerBudget();
     if (active.maxPeakMa > 0 && worstCase > active.maxPeakMa) {
@@ -738,6 +854,9 @@ void initTask(void* param) {
 
   // 9. Web Server (includes auth, rate-limiting, WiFi API, logs API)
   webServer.setMicrophone(&mic);
+  // Doit etre pose AVANT begin() : c'est begin() qui enregistre
+  // GET /gmb/descriptor.json, et qui arme donc le drapeau HTTP du handshake.
+  webServer.setGmb(&gmbService, rebuildGmbCapabilities);
   webServer.setRecompileCallback(compilePipelines);
   webServer.begin();
   wifiManager.registerRoutes(&webServer.getServer(),
@@ -757,6 +876,9 @@ void initTask(void* param) {
   DBGF("  IP:           %s\n", wifiManager.getIP().c_str());
   DBGF("  API Token:    %s\n", webServer.getApiToken().c_str());
   DBGF("  MIDI:         %s (port %d)\n", MIDI_SESSION_NAME, RTP_MIDI_PORT);
+  DBGF("  GMB:          instance 0x%08X, rev %u, descriptor %u bytes (%d instrument(s))\n",
+       (unsigned)gmbService.instanceId(), (unsigned)gmbService.revision(),
+       (unsigned)gmbService.descriptorSize(), gmbService.snapshot().instrumentCount);
   DBGF("  Instruments:  %d\n", instrumentManager.getInstrumentCount());
   DBGF("  Actuators:    %d (configs: %d)\n",
        actuatorManager.getCount(), actuatorFactory.getConfigCount());

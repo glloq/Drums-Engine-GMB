@@ -53,11 +53,35 @@ Core 1 (RT 1kHz)                    Core 0 (App)
 
 Protections concurrence : spinlocks dual-core, mutex I2C, ISR atomique, ecriture LittleFS atomique.
 
+## General-Midi-Boop automatic recognition
+
+Quand ce moteur apparait sur une liaison MIDI, [General-Midi-Boop](https://github.com/glloq/General-Midi-Boop)
+le reconnait et se configure **tout seul** : canal de percussion, notes reellement
+jouables, CC routes, polyphonie, timing, contraintes mecaniques. Aucune saisie
+manuelle cote Raspberry Pi.
+
+```
+ESP32 demarre -> charge la configuration percussion -> construit son descripteur
+GMB envoie le bloc 0x01 -> handshake v2 (24 octets, identite unique par carte)
+GMB telecharge le descripteur (bloc 0x10, ou GET /gmb/descriptor.json)
+vous editez la configuration -> revision++ -> bloc 0x11 -> GMB se remet a jour
+```
+
+La configuration Drums-Engine est la **seule** source de verite : tout ce qui est
+annonce en est derive, il n'y a pas de fichier de capacites a maintenir en
+parallele. La revision n'augmente que si les capacites changent reellement — une
+edition d'interface qui ne change rien de musical ne coute ni notification ni
+cycle de flash.
+
+Diagnostique : onglet **Traitement MIDI** de l'interface web, ou
+`GET /api/gmb/status`. Detail complet : [`docs/gmb-protocol.md`](docs/gmb-protocol.md).
+
 ## Documentation
 - Index documentation: [`docs/README.md`](docs/README.md)
 - Etat des lieux actuel: [`docs/system-status.md`](docs/system-status.md)
 - Architecture technique: [`docs/architecture.md`](docs/architecture.md)
 - API web: [`docs/web-api.md`](docs/web-api.md)
+- Reconnaissance General-Midi-Boop: [`docs/gmb-protocol.md`](docs/gmb-protocol.md)
 - Scheduler temps reel: [`docs/realtime-scheduler.md`](docs/realtime-scheduler.md)
 - Guide de deploiement: [`docs/deployment-guide.md`](docs/deployment-guide.md)
 - Page Cablage (branchements generes): [`docs/wiring-page.md`](docs/wiring-page.md)

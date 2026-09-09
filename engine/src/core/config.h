@@ -150,6 +150,36 @@
 #define LED_DEFAULT_PIN_2    16         // Strip 2 data pin
 #define LED_DEFAULT_PIN_3    17         // Strip 3 data pin
 
+// --- Firmware version (annoncee dans le handshake GMB bloc 0x01) ---
+// General-Midi-Boop persiste cette version par exemplaire et s'en sert pour
+// signaler une mise a jour. A incrementer a chaque release qui change le
+// comportement observable depuis l'hote.
+#define FIRMWARE_VERSION_MAJOR  1
+#define FIRMWARE_VERSION_MINOR  0
+#define FIRMWARE_VERSION_PATCH  0
+
+// --- GMB (reconnaissance automatique General-Midi-Boop) ---
+// Voir docs/gmb-protocol.md. Ces trois limites dimensionnent des tables
+// statiques ; leur cout est itemise dans docs/memory-budget.md.
+//
+// GMB_MAX_LOGICAL_INSTRUMENTS : plafond du descripteur v2 cote hote
+// (DescriptorProtocol.js : `instruments must have at most 16 entries`). Un
+// instrument logique = un canal MIDI, donc 16 est aussi la borne naturelle.
+#define GMB_MAX_LOGICAL_INSTRUMENTS  16
+// Nombre d'actionneurs decrits (toutes voix et mecanismes confondus) dans un
+// meme instantane de capacites. Au-dela, les mecanismes surnumeraires sont
+// COMPTES et signales, jamais silencieusement omis.
+#define GMB_MAX_MECHANISMS           32
+// Taille du descripteur JSON mis en cache. Un descripteur typique fait 1 a 2 ko
+// (SYSEX_IDENTITY.md §3). Le serialiseur degrade les sections optionnelles
+// plutot que de tronquer : il ne peut pas produire de JSON invalide.
+#define GMB_DESCRIPTOR_MAX           2560
+// Canal de repli (0-based, comme dans le descripteur) quand la configuration
+// n'expose que des instruments OMNI : le canal de percussion General MIDI.
+#define GMB_DEFAULT_CHANNEL          (MIDI_CHANNEL - 1)
+// Fichier de persistance de la revision de capacites.
+#define GMB_STATE_FILE    "/gmb.json"
+
 // --- Storage ---
 #define CONFIG_FILE       "/config.json"
 #define ACTUATORS_FILE    "/actuators.json"

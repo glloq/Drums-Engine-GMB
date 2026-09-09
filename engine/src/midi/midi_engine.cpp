@@ -26,6 +26,7 @@ bool MidiEngine::begin() {
   MIDI.setHandleControlChange(_onControlChange);
   MIDI.setHandlePitchBend(_onPitchBend);
   MIDI.setHandleAfterTouchChannel(_onAftertouch);
+  MIDI.setHandleSystemExclusive(_onSysEx);
 
   DBGF("[MIDI] Session '%s' on port %d\n", MIDI_SESSION_NAME, RTP_MIDI_PORT);
   return true;
@@ -33,6 +34,25 @@ bool MidiEngine::begin() {
 
 void MidiEngine::update() {
   MIDI.read();
+
+  // Pousser la notification GMB (bloc 0x11) depuis CE contexte, et pas depuis
+  // Core 0 : la pile AppleMIDI n'est pas reentrante, et elle est deja lue ici.
+  // Le cas courant est un test de drapeau et rien d'autre.
+  if (_gmb && _gmb->notificationPending()) {
+    uint8_t frame[GMB_NOTIFICATION_SIZE];
+    const size_t n = _gmb->takeNotification(frame, sizeof(frame), millis());
+    if (n > 0) sendSysEx(frame, n);
+  }
+}
+
+void MidiEngine::sendSysEx(const uint8_t* data, size_t len) {
+  if (!data || len < 2) return;
+  // `true` : le tableau porte deja ses delimiteurs F0/F7, la librairie l'emet
+  // tel quel. C'est indispensable ici — les trames GMB sont construites
+  // completes par gmb_sysex.cpp et doivent partir octet pour octet.
+  MIDI.sendSysEx((unsigned)len, data, true);
+  _sysexSent.fetch_add(1, std::memory_order_relaxed);
+  _lastActivity = millis();
 }
 
 void MidiEngine::sendNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {
@@ -175,6 +195,22 @@ void MidiEngine::_onPitchBend(byte channel, int value) {
   } else {
     _instance->_instrumentMgr->onPitchBend(channel, (int16_t)value);
   }
+}
+
+// Reception SysEx. Appele depuis MIDI.read(), donc sur le coeur temps reel :
+// le traitement doit rester borne et sans effet de bord. Il l'est — le service
+// n'analyse que l'en-tete et recopie un segment deja en cache. Aucune frappe
+// n'est planifiee, aucune note active n'est touchee, le scheduler n'est pas
+// sollicite : la decouverte GMB ne peut pas faire bouger la machine.
+void MidiEngine::_onSysEx(byte* data, unsigned size) {
+  if (!_instance) return;
+  _instance->_lastActivity = millis();
+  if (!_instance->_gmb) return;
+
+  uint8_t response[GmbSysExService::MAX_RESPONSE];
+  const size_t n = _instance->_gmb->handleSysEx((const uint8_t*)data, (size_t)size,
+                                                response, sizeof(response), millis());
+  if (n > 0) _instance->sendSysEx(response, n);
 }
 
 void MidiEngine::_onAftertouch(byte channel, byte pressure) {

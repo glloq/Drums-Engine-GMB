@@ -567,6 +567,22 @@ input[type=checkbox] { width: auto; }
     <p style="font-size:0.85em;color:var(--fg2);margin-bottom:16px;">
       Cliquez sur un instrument pour editer son pipeline visuellement.
     </p>
+
+    <!-- Diagnostique de la reconnaissance automatique General-Midi-Boop.
+         Purement informatif : tout ce qui est affiche ici est DERIVE de la
+         configuration ci-dessous, il n'y a rien a saisir. -->
+    <div class="card" id="gmbCard" style="margin-bottom:16px;">
+      <h3>Reconnaissance automatique General-Midi-Boop
+        <span class="badge" id="gmbBadge">...</span>
+        <button class="btn btn-sm btn-secondary" style="float:right;" onclick="refreshGmbStatus()">Actualiser</button>
+      </h3>
+      <p class="hint" style="margin-bottom:10px;">
+        Les capacites annoncees a General-Midi-Boop sont deduites de cette configuration.
+        Aucune saisie manuelle n'est necessaire cote Raspberry Pi.
+      </p>
+      <div id="gmbStatus" style="font-size:0.85em;"></div>
+    </div>
+
     <div id="mappingList"></div>
   </div>
 
@@ -4318,7 +4334,101 @@ async function refreshMappings() {
   toast('Mappings actualises', 'success');
 }
 
+// --- Diagnostique GMB -------------------------------------------------------
+// Tout vient de GET /api/gmb/status, qui lit le MEME instantane de capacites que
+// le descripteur SysEx : ce que la page affiche est donc exactement ce que
+// General-Midi-Boop recoit, jamais une seconde description.
+function gmbAge(now, then) {
+  if (!then) return 'jamais';
+  const ms = now - then;
+  if (ms < 0) return 'jamais';
+  if (ms < 1000) return 'a l\'instant';
+  if (ms < 60000) return 'il y a ' + Math.round(ms / 1000) + ' s';
+  return 'il y a ' + Math.round(ms / 60000) + ' min';
+}
+
+async function refreshGmbStatus() {
+  const el = document.getElementById('gmbStatus');
+  const badge = document.getElementById('gmbBadge');
+  if (!el) return;
+  const d = await api('gmb/status', 'GET', null, true);
+  if (!d || !d.enabled) {
+    badge.textContent = 'indisponible';
+    badge.className = 'badge';
+    el.innerHTML = '<p class="hint">Service GMB non actif sur ce firmware.</p>';
+    return;
+  }
+  badge.textContent = 'v' + d.protocol;
+  badge.className = 'badge badge-green';
+
+  const now = d.last ? d.last.now : 0;
+  const c = d.counters || {};
+  const rows = [
+    ['Identifiant d\'exemplaire', d.instanceId],
+    ['Firmware', d.firmware],
+    ['Revision du descripteur', d.revision],
+    ['Taille du descripteur', d.descriptorSize + ' octets (' + d.descriptorChunks + ' segment(s), max ' + d.descriptorMax + ')'],
+    ['Niveau de detail', d.detail + (d.instrumentsDropped ? ' — ' + d.instrumentsDropped + ' canal/canaux abandonne(s)' : '')],
+    ['Instruments logiques', (d.instruments || []).length],
+    ['Descripteur HTTP', d.httpDescriptor ? 'disponible' : 'indisponible'],
+    ['Notifications push', d.pushNotifications ? 'actives' : 'inactives'],
+    ['Transports', (d.transports || []).join(', ')],
+    ['Derniere requete GMB', gmbAge(now, d.last && d.last.requestMs)],
+    ['Dernier transfert de descripteur', gmbAge(now, d.last && d.last.transferMs)],
+    ['Derniere notification', gmbAge(now, d.last && d.last.notificationMs)],
+    ['Dernier recalcul des capacites', gmbAge(now, d.last && d.last.rebuildMs)],
+    ['Compteurs',
+      'identite ' + (c.identityRequests || 0) +
+      ' / segments ' + (c.descriptorChunkRequests || 0) +
+      ' / HTTP ' + (c.httpDescriptorReads || 0) +
+      ' / notifications ' + (c.notificationsSent || 0) +
+      ' / SysEx invalides ' + (c.invalidSysEx || 0) +
+      ' / limites ' + (c.rateLimited || 0) +
+      ' / index hors bornes ' + (c.outOfRangeChunks || 0)]
+  ];
+
+  let html = '<table style="width:100%;border-collapse:collapse;">';
+  html += rows.map(r =>
+    '<tr><td style="padding:2px 8px 2px 0;color:var(--fg2);white-space:nowrap;">' + r[0] +
+    '</td><td style="padding:2px 0;"><strong>' + r[1] + '</strong></td></tr>').join('');
+  html += '</table>';
+
+  if (d.mechanismsDropped) {
+    html += '<p class="hint" style="color:var(--warn,#e9a);">Trop d\'actionneurs pour un seul instantane : ' +
+            d.mechanismsDropped + ' voix non decrite(s).</p>';
+  }
+
+  (d.instruments || []).forEach(inst => {
+    const t = inst.timing || {};
+    const timing = [
+      t.prepareMaxMs !== undefined ? 'preparation ' + t.prepareMaxMs + ' ms (silencieuse)' : null,
+      t.exciteLatencyMs !== undefined ? 'frappe +' + t.exciteLatencyMs + ' ms' : null,
+      t.jitterMs !== undefined ? 'gigue ' + t.jitterMs + ' ms' : null,
+      t.rearticulationMs !== undefined ? 'rearticulation ' + t.rearticulationMs + ' ms' : null,
+      t.releaseMs !== undefined ? 'relachement ' + t.releaseMs + ' ms' : null
+    ].filter(Boolean).join(' · ');
+    html += '<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border,#333);">' +
+      '<strong>Canal MIDI ' + inst.userChannel + '</strong> ' +
+      '<span class="hint">(declare comme ' + inst.channel + ' — le descripteur compte a partir de zero)</span>' +
+      (inst.configured ? '' : ' <span class="badge">non configure</span>') +
+      '<br>Notes : ' + (inst.notes && inst.notes.length ? inst.notes.join(', ') : 'aucune') +
+      '<br>CC : ' + (inst.ccs && inst.ccs.length ? inst.ccs.join(', ') : 'aucun') +
+      (inst.hihatPedalCc !== undefined ? ' <span class="hint">(pedale hi-hat : CC#' + inst.hihatPedalCc + ')</span>' : '') +
+      '<br>Polyphonie : ' + (inst.polyphony || 'inconnue') +
+      ' · Velocite : ' + (inst.velocity ? 'oui' : 'non') +
+      (timing ? '<br>Timing : ' + timing : '') +
+      '</div>';
+  });
+
+  html += '<p style="margin-top:10px;">' +
+    '<a class="btn btn-sm btn-secondary" href="/gmb/descriptor.json" target="_blank" rel="noopener">Voir le descripteur</a>' +
+    '</p>';
+
+  el.innerHTML = html;
+}
+
 async function renderMappings() {
+  refreshGmbStatus();   // diagnostique GMB, independant de la liste ci-dessous
   const el = document.getElementById('mappingList');
   if (instruments.length === 0) {
     el.innerHTML = '<div class="empty-state"><p>Aucun instrument configure</p></div>';

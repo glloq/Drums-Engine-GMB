@@ -30,6 +30,7 @@ bool WebServerManager::begin() {
   _auth.begin();
 
   _setupRoutes();
+  _setupGmbRoutes();
 
   _ws.onEvent([this](AsyncWebSocket* server, AsyncWebSocketClient* client,
                      AwsEventType type, void* arg, uint8_t* data, size_t len) {

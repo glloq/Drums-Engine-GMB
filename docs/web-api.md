@@ -32,6 +32,21 @@ Base URL: `http://<ip-esp32>/`
   force sur le canal 10 ne pouvait pas exercer une liaison appartenant a un
   instrument d'un autre canal.
 
+### General-Midi-Boop (reconnaissance automatique)
+- `GET /gmb/descriptor.json` — descripteur de capacites v2. **Non prefixe `/api/`
+  et non authentifie** : General-Midi-Boop le recupere sans jeton, c'est tout
+  l'interet du drapeau HTTP du handshake SysEx. Sert exactement les memes octets
+  que le transfert SysEx bloc `0x10` (meme cache, seul le decoupage differe).
+  En-tete `ETag` = revision courante. `503` tant que le descripteur n'a pas ete
+  construit. Voir [`gmb-protocol.md`](gmb-protocol.md).
+- `GET /api/gmb/status` — diagnostique : identifiant d'exemplaire, firmware,
+  revision, taille et nombre de segments du descripteur, niveau de detail,
+  instruments logiques (canal 0-based **et** 1-based, notes, CC, polyphonie,
+  velocite, timing, voix et roles), drapeaux HTTP/push, transports, compteurs
+  (requetes d'identite, segments, lectures HTTP, SysEx invalides, requetes
+  limitees, index hors bornes, notifications, recalculs) et horodatages
+  (`last.now` permet a l'interface de calculer les ages).
+
 ### Notes actives (temps reel)
 - `GET /api/notes/active` — retourne les notes MIDI actuellement actives
 

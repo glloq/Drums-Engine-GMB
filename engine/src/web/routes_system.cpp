@@ -554,6 +554,11 @@ void WebServerManager::_handleSetMidiChannels(AsyncWebServerRequest* req, uint8_
   saveDoc["channelMask"] = mask;
   _storage->saveJsonFile("/midi.json", saveDoc);
 
+  // Filtrer un canal le rend non routable : ses notes cessent d'etre des
+  // capacites. Le descripteur GMB doit donc suivre, alors qu'aucun pipeline n'a
+  // change — d'ou un rafraichissement des capacites plutot qu'un recompile.
+  _refreshGmbCapabilities();
+
   JsonDocument resp;
   resp["channelMask"] = mask;
   resp["message"] = "MIDI channels updated";
@@ -617,6 +622,10 @@ void WebServerManager::_handleSetPowerBudget(AsyncWebServerRequest* req, uint8_t
   }
 
   _actMgr->setPowerBudget(budget);
+
+  // Le budget electrique EST la contrainte de polyphonie annoncee : le changer
+  // change ce que la machine peut jouer simultanement.
+  _refreshGmbCapabilities();
 
   JsonDocument saveDoc;
   saveDoc["maxPeakMa"] = budget.maxPeakMa;

@@ -19,6 +19,7 @@
 #include "../event/pipeline_compiler.h"
 #include "../led/led_engine.h"
 #include "../hal/mic_inmp441.h"
+#include "../gmb/gmb_sysex_service.h"
 #include "api_auth.h"
 
 // ============================================================================
@@ -39,6 +40,18 @@ public:
   // Set callback for pipeline recompilation after instrument mutations
   void setRecompileCallback(void (*cb)()) { _recompileCb = cb; }
 
+  // --- GMB (reconnaissance automatique General-Midi-Boop) ---
+  // `refreshCb` recalcule l'instantane de capacites. Il est distinct du
+  // recompile : le filtre de canaux MIDI et le budget electrique changent les
+  // CAPACITES annoncees sans toucher aux pipelines, et il serait absurde de
+  // recompiler toute la table de routage pour ca.
+  // A appeler AVANT begin() : c'est begin() qui enregistre la route HTTP du
+  // descripteur, donc qui decide si le handshake peut annoncer le drapeau HTTP.
+  void setGmb(GmbSysExService* svc, void (*refreshCb)()) {
+    _gmb = svc;
+    _gmbRefreshCb = refreshCb;
+  }
+
   // Expose server for external route registration (WiFiManager, etc.)
   AsyncWebServer& getServer() { return _server; }
 
@@ -56,6 +69,8 @@ private:
   ApiAuth _auth;
   RateLimiter _rateLimiter;
   void (*_recompileCb)() = nullptr;
+  GmbSysExService* _gmb = nullptr;
+  void (*_gmbRefreshCb)() = nullptr;
 
   InstrumentManager* _instrMgr;
   ActuatorManager* _actMgr;
@@ -124,6 +139,14 @@ private:
   void _handlePanic(AsyncWebServerRequest* req);
   void _handlePanicReset(AsyncWebServerRequest* req);
   void _handleValidateConfig(AsyncWebServerRequest* req);
+
+  // GMB
+  void _setupGmbRoutes();
+  void _handleGetGmbDescriptor(AsyncWebServerRequest* req);
+  void _handleGetGmbStatus(AsyncWebServerRequest* req);
+  // Recalculer les capacites apres un changement qui les affecte sans passer
+  // par une recompilation de pipelines.
+  void _refreshGmbCapabilities();
 
   // LED Strips
   void _handleGetLedStrips(AsyncWebServerRequest* req);

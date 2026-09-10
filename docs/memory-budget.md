@@ -113,6 +113,47 @@ type d'actionneur ne peut pas depasser silencieusement l'emplacement, et
 systeme les ressources detenues par l'objet (l'emplacement d'ISR optique d'un
 `MotorActuator`, par exemple), ce que l'ancienne re-affectation ne faisait pas.
 
+## GMB : le cout de la reconnaissance automatique
+
+Le service General-Midi-Boop (`engine/src/gmb/`, voir
+[`gmb-protocol.md`](gmb-protocol.md)) est un objet global de plus. Tailles
+relevees sur hote 64 bits — aucune de ces structures ne contient de pointeur,
+donc elles ne bougent pas sur ESP32 :
+
+| Objet | Taille |
+|---|---:|
+| `GmbMechanism` x `GMB_MAX_MECHANISMS` (32) | 768 |
+| `GmbInstrumentCaps` x `GMB_MAX_LOGICAL_INSTRUMENTS` (16) | 768 |
+| `CapabilitySnapshot` (les deux ci-dessus + compteurs) | 1 542 |
+| Cache du descripteur (`GMB_DESCRIPTOR_MAX`) | 2 560 |
+| **`GmbSysExService` — total du module** | **4 192** |
+
+Soit environ **+4,1 ko de `.bss`** sur une marge estimee a une dizaine de ko.
+C'est significatif : mesurez apres tout changement de ces trois constantes.
+
+### Pourquoi ces trois valeurs
+
+- **`GMB_MAX_LOGICAL_INSTRUMENTS` = 16** n'est pas negociable : c'est le plafond
+  du descripteur cote hote (`DescriptorProtocol.js` refuse au-dela de 16
+  entrees), et un instrument logique est un canal MIDI — il n'y en a que 16.
+- **`GMB_MAX_MECHANISMS` = 32** borne le nombre d'actionneurs decrits dans un
+  meme instantane. `MAX_ACTUATORS` vaut 64, donc une installation qui cablerait
+  plus de 32 actionneurs *sonores ou de controle* verrait les surnumeraires
+  comptes dans `mechanismsDropped` et signales dans les logs — jamais omis en
+  silence. Passer a 64 couterait +768 octets.
+- **`GMB_DESCRIPTOR_MAX` = 2 560** est le poste dominant. Un descripteur typique
+  (un canal, une dizaine de voix) fait 1 a 1,6 ko ; le plafond laisse la place a
+  deux ou trois groupes de percussion. Il n'y a pas de risque de JSON tronque :
+  le serialiseur essaie des niveaux de detail decroissants (`physical`, puis
+  `voices`, puis le detail, puis le nombre de canaux) et ne rend que le premier
+  qui tient ENTIER. Reduire cette valeur ne casse donc rien — cela degrade la
+  richesse du descripteur, ce que `GET /api/gmb/status` affiche (`detail`,
+  `instrumentsDropped`).
+
+Le snapshot est deliberement statique plutot que sur la pile : la
+reconstruction est declenchee depuis un handler du serveur web, dont la tache
+AsyncTCP n'a pas 1,5 ko de pile a offrir.
+
 ## Si vous devez relever encore les limites
 
 1. `MAX_INSTRUMENTS` coute deux fois : 208 octets d'`InstrumentConfig` **et**

@@ -240,6 +240,22 @@ void writeExpression(Writer& w, const GmbInstrumentCaps& e) {
   w.ch('}');
 }
 
+void writeMessages(Writer& w, const GmbInstrumentCaps& e) {
+  // Capacites semantiques : un `true` signifie qu'un message a un effet reel
+  // dans le pipeline compile actif. Les messages realtime restent omis ici tant
+  // que le moteur ne fournit pas de preuve fonctionnelle : absence = inconnu
+  // cote GMB, donc comportement retrocompatible et permissif.
+  w.raw(",\"messages\":{\"note_on\":true,\"note_off\":true");
+  w.raw(",\"control_change\":");
+  w.boolean(!e.ccs.empty());
+  w.raw(",\"program_change\":false");
+  w.raw(",\"pitch_bend\":");
+  w.boolean((e.flags & GMB_INST_PITCHBEND) != 0);
+  w.raw(",\"channel_aftertouch\":");
+  w.boolean((e.flags & GMB_INST_AFTERTOUCH) != 0);
+  w.raw(",\"poly_aftertouch\":false}");
+}
+
 // Extensions percussion (§5.9). Espace de noms libre, ignore par GMB s'il ne le
 // connait pas : c'est la place des comportements que les champs generiques ne
 // savent pas dire — relation pedale/hi-hat, groupes de choke.
@@ -317,6 +333,7 @@ void writeInstrument(Writer& w, const CapabilitySnapshot& snap,
   writePolyphony(w, snap, e, voices);
   writeTiming(w, e);
   writeExpression(w, e);
+  writeMessages(w, e);
   if (detail == GmbDetail::FULL) writePhysical(w, snap, e);
   w.ch('}');
 }
